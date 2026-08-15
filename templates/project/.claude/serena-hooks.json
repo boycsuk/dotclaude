@@ -1,0 +1,39 @@
+{
+  "_comment": "Serena drift-prevention hooks. Deployed by `init.sh --serena` ONLY: init MERGES this `hooks` block into the project's .claude/settings.json after confirming the `serena-hooks` binary exists (so it never lands in a project without Serena, where it would error). Most entries here are Serena's own official hooks (oraios/serena #1201) and are what makes the model deterministically reach for Serena's symbol tools instead of drifting back to Grep/Edit over a long session — the advisory CLAUDE.md prose decays under context compaction; these do not. `activate` primes the model to read Serena's instructions at session start; `remind` (PreToolUse, all tools) injects a reminder ONLY when the model over-relies on grep/read without a recent Serena call (silent when compliant); `auto-approve` skips the permission prompt for Serena's own edits in permissive modes. The `prefer-serena-bash.{{HOOK_EXT}}` entry is OURS, not Serena's: it closes the gap `remind` leaves open — `remind` only watches Grep/Read in the MAIN thread, so it is blind to sed/cat/awk/grep INSIDE Bash and to sub-agents (incl. the built-in Explore agent). A PreToolUse hook on the Bash tool reaches both; it is a non-blocking nudge (exit 0, advisory on stderr) that fires only when the command reads a code file. The `prefer-graphify.{{HOOK_EXT}}` entries (on Bash + Read/Glob/Grep) are also OURS: they add the graph-LEVEL nudge Serena's symbol-level hooks don't — pushing `graphify query` BEFORE grepping raw files or reading code one file at a time to answer a structure/impact question. They are gated on `graphify-out/graph.json` existing (silent in Serena-only projects) and are equally non-blocking. This replaces `graphify install`'s own hook registration, which we do NOT run because it appends a bundle (skill + a raw CLAUDE.md block) that duplicates the clean Graphify section the template already ships. The `{{HOOK_EXT}}` placeholder is resolved by init.sh → `sh` and init.ps1 → `ps1` just before the merge (this JSON stays OS-agnostic). To update the invocations, edit this file in dotclaude and re-run install.sh; init reads it fresh on the next --serena deploy.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "serena-hooks activate --client=claude-code", "timeout": 10 }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          { "type": "command", "command": "serena-hooks remind --client=claude-code", "timeout": 10 }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "\"$HOME\"/.claude/hooks/prefer-serena-bash.{{HOOK_EXT}}", "timeout": 5 },
+          { "type": "command", "command": "\"$HOME\"/.claude/hooks/prefer-graphify.{{HOOK_EXT}}", "timeout": 5 }
+        ]
+      },
+      {
+        "matcher": "Read|Glob|Grep",
+        "hooks": [
+          { "type": "command", "command": "\"$HOME\"/.claude/hooks/prefer-graphify.{{HOOK_EXT}}", "timeout": 5 }
+        ]
+      },
+      {
+        "matcher": "mcp__serena__.*",
+        "hooks": [
+          { "type": "command", "command": "serena-hooks auto-approve --client=claude-code", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,74 @@
+# Project lifecycle script — SKELETON (Windows, lockstep sibling of deploy.sh).
+# The structure is wired up; you fill in the bodies for how THIS project
+# starts/stops/logs. Keep the four subcommands.
+#
+#   .\deploy.ps1 start    bring the app up
+#   .\deploy.ps1 stop     bring it down
+#   .\deploy.ps1 restart  stop, then start
+#   .\deploy.ps1 logs     follow logs (Ctrl-C to exit)
+#
+# APP_MODE from .env (development | production) is read for you so `start` can
+# behave differently per environment. Fill in the functions with real commands.
+
+$ErrorActionPreference = "Stop"
+Set-Location $PSScriptRoot
+
+if (-not (Test-Path ".env")) {
+    Write-Error ".env not found. Copy .env.example to .env and adjust APP_MODE."
+    exit 1
+}
+
+# Read APP_MODE without dot-sourcing .env.
+$AppMode = "development"
+$line = Select-String -Path ".env" -Pattern '^APP_MODE=' | Select-Object -First 1
+if ($line) {
+    $AppMode = ($line.Line -replace '^APP_MODE=', '').Trim().Trim('"').Trim("'")
+    if (-not $AppMode) { $AppMode = "development" }
+}
+
+function Start-App {
+    # TODO: bring the app up. Branch on $AppMode if dev and prod differ.
+    # Examples (uncomment/adapt ONE):
+    #
+    #   # Docker Compose:
+    #   if ($AppMode -eq "production") { docker compose up -d --build }
+    #   else { docker compose up --build --watch }
+    #
+    #   # Node process:      npm run start
+    #   # Python process:    uv run python -m backend
+    #   # Compiled binary:   .\bin\app.exe
+    #   # Windows service:   Start-Service my-app
+    Write-Error "TODO: implement Start-App in deploy.ps1 (APP_MODE=$AppMode)"
+    exit 1
+}
+
+function Stop-App {
+    # TODO: bring the app down. Examples:
+    #   docker compose down                          # Docker
+    #   Get-Process node | Stop-Process              # process (or use a PID file)
+    #   Stop-Service my-app                          # Windows service
+    Write-Error "TODO: implement Stop-App in deploy.ps1"
+    exit 1
+}
+
+function Restart-App {
+    Stop-App
+    Start-App
+}
+
+function Show-Logs {
+    # TODO: follow the app's logs. Examples:
+    #   docker compose logs -f --tail=100            # Docker
+    #   Get-Content .\logs\app.log -Wait -Tail 100   # logfile
+    Write-Error "TODO: implement Show-Logs in deploy.ps1"
+    exit 1
+}
+
+$cmd = if ($args.Count -ge 1) { $args[0] } else { "start" }
+switch ($cmd) {
+    "start"   { Start-App }
+    "stop"    { Stop-App }
+    "restart" { Restart-App }
+    "logs"    { Show-Logs }
+    default   { Write-Error "Usage: deploy.ps1 {start|stop|restart|logs}"; exit 1 }
+}

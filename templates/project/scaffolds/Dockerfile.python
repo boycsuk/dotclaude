@@ -1,0 +1,28 @@
+FROM python:3.13-slim AS runtime
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+# uv, pinned rather than :latest so a build is reproducible. Copying the binary
+# from the official image is the documented install path and avoids pip.
+COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /uvx /bin/
+COPY pyproject.toml poetry.lock* uv.lock* requirements.txt* ./
+# Poetry: --no-dev was REMOVED in Poetry 2.0 (not deprecated), so the old flag
+# fails the build outright; --only main is the replacement. virtualenvs.create
+# is off so packages land in the system site-packages the CMD below runs from.
+RUN if [ -f uv.lock ]; then uv sync --frozen --no-dev; \
+    elif [ -f poetry.lock ]; then pip install --no-cache-dir 'poetry>=2,<3' \
+      && POETRY_VIRTUALENVS_CREATE=false poetry install --only main --no-root; \
+    elif [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
+# uv sync installs into /app/.venv, which the system python does NOT see: the
+# container would start and die with ModuleNotFoundError on the first import.
+# Putting the venv first on PATH makes `python` resolve to it when it exists
+# and fall through to the system interpreter otherwise.
+ENV PATH="/app/.venv/bin:$PATH"
+COPY . .
+# Run as a non-root user so an app-level compromise is not root in the
+# container. The slim image has no preset app user, so create one and hand it
+# the app dir.
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
+USER appuser
+# Keep this in sync with docker-compose.yml's `ports:` and .env.example's PORT.
+EXPOSE 8000
+CMD ["python", "-m", "backend"]

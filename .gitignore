@@ -1,0 +1,24 @@
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Local installer state, if any
+.install-cache/
+
+# Python bytecode from running the test matrices
+__pycache__/
+*.pyc
+
+# Personal Claude Code overrides for this repo (never forced onto others)
+.claude/settings.local.json
+
+# Never commit secrets even by accident
+.env
+.env.*
+*.pem
+*.p12
+secrets/
+credentials/

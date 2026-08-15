@@ -1,0 +1,26 @@
+# Node 24 is the current Active LTS (Node 22 moved to Maintenance in
+# October 2025 — it still gets security fixes, but a new project should not
+# start on a line that is already winding down).
+FROM node:24-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
+# --omit=dev / --prod: this layer is copied wholesale into the runtime stage,
+# so installing devDependencies here ships the toolchain (and its CVEs) in the
+# final image. If your build step needs them, add a separate build stage.
+RUN if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile --prod; \
+    elif [ -f yarn.lock ]; then corepack enable && yarn install --frozen-lockfile --production; \
+    elif [ -f package-lock.json ]; then npm ci --omit=dev; \
+    else npm install --omit=dev; fi
+
+FROM node:24-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+# The official node image ships a non-root `node` user. Run as it so an
+# app-level compromise is not root inside the container. Copy with ownership
+# so the runtime user can read its own files.
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node . .
+USER node
+# Keep this in sync with docker-compose.yml's `ports:` and .env.example's PORT.
+EXPOSE 3000
+CMD ["node", "backend/index.js"]

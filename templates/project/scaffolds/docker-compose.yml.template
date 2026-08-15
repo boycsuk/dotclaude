@@ -1,0 +1,55 @@
+services:
+  app:
+    build: .
+    env_file: .env
+    # PORT must match the Dockerfile's EXPOSE and the app's listen port.
+    # Dockerfile.node listens on 3000, Dockerfile.python on 8000 — set PORT in
+    # .env accordingly (the default below only fits the Node scaffold).
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # A container that is up but not serving is worse than one that is down:
+    # depends_on only waits for `db`, and nothing here would notice the app
+    # wedging. Point this at a real endpoint your app exposes.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${PORT:-3000}/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    develop:
+      watch:
+        - action: sync
+          path: ./backend
+          target: /app/backend
+        # Rebuild when dependencies change. Node projects: package.json.
+        # Python projects: swap this for pyproject.toml.
+        - action: rebuild
+          path: package.json
+
+  db:
+    image: postgres:17-alpine
+    # Trivial dev-only credentials. NEVER reuse these in production — set real
+    # values via the .env file (POSTGRES_PASSWORD, etc.) before deploying.
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    # The app reaches Postgres over the compose network as `db:5432`; no need
+    # to publish the port to the host. Uncomment only to connect a local client
+    # (psql, a GUI) — and prefer binding to localhost: "127.0.0.1:5432:5432".
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db-data:

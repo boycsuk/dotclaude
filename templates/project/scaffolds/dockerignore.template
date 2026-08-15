@@ -1,0 +1,42 @@
+# Keep build context small and keep secrets/VCS/local cruft out of the image.
+# Pairs with the COPY . . in the Dockerfile scaffolds.
+
+.git
+.gitignore
+.dockerignore
+Dockerfile*
+docker-compose*.yml
+compose*.yml
+
+# Secrets and local env — must never enter the image layer.
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.p12
+
+# Dependencies and build output — reinstalled/rebuilt inside the image.
+node_modules
+.pnpm-store
+dist
+build
+.next
+.nuxt
+__pycache__
+*.pyc
+.venv
+venv
+.mypy_cache
+.ruff_cache
+.pytest_cache
+target
+
+# Editor / tooling / CI noise.
+.vscode
+.idea
+.claude
+*.log
+.DS_Store
+coverage
+.serena

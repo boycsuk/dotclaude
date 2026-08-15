@@ -1,0 +1,8 @@
+{
+  "_comment": "Per-project settings ONLY. The base permissions, hooks, attribution, and bypass lockdown live centrally in ~/.claude/settings.json (installed from the dotclaude repo) and apply to every project automatically — do NOT duplicate them here. This file holds only what is specific to THIS project: MCP tool permissions, project-local overrides. permissions and hooks MERGE across scopes, so anything added here is in addition to the central config, never a replacement. If the project has nothing project-specific, this file can be left as-is (empty permissions) or deleted.",
+  "permissions": {
+    "allow": [],
+    "ask": [],
+    "deny": []
+  }
+}

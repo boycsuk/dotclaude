@@ -1,0 +1,7 @@
+{
+  "xcode": {
+    "command": "xcrun",
+    "args": ["mcpbridge"],
+    "env": {}
+  }
+}

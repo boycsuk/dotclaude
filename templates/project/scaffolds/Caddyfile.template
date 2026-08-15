@@ -1,0 +1,36 @@
+# Caddy automatically provisions HTTPS via Let's Encrypt for any real domain.
+# Use :80 (or http://) for local testing without TLS.
+#
+# THIS FILE DOES NOTHING ON ITS OWN. `reverse_proxy app:3000` resolves only
+# inside a compose network, and the docker-compose.yml this template ships
+# defines just `app` and `db` — no caddy service. Add one, or this Caddyfile
+# is an orphan:
+#
+#   caddy:
+#     image: caddy:2-alpine
+#     restart: unless-stopped
+#     ports: ["80:80", "443:443"]
+#     volumes:
+#       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+#       - caddy-data:/data      # Let's Encrypt certs — WITHOUT this volume
+#       - caddy-config:/config  # every recreate re-requests them and you hit
+#     depends_on: [app]         # the ACME rate limit
+#
+# and declare `caddy-data:` / `caddy-config:` under the top-level `volumes:`.
+# With Caddy in front, `app` no longer needs to publish its port to the host:
+# drop the `ports:` entry from the app service so it is reachable only through
+# the proxy.
+
+# example.com {
+#   reverse_proxy app:3000
+# }
+
+:80 {
+    reverse_proxy app:3000
+
+    encode gzip
+    log {
+        output stdout
+        format console
+    }
+}

@@ -1,0 +1,12 @@
+{
+  "serena": {
+    "command": "serena",
+    "args": [
+      "start-mcp-server",
+      "--context", "claude-code",
+      "--open-web-dashboard", "False",
+      "--project", "${CLAUDE_PROJECT_DIR:-.}"
+    ],
+    "env": {}
+  }
+}

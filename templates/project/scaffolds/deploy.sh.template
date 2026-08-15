@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Project lifecycle script — SKELETON. The structure is wired up; you fill in
+# the bodies for how THIS project starts/stops/logs. Keep the four subcommands.
+#
+#   ./deploy.sh start    bring the app up
+#   ./deploy.sh stop     bring it down
+#   ./deploy.sh restart  stop, then start
+#   ./deploy.sh logs     follow logs (Ctrl-C to exit)
+#
+# APP_MODE in .env is read for you (development | production) so `start` can
+# behave differently per environment. Fill in the functions below with your
+# real commands — examples are commented out for the common cases.
+
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+if [ ! -f .env ]; then
+  echo "ERROR: .env not found. Copy .env.example to .env and adjust APP_MODE." >&2
+  exit 1
+fi
+
+# Read APP_MODE without sourcing .env (avoids executing shell metacharacters in
+# values). Falls back to 'development' if absent or commented out.
+APP_MODE="$(grep -E '^APP_MODE=' .env | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+APP_MODE="${APP_MODE:-development}"
+
+start() {
+  # TODO: bring the app up. Branch on $APP_MODE if dev and prod differ.
+  # Examples (uncomment/adapt ONE):
+  #
+  #   # Docker Compose:
+  #   if [ "$APP_MODE" = "production" ]; then docker compose up -d --build
+  #   else docker compose up --build --watch; fi
+  #
+  #   # Node process:           npm run start
+  #   # Python process:         uv run python -m backend
+  #   # Compiled binary:        ./bin/app
+  #   # systemd service:        sudo systemctl start my-app
+  echo "TODO: implement start() in deploy.sh (APP_MODE=$APP_MODE)" >&2
+  exit 1
+}
+
+stop() {
+  # TODO: bring the app down. Examples:
+  #   docker compose down            # Docker
+  #   pkill -f 'node .*backend'      # process (or use a PID file)
+  #   sudo systemctl stop my-app     # systemd
+  echo "TODO: implement stop() in deploy.sh" >&2
+  exit 1
+}
+
+restart() {
+  stop
+  start
+}
+
+logs() {
+  # TODO: follow the app's logs. Examples:
+  #   docker compose logs -f --tail=100      # Docker
+  #   tail -f ./logs/app.log                 # logfile
+  #   journalctl -u my-app -f                # systemd
+  echo "TODO: implement logs() in deploy.sh" >&2
+  exit 1
+}
+
+CMD="${1:-start}"
+case "$CMD" in
+  start)   start ;;
+  stop)    stop ;;
+  restart) restart ;;
+  logs)    logs ;;
+  *)       echo "Usage: $0 {start|stop|restart|logs}" >&2; exit 1 ;;
+esac

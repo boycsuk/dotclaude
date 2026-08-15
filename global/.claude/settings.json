@@ -1,0 +1,126 @@
+{
+  "_comment": "CENTRAL settings, installed to ~/.claude/settings.json by install.sh/ps1. Hook commands point at $HOME/.claude/hooks and use the .sh form; install.ps1 rewrites them to .ps1 + adds \"shell\": \"powershell\" on Windows, and mirrors the Bash permission rules to PowerShell(...). These apply to EVERY project automatically; a project's own .claude/settings.json only adds to this (permissions and hooks merge across scopes). MODEL: Bash runs allow-by-default; the deny list + guard-destructive hook (which now matches ALL Bash) are the safety net. See DESIGN.md §9. HOOK GATING: hook entries carry NO \"if\" conditions on purpose — an \"if\" pattern is prefix-anchored and reopens exactly the wrapped-form bypasses the hooks' own parsers close (\"if\": \"Bash(git push *)\" let `git -C /repo push origin main` through unjudged); every hook self-gates precisely and exits 0 fast on non-matches.",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "TodoWrite",
+      "WebFetch",
+      "WebSearch",
+      "Bash"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(git rebase:*)",
+      "Bash(git commit *--amend*)",
+      "Bash(git filter-branch:*)",
+      "Bash(npm install:*)",
+      "Bash(pnpm install:*)",
+      "Bash(yarn add:*)",
+      "Bash(pip install:*)",
+      "Bash(cargo add:*)",
+      "Bash(go get:*)",
+      "Bash(chmod:*)",
+      "Bash(chown:*)",
+      "Bash(chgrp:*)",
+      "Read(//**/.env.*)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(rm -fr:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean -fd:*)",
+      "Bash(git clean -fdx:*)",
+      "Bash(git branch -D:*)",
+      "Bash(sudo:*)",
+      "Bash(dd:*)",
+      "Bash(mkfs:*)",
+      "Bash(shred:*)",
+      "Bash(truncate:*)",
+      "Bash(mkfs.*:*)",
+      "Bash(eval:*)",
+      "Read(//**/.env)",
+      "Read(//**/.env.local)",
+      "Read(//**/.env.development)",
+      "Read(//**/.env.production)",
+      "Read(//**/.env.test)",
+      "Read(//**/.env.staging)",
+      "Read(//**/secrets/**)",
+      "Read(//**/credentials/**)",
+      "Read(~/.claude/.credentials.json)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME\"/.claude/hooks/guard-destructive.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"$HOME\"/.claude/hooks/guard-push-main.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME\"/.claude/hooks/guard-central-config.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME\"/.claude/hooks/verify-on-edit.sh",
+            "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "\"$HOME\"/.claude/hooks/detect-secrets.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"$HOME\"/.claude/hooks/sync-mirror-docs.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME\"/.claude/hooks/reinject-rules.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

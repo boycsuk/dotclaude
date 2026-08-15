@@ -1,0 +1,141 @@
+# Project: {{PROJECT_NAME}}
+
+> Structure: WHAT / WHY / HOW. Keep this file <200 lines. Critical rules must be backed by a hook — this file is advisory.
+> Conventions live in `docs/conventions.md` — the repo-versioned copy every contributor reads. In Claude Code they also load from the developer's personal `~/.claude/rules/` (not checked in): rules with a `paths:` frontmatter field load only for matching files; the rest load every session.
+
+## WHAT — Stack
+- {{LANGUAGE}} {{LANGUAGE_VERSION}}
+- {{FRAMEWORK_OR_KEY_LIBS}}
+- {{RUNTIME_OR_TOOLING}}
+- Database: {{DATABASE_OR_NONE}}
+
+## WHAT — Commands
+- Install: `{{INSTALL_CMD}}`
+- Dev: `{{DEV_CMD}}`
+- Build: `{{BUILD_CMD}}`
+- Test: `{{TEST_CMD}}`
+- Lint: `{{LINT_CMD}}`
+- Typecheck: `{{TYPECHECK_CMD}}`
+- Format: `{{FORMAT_CMD}}`
+
+## WHAT — Structure
+<!-- Fill in once you understand the repo. Example:
+- `src/` — main source code
+- `tests/` — tests
+- `scripts/` — dev utilities
+- `docs/` — documentation
+-->
+
+## WHAT — External integrations (MCP)
+{{MCP_SECTION}}
+
+{{SERENA_BLOCK}}
+
+<!-- The block below is the SOURCE for {{SERENA_BLOCK}} above: /init-project
+     pastes it in (without these comment markers) when the project uses Serena,
+     and deletes the marker otherwise. It must stay inside a comment here
+     because block-level HTML comments are stripped before CLAUDE.md reaches
+     the model — which is exactly why the guidance cannot LIVE in one.
+### When to prefer Serena tools over native Claude Code tools
+
+Serena operates at the **symbol level** (LSP-backed), not the text level. Prefer it for:
+- **Locating a symbol's definition** → `find_symbol` instead of `Grep` + `Read`.
+- **Finding all references to a function/class** → `find_referencing_symbols` instead of `Grep`.
+- **Renaming or rewriting a function body** → `replace_symbol_body` instead of `Edit` (it preserves siblings and indentation correctly).
+- **Inserting code adjacent to a symbol** → `insert_after_symbol` / `insert_before_symbol`.
+- **Getting a structural overview of a file** → `get_symbols_overview` instead of reading the whole file.
+
+Keep using native tools for:
+- Plain text files, configs, markdown (no LSP gain).
+- One-off reads of a known path (`Read` is faster).
+- Edits where line-level precision matters more than symbol semantics.
+
+Serena writes onboarding summaries to `.serena/memories/*.md` — these ARE committed (team-wide context). `.serena/project.local.yml` is gitignored (personal overrides).
+
+### Graphify (graph-level companion, same `.mcp.json` as Serena)
+
+Where Serena works at the symbol level, Graphify answers **structural / ripple-effect** questions over a knowledge graph of the whole codebase: "what depends on this", "what breaks if I change X" (`get_pr_impact`, `shortest_path`), or mapping an unfamiliar area (`query_graph`, `get_neighbors`). Workflow: **graph first, then Serena** — query the graph for shape and blast radius, then act on the symbols with Serena.
+
+Reach the graph two ways over the same `graphify-out/graph.json`:
+- **MCP tools** (`query_graph`, `get_neighbors`, `shortest_path`, `get_pr_impact`) for impact analysis mid-task.
+- **CLI** for focused lookups: `graphify query "<question>"` (scoped subgraph, cheaper than grepping), `graphify path "<A>" "<B>"` (relationships), `graphify explain "<concept>"`. Use `graphify-out/wiki/index.md` for broad navigation; read `graphify-out/GRAPH_REPORT.md` only for whole-architecture review. After editing code, `graphify update .` refreshes it (AST-only, no API cost).
+
+One-time setup — run `/graphify .` once to build `graphify-out/graph.json` (the MCP server stays unavailable until then). You do NOT need to run `graphify install`: the graph-first `PreToolUse` nudge ships centrally as `prefer-graphify.{sh,ps1}` and is merged into this project's hooks by `--serena` (gated on the graph existing, so it's silent until you build it). Heed the nudge when you see it: the graph answers structure questions faster than scanning files. `graphify-out/` is gitignored build output.
+-->
+
+## WHY — Architectural decisions
+<!-- Document ONLY non-obvious decisions and their reason:
+- "We use X instead of Y because Z"
+- "Validation in both frontend AND backend because the frontend cannot be trusted"
+- "Module A must not import from B because it creates a dependency cycle"
+-->
+
+## HOW — Conventions
+Detailed conventions live in `docs/conventions.md`, the repo-versioned copy present in every clone. Developers using Claude Code also load them from their personal `~/.claude/rules/` — not checked into this repo, so reconcile by hand if the two diverge (those with a `paths:` field load only for matching files; the rest load every session):
+- Code quality → `~/.claude/rules/code-quality.md` (loads for source files via `paths:`)
+- Security → `~/.claude/rules/security.md`
+- Workflow → `~/.claude/rules/workflow.md`
+- AI collaboration → `~/.claude/rules/ai-collaboration.md`
+
+**Minimum rules that apply everywhere:**
+- Follow the existing style in neighboring files before inventing new patterns.
+- Strict typing wherever the language allows it.
+- Explicit error handling, no swallowed errors.
+- Tests for new logic (at minimum: happy path + 1 edge case).
+- Atomic commits: one logical change per commit.
+- `CHANGELOG.md` updated with every relevant change (Keep a Changelog format).
+
+## Don't
+<!-- Project-specific anti-patterns with explicit reason.
+Starter examples (review and adjust for this project):
+- DO NOT add dependencies without explicit confirmation — every new dep is audited.
+- DO NOT use `any` / `unwrap()` / `!.` in production code — they break the error flow.
+- DO NOT mix refactor with feature in the same commit — it complicates rollback.
+- DO NOT use `git commit --amend` without explicit user request — always create a new commit.
+- DO NOT auto-sign commits with `Co-Authored-By` unless explicitly requested.
+-->
+
+## Workflow
+- Changes touching >3 files: **plan mode first** (use `/plan-feature`).
+- Before declaring a task done: **always** `/verify`.
+- Before each commit: `/changes` to review the diff, then `/commit` (it updates CHANGELOG.md).
+- When opening a new session in an ongoing project: `/resume-context`.
+- When I correct a systematic mistake: use `/compound` so it does not happen again.
+- Before merging anything that touches I/O, auth, or deps: `/audit` (Security category, Uncommitted-changes scope).
+- UI work from a design reference (mockup, screenshot, handoff bundle): `/implement-ui` — tokens into `docs/ui.md` first, then section-by-section with visual verification.
+- Branch model: feature branches by default. The `guard-push-main` hook blocks direct pushes to main/master. If this project intentionally lives on main (solo project, prototype, scratch repo), add `"allowPushToMain": true` to `.claude/settings.local.json` (see `settings.local.json.example`). Force pushes stay blocked regardless.
+
+## Portable docs — `docs/`
+- `docs/` is the **portable contract** of this project, split across self-maintained files: `backend.md` (the API — endpoints, shapes, auth), `ui.md` (the visual contract — brand design tokens + sections), `user-stories.md` (the behavioral contract — everything the user can do, platform-agnostic), and `conventions.md` (how to write the code — the repo-versioned copy of the conventions, for every contributor and for tools that don't run Claude Code). It exists so that tools or contributors who can only see one slice of the repo (Xcode workspace, embedded subdir, sandboxed editor) can still build the right mental model and follow the same conventions. Each file carries its own maintenance rules in its header, so it stays usable even where `/update-docs` is not available. See `docs/README.md`.
+- **Coverage over depth.** Every capability the system exposes must appear in `docs/`, even if as a one-liner. A reader of `docs/` should be able to answer *"what can this system do?"* without opening the source. Detail per entry can be shallow; the list of entries must be exhaustive.
+- **Mandatory step at task close.** Before declaring any task done, ask yourself: *"did this change a contract another part of the system relies on?"* If yes, run `/update-docs` **before** `/commit`. This is non-negotiable — desynced docs are worse than no docs.
+- **What counts as a contract change** (update required):
+  - `backend.md`: added/removed/renamed endpoint, changed request body, changed response shape, changed auth requirement, changed error code semantics.
+  - `ui.md`: added/removed/renamed top-level section/screen, changed what a section does, or any change to brand design tokens (color, typography, spacing, radii) shared across clients.
+  - `user-stories.md`: the user can now do something new, can no longer do it, or achieves it differently (write it platform-agnostic; add a platform exception only if a client genuinely differs).
+  - Any new file under `docs/` (e.g. `docs/cli.md`) when a new contract producer/consumer appears.
+- **What does NOT count** (skip — do not pollute docs with noise):
+  - Internal refactors, renamed private helpers, logging, formatting, dependency bumps with no behavior change.
+  - Tests, build/CI config, comments.
+  - Bug fixes that restore documented behavior rather than change it.
+- **If unsure, invoke `/update-docs` anyway.** The skill detects "nothing to update" and exits — false positives cost nothing, false negatives leave stale docs.
+
+## Source hierarchy for research
+1. **Official library documentation** (project docs sites, package READMEs) — fetch via `WebFetch` / `WebSearch`.
+2. **Specialized forums** (GitHub Issues, Stack Overflow) for real-world user solutions.
+3. **Your own training knowledge** as a last resort — it may be outdated.
+
+<!-- "Compact Instructions" is not a Claude Code API — there is no named contract by that name.
+     This works because CLAUDE.md is re-injected after /compact, so guidance placed here survives
+     compaction. Recent Claude Code also asks the model to preserve sensitive user instructions
+     during compaction (changelog 2.1.139). Treat the section below as advisory. -->
+## On compaction (advisory)
+When this conversation is compacted, preserve:
+- Design decisions made and their justification.
+- Error messages encountered and how they were resolved.
+- List of files modified and why.
+- Any "Don't" rule discovered during the session that is not yet codified.
+
+Summarize briefly:
+- Exploration steps that did not lead anywhere.
+- Trial-and-error iterations on code that is now finalized.
