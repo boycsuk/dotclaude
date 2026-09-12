@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `rules/ai-collaboration.md`: a subagent's findings are hypotheses until
+  verified at the source, not facts. Mirrored in
+  `templates/project/docs/conventions.md` and added to the post-compaction
+  digest in `reinject-rules.{sh,ps1}` — the failure mode is silent, so it
+  belongs in the digest that survives compaction. The rule exists because the
+  "fan out to investigate" rule above it makes delegation the main channel
+  through which claims arrive, and a sweep returns the same confident synthesis
+  whether or not it is right: in one session two subagent claims (that
+  `PreCompact` can inject context; that `maxEffortLevel` sets a default) were
+  both wrong and both would have reached shipped config had the docs not been
+  read directly. `code-quality.md` already sets this standard for third-party
+  APIs; this applies it to the layer that now supplies most of the claims.
+- `templates/project/.gitignore.template`: ignore `.claude/agent-memory-local/`.
+  A subagent with `memory: local` writes there, and the whole point of that
+  scope over `project` is staying out of version control — without the entry
+  it would have been committed, silently inverting the choice.
+- `rules/ai-collaboration.md`: a note on subagent memory recording why this
+  setup does not use it yet. It rides on auto memory, so `autoMemoryEnabled`
+  false or `CLAUDE_CODE_DISABLE_AUTO_MEMORY` makes the field a silent no-op;
+  and enabling it auto-enables Read/Write/Edit, which collides with the
+  read-only guarantee `researcher`, `code-reviewer` and `debugger` take from
+  `disallowedTools`. The docs do not say which wins, and a read-only agent that
+  silently regains Write is worse than no memory — so it stays unused until
+  someone tests it. Written down because a capability rejected for a reason
+  nobody recorded gets re-proposed as an oversight (DESIGN.md §21).
 - A third class of settings key, SEEDED, in `install.sh` and `install.ps1`:
   written only when the key is absent from the user's `~/.claude/settings.json`,
   so a fresh machine gets the default while a later `/config` change survives

@@ -150,6 +150,14 @@
   dimension (never one per file), save results as they arrive so an
   interruption does not discard them, and verify fixes with the project's own
   tests rather than a second sweep.
+- **An agent's findings are hypotheses, not facts.** A sweep returns a
+  confident synthesis whether or not it is right. Before a claim from an agent
+  becomes code, configuration, or an answer someone relies on, check it at the
+  source — the doc page, the file, the command's real output. Check first
+  anything that contradicts the code in front of you, any version, flag or
+  field name nobody has seen directly, and any recommendation whose reasoning
+  the report does not show. Delegating the reading does not delegate
+  responsibility for it.
 
 ---
 

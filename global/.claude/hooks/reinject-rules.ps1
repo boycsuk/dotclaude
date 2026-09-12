@@ -24,6 +24,7 @@ POST-COMPACTION REMINDER — non-negotiable conventions still in force:
 - Explain plainly: lead with the outcome, short sentences, keep every fact/name/path exactly; no filler.
 - If the project has Serena/Graphify (see .mcp.json), prefer graph/symbol tools over grep and whole-file reads.
 - Challenge assumptions; never agree just to be agreeable.
+- A subagent's findings are hypotheses: verify a claim at the source before it becomes code, config, or an answer.
 '@ | Write-Output
 
 exit 0
