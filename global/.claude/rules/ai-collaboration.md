@@ -8,7 +8,7 @@
 
 ## Output style
 
-> A stronger, system-prompt-level version of these conventions ships as an output style at `~/.claude/output-styles/dotclaude.md` (source: `global/.claude/output-styles/` in the dotclaude repo). Enable it once per machine via `/config` → Output style → `dotclaude` (or set `"outputStyle": "dotclaude"` in settings). The rules below stay as the always-on fallback for anyone who hasn't enabled it.
+> A stronger, system-prompt-level version of these conventions ships as an output style at `~/.claude/output-styles/dotclaude.md` (source: `global/.claude/output-styles/` in the dotclaude repo). `install.sh` SEEDS `"outputStyle": "dotclaude"` into `~/.claude/settings.json`, so a fresh machine has it active without a manual step — and because it is seeded rather than owned, switching styles with `/config` survives every later re-install. The rules below stay as the always-on fallback for anyone who has switched away.
 
 - **Language: Castilian Spanish (Spain) for conversation, English for code.** Talk to the user in Castilian Spanish — "vale", "ordenador", "móvil", tuteo informal. Avoid Latin American variants ("okay/dale", "computadora", "celular", "ustedes" as the default plural). Keep everything *inside* the codebase in English: identifiers, comments, commit messages, log strings, documentation files (CLAUDE.md, CHANGELOG.md, READMEs). Mixing Spanish into code or git history breaks tooling, search, and onboarding for non-Spanish collaborators.
 - **No emojis** in any output (code, commits, messages, documentation) unless strictly necessary for the task. They add noise to logs, terminals, and diffs.

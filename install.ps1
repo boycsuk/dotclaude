@@ -256,6 +256,13 @@ if ($unmapped.Count -gt 0) {
     exit 1
 }
 
+# Mirrors OWNED/SEEDED in install.sh; check.py asserts the three sites agree.
+# OWNED is overwritten every install (it is the deterministic guarantee);
+# SEEDED is written only when the key is absent, so a /config choice survives
+# a re-install.
+$owned  = @("permissions", "hooks", "attribution")
+$seeded = @("outputStyle", "fileCheckpointingEnabled")
+
 $settingsPath = Join-Path $Target "settings.json"
 $existing = [ordered]@{}
 if (Test-Path $settingsPath) {
@@ -263,7 +270,7 @@ if (Test-Path $settingsPath) {
         $raw = Get-Content $settingsPath -Raw | ConvertFrom-Json
         # Copy existing keys we do NOT own, so the user's theme/effort/etc survive.
         foreach ($p in $raw.PSObject.Properties) {
-            if ($p.Name -notin @("permissions", "hooks", "attribution")) {
+            if ($p.Name -notin $owned) {
                 $existing[$p.Name] = $p.Value
             }
         }
@@ -283,10 +290,22 @@ if (Test-Path $settingsPath) {
 foreach ($k in $central.Keys) {
     if ($null -ne $central[$k]) { $existing[$k] = $central[$k] }
 }
+# Seed AFTER the user's keys were copied in, so an existing value wins.
+$seededNow = @()
+$srcKeys = @($srcSettings.PSObject.Properties.Name)
+foreach ($k in $seeded) {
+    # Absent from the source is not the same as present-and-null: test the
+    # property list, since $srcSettings.$k returns $null for both.
+    if ($srcKeys -contains $k -and -not $existing.Contains($k)) {
+        $existing[$k] = $srcSettings.$k
+        $seededNow += $k
+    }
+}
 # BOM-less on purpose: PS 5.1's Set-Content -Encoding UTF8 writes a BOM, which
 # strict JSON parsers reject — settings.json is read by more than PowerShell.
 [System.IO.File]::WriteAllText($settingsPath, ($existing | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))
-Write-Host "  - $settingsPath merged (PowerShell base permissions + hooks; your other keys kept)"
+$seedNote = if ($seededNow.Count -gt 0) { " seeded $($seededNow -join ', ');" } else { "" }
+Write-Host "  - $settingsPath merged (PowerShell base permissions + hooks;$seedNote your other keys kept)"
 
 # --- Per-project template and the /init-project skill ------------------------
 $templateDest = Join-Path $Target "templates\project"

@@ -8,6 +8,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A third class of settings key, SEEDED, in `install.sh` and `install.ps1`:
+  written only when the key is absent from the user's `~/.claude/settings.json`,
+  so a fresh machine gets the default while a later `/config` change survives
+  every re-install. OWNED keys (`permissions`, `hooks`, `attribution`) still
+  overwrite unconditionally — they are the deterministic guarantee. Seeding a
+  user-facing preference as OWNED would violate the installer's contract that
+  it never reverts user content (CLAUDE.md constraint 3).
+- `outputStyle: dotclaude` and `fileCheckpointingEnabled: true` as the first
+  seeded keys. The output style shipped since its introduction but nothing ever
+  activated it: `rules/ai-collaboration.md` told the reader to enable it by
+  hand, so every fresh machine silently ran on the weaker advisory fallback.
+  `fileCheckpointingEnabled` turns on the file snapshots `/rewind` restores.
+- `check.py`: a `settings key classes` check asserting that the OWNED and
+  SEEDED lists agree across `install.sh` and `install.ps1`, that no key is in
+  both, and that every non-comment top-level key in `settings.json` is
+  classified — an unclassified key reaches neither platform. The existing
+  `permissions` scalar-key check covered only keys nested under `permissions`.
+- `tests/install-cases.py`: two cases asserting the seeding contract end to end
+  — seeded defaults land on a fresh machine, and a re-install after a `/config`
+  change does not revert it while owned keys still apply.
+- `tests/inject.py`: `diverge-seeded-lists`, `own-a-seeded-key` and
+  `add-unclassified-key` regressions, wired into `tests/check-selftest.sh`.
+  NOT YET VERIFIED ON WINDOWS: the seeding path in `install.ps1` was reviewed
+  against the known PowerShell traps (`.Contains` on an `[ordered]`, and
+  `$srcSettings.$k` returning `$null` for both an absent and a null property)
+  but never executed — no `pwsh` on the authoring machine. Run
+  `python3 tests/install-cases.py --pwsh <path>` before trusting it; a `.ps1`
+  that parses has shipped dead before (`guard-push-main.ps1`).
 - `tests/advisory-hooks-cases.py`: a 21-case matrix for `reinject-rules`,
   `sync-mirror-docs`, `prefer-serena-bash` and `prefer-graphify` — the four
   hooks `check.py` silently exempted from the matrix requirement, and the only

@@ -61,6 +61,9 @@
     "commit": "",
     "pr": ""
   },
+  "_seeded_comment": "outputStyle and fileCheckpointingEnabled are SEEDED, not owned: the installers write them only when the key is absent, so /config can change them and a re-install will not revert it. Adding a key here without adding it to SEEDED in install.sh AND $seeded in install.ps1 is caught by check.py.",
+  "outputStyle": "dotclaude",
+  "fileCheckpointingEnabled": true,
   "hooks": {
     "PreToolUse": [
       {

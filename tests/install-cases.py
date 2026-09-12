@@ -81,6 +81,8 @@ def case_user_keys_survive(home, pwsh):
         return "personal 'model' key was clobbered"
     if merged.get("outputStyle") != "dotclaude":
         return "personal 'outputStyle' key was clobbered"
+    if merged.get("fileCheckpointingEnabled") is not True:
+        return "a seeded key was not written on a settings.json that lacked it"
     # permissions is a repo-OWNED key: the user's ad-hoc edit must be replaced
     # by the central set, not merged into it.
     if "Bash(user-added:*)" in merged.get("permissions", {}).get("allow", []):
@@ -120,6 +122,50 @@ def case_stopped_shipping_is_cleaned(home, pwsh):
     return None
 
 
+def case_seeded_on_fresh(home, pwsh):
+    """A fresh machine gets the seeded defaults, or shipping them is pointless:
+    that was the outputStyle gap — the style file was installed but nothing
+    ever activated it."""
+    if run_install(home, pwsh) != 0:
+        return "installer exited non-zero"
+    with open(claude(home, "settings.json")) as fh:
+        merged = json.load(fh)
+    src = os.path.join(REPO, "global/.claude/settings.json")
+    with open(src) as fh:
+        want = {k: v for k, v in json.load(fh).items()
+                if k in ("outputStyle", "fileCheckpointingEnabled")}
+    for key, value in want.items():
+        if merged.get(key) != value:
+            return f"seeded key '{key}' missing or wrong: {merged.get(key)!r} != {value!r}"
+    if any(k.startswith("_") for k in merged):
+        return "a _comment key leaked into the installed settings.json"
+    return None
+
+
+def case_seeded_never_reverts_user_choice(home, pwsh):
+    """The whole reason these are seeded and not owned: a re-install after a
+    /config change must not revert it."""
+    if run_install(home, pwsh) != 0:
+        return "first install failed"
+    with open(claude(home, "settings.json")) as fh:
+        merged = json.load(fh)
+    merged["outputStyle"] = "Explanatory"
+    merged["fileCheckpointingEnabled"] = False
+    with open(claude(home, "settings.json"), "w") as fh:
+        json.dump(merged, fh)
+    if run_install(home, pwsh) != 0:
+        return "re-install failed"
+    with open(claude(home, "settings.json")) as fh:
+        after = json.load(fh)
+    if after.get("outputStyle") != "Explanatory":
+        return "re-install reverted the user's outputStyle choice"
+    if after.get("fileCheckpointingEnabled") is not False:
+        return "re-install reverted the user's fileCheckpointingEnabled choice"
+    if not after.get("permissions", {}).get("deny"):
+        return "owned keys stopped being applied"
+    return None
+
+
 def case_unparseable_settings_backed_up(home, pwsh):
     os.makedirs(claude(home), exist_ok=True)
     with open(claude(home, "settings.json"), "w") as fh:
@@ -141,6 +187,8 @@ CASES = [
     ("personal settings keys survive the merge", case_user_keys_survive),
     ("re-install keeps user-added files", case_rerun_keeps_user_files),
     ("stopped-shipping files are cleaned up", case_stopped_shipping_is_cleaned),
+    ("seeded defaults land on a fresh machine", case_seeded_on_fresh),
+    ("a re-install never reverts a seeded choice", case_seeded_never_reverts_user_choice),
     ("unparseable settings is backed up, not lost", case_unparseable_settings_backed_up),
 ]
 

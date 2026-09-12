@@ -177,7 +177,46 @@ def add_permissions_key(repo):
         json.dump(settings, fh, indent=2)
 
 
+def diverge_seeded_lists(repo):
+    """The SEEDED list is hand-written in both installers; a key added to one
+    only is silently never seeded on the other platform."""
+    path = os.path.join(repo, "install.ps1")
+    with open(path) as fh:
+        text = fh.read()
+    old = '$seeded = @("outputStyle", "fileCheckpointingEnabled")'
+    if old not in text:
+        raise SystemExit("inject: install.ps1 no longer declares $seeded as expected")
+    with open(path, "w") as fh:
+        fh.write(text.replace(old, '$seeded = @("outputStyle")'))
+
+
+def own_a_seeded_key(repo):
+    """Owning a user-facing preference makes every re-install revert a /config
+    choice — the contract violation the three classes exist to prevent."""
+    path = os.path.join(repo, "install.sh")
+    with open(path) as fh:
+        text = fh.read()
+    old = 'OWNED = ("permissions", "hooks", "attribution")'
+    if old not in text:
+        raise SystemExit("inject: install.sh no longer declares OWNED as expected")
+    with open(path, "w") as fh:
+        fh.write(text.replace(old, 'OWNED = ("permissions", "hooks", "attribution", "outputStyle")'))
+
+
+def add_unclassified_key(repo):
+    """A top-level key in neither class never reaches ~/.claude at all."""
+    path = os.path.join(repo, "global/.claude/settings.json")
+    with open(path) as fh:
+        settings = json.load(fh)
+    settings["alwaysThinkingEnabled"] = True
+    with open(path, "w") as fh:
+        json.dump(settings, fh, indent=2)
+
+
 REGRESSIONS = {
+    "diverge-seeded-lists": diverge_seeded_lists,
+    "own-a-seeded-key": own_a_seeded_key,
+    "add-unclassified-key": add_unclassified_key,
     "add-permissions-key": add_permissions_key,
     "heredoc-back-into-subshell": heredoc_back_into_subshell,
     "drop-hook-matrix": drop_hook_matrix,

@@ -95,14 +95,24 @@ done
 echo "  - central hooks/agents/skills/rules/output-styles installed (.sh hooks)"
 
 # --- Central settings.json: MERGE into the user's, do not clobber ------------
-# We own permissions/hooks/attribution; the user may have their own keys
-# (theme, effortLevel, model, ...). Merge ours in, keep theirs.
+# Three classes of key, and the distinction is the whole point:
+#   OWNED  - the deterministic guarantees (permissions/hooks/attribution).
+#            Overwritten on every install; a user edit to these is drift.
+#   SEEDED - defaults worth having on a fresh machine but which the user may
+#            legitimately change (outputStyle, /rewind snapshots). Written ONLY
+#            when absent, so `git pull && ./install.sh` never reverts a choice
+#            made with /config. Owning them would violate the installer's
+#            contract that it never touches user content (CLAUDE.md §3).
+#   everything else - the user's, preserved untouched.
+# install.ps1 rebuilds this object key by key, so both lists live there too;
+# check.py asserts all three sites agree.
 python3 - "$SCRIPT_DIR/global/.claude/settings.json" "$TARGET/settings.json" <<'PY'
 import json, os, sys
 src_path, dst_path = sys.argv[1], sys.argv[2]
 with open(src_path) as f:
     src = json.load(f)
-src.pop("_comment", None)
+for k in [k for k in src if k.startswith("_")]:
+    src.pop(k)
 dst = {}
 if os.path.exists(dst_path):
     try:
@@ -121,15 +131,21 @@ if os.path.exists(dst_path):
             "    A copy is saved at %s — merge anything you need back by hand.\n"
             % (dst_path, backup))
         dst = {}
-# Repo owns these top-level keys outright (central config). Everything else in
-# the user's settings is preserved untouched.
-for key in ("permissions", "hooks", "attribution"):
+OWNED = ("permissions", "hooks", "attribution")
+SEEDED = ("outputStyle", "fileCheckpointingEnabled")
+for key in OWNED:
     if key in src:
         dst[key] = src[key]
+# After an unparseable settings.json dst is empty, so everything seeds — the
+# user's old values are unrecoverable anyway and the backup holds them.
+seeded = [k for k in SEEDED if k in src and k not in dst]
+for key in seeded:
+    dst[key] = src[key]
 with open(dst_path, "w") as f:
     json.dump(dst, f, indent=2)
     f.write("\n")
-print("  - ~/.claude/settings.json merged (base permissions + hooks; your other keys kept)")
+note = " seeded %s;" % ", ".join(seeded) if seeded else ""
+print("  - ~/.claude/settings.json merged (base permissions + hooks;%s your other keys kept)" % note)
 PY
 
 # --- Per-project template and the /init-project skill ------------------------

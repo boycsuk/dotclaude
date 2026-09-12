@@ -143,6 +143,58 @@ def _():
                  f"install.ps1 — it would be dropped on Windows")
 
 
+# --- 4b. OWNED/SEEDED key classes agree across all three sites ---------------
+# The same two lists are written by hand in install.sh and install.ps1, and a
+# top-level key in settings.json that is in neither list never reaches
+# ~/.claude at all. Nothing caught that: the `permissions` scalar-key check
+# above covers only keys NESTED under permissions.
+@check("settings key classes")
+def _():
+    NAME = "settings key classes"
+    sh, ps1 = read("install.sh"), read("install.ps1")
+
+    def lists(text, pat):
+        m = re.search(pat, text)
+        return set(re.findall(r'"([^"]+)"', m.group(1))) if m else None
+
+    sh_owned = lists(sh, r"OWNED\s*=\s*\((.*?)\)")
+    sh_seeded = lists(sh, r"SEEDED\s*=\s*\((.*?)\)")
+    ps_owned = lists(ps1, r"\$owned\s*=\s*@\((.*?)\)")
+    ps_seeded = lists(ps1, r"\$seeded\s*=\s*@\((.*?)\)")
+    for label, got in (("OWNED", sh_owned), ("SEEDED", sh_seeded),
+                       ("$owned", ps_owned), ("$seeded", ps_seeded)):
+        if got is None:
+            fail(NAME, f"could not find the {label} list — fix this check "
+                       f"before trusting a pass")
+            return
+
+    if sh_owned != ps_owned:
+        fail(NAME, f"owned keys differ: install.sh {sorted(sh_owned)} vs "
+                   f"install.ps1 {sorted(ps_owned)}")
+    if sh_seeded != ps_seeded:
+        fail(NAME, f"seeded keys differ: install.sh {sorted(sh_seeded)} vs "
+                   f"install.ps1 {sorted(ps_seeded)}")
+    if sh_owned & sh_seeded:
+        fail(NAME, f"{sorted(sh_owned & sh_seeded)} is both owned and seeded — "
+                   f"owned overwrites every install, seeded must not")
+
+    # Every non-comment top-level key in the source must be classified, or the
+    # installers simply drop it.
+    settings = json.loads(read("global/.claude/settings.json"))
+    for key in settings:
+        if key.startswith("_"):
+            continue
+        if key not in sh_owned and key not in sh_seeded:
+            fail(NAME, f"top-level key '{key}' in settings.json is neither "
+                       f"owned nor seeded — it never reaches ~/.claude")
+
+    # Seeded keys are the ones a re-install must not revert.
+    for key in sh_seeded:
+        if key not in settings:
+            fail(NAME, f"'{key}' is listed as seeded but is absent from "
+                       f"settings.json — nothing would be seeded")
+
+
 # --- 5. Doc inventories match the artifacts on disk --------------------------
 @check("doc inventories")
 def _():
