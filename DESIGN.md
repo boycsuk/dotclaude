@@ -347,7 +347,7 @@ One feature appears in all three under a different lens, with no duplicated deta
 
 **Considered:** shipping `sandbox` settings (`sandbox.filesystem.denyRead`, `network.deniedDomains`, etc.) so the template enforces filesystem/network boundaries at the OS level, given the security focus.
 
-**Chosen:** do NOT ship sandbox config. Document it as a reasoned non-goal here (and optionally point power users at it from `rules/security.md`).
+**Chosen:** do NOT ship sandbox config. Document it as a reasoned non-goal here, and point power users at it from `rules/security.md` — that pointer was optional when this was written and went unwritten for months, so an audit re-surfaced the sandbox as a "missing capability" when it was in fact a decision nobody could find. It now exists under "Optional hardening: the Bash sandbox" there, mirrored in `templates/project/docs/conventions.md`. **A reasoned non-goal that is only recorded in DESIGN.md will be re-proposed as an oversight; write it where the reader looks.**
 
 **Why the sandbox is genuinely stronger than the deny rules:** Read/Edit deny rules apply to Claude's built-in file tools and to file commands it recognizes in Bash, but **not** to arbitrary subprocesses (a Python or Node script that opens `.env` itself slips past them). The OS-level sandbox blocks all processes. So it is not redundant with decision 9 — it is a strictly stronger layer.
 

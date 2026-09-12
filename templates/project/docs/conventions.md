@@ -91,6 +91,12 @@
   reads of `.env`/`secrets/`/`credentials/`.
 - **Secure logs.** Never log sensitive data; sanitize inputs before logging
   (log injection via CRLF/escapes).
+- **Bash sandbox (opt-in hardening).** The deny rules stop Claude's own file
+  tools, not an arbitrary subprocess that opens `.env` itself. The OS-level
+  sandbox blocks every process, so it is strictly stronger. Off by default: it
+  needs a host prerequisite, has no native Windows support, and is incompatible
+  with Docker. Enable per machine with `{"sandbox": {"enabled": true}}` in
+  `~/.claude/settings.json` on a supported host.
 - **Limit resources.** Timeouts on external calls, input size limits, rate
   limiting where applicable.
 - **TOCTOU.** If a check and its action must be inseparable, use atomic ops or

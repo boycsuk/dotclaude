@@ -40,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   form is the one a future maintainer will reach for, so the test pins it.
 
 ### Changed
+- `rules/security.md` gains an "Optional hardening: the Bash sandbox" section,
+  mirrored in `templates/project/docs/conventions.md`. DESIGN.md §21 decided
+  against shipping sandbox config and said to "optionally" point power users at
+  it from the rules; that pointer went unwritten, so an audit later re-surfaced
+  the sandbox as a missing capability when it was a reasoned decision nobody
+  could find. §21 now records that a non-goal only written in DESIGN.md gets
+  re-proposed as an oversight.
 - CLAUDE.md: the layout tree now lists `check.py`, `tests/`, and the
   `references/` + `scripts/` subtrees of `skills/init-project/` — the validation
   surface "Operating in this repo" leans on was absent from the map.
@@ -48,6 +55,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its own live count).
 
 ### Fixed
+- `guard-push-main.ps1`: renamed the loop variable off `$args`, a PowerShell
+  automatic variable. Harmless today (nothing read it back) but a correctness
+  landmine in a safety hook.
+- `prefer-graphify.ps1`: `break` in every `switch` arm. PowerShell evaluates
+  every clause unless told to stop, unlike the `.sh` sibling's `case`, where
+  `;;` terminates. The three conditions are mutually exclusive today so nothing
+  double-fired, but `verify-on-edit.ps1` already used `break` throughout.
+- `init.ps1`: the `.gitignore` merge writes through `Write-Utf8NoBom` instead of
+  `Add-Content`, which on PS 5.1 defaults to ANSI and CRLF — mangling non-ASCII
+  patterns and mixing line endings in a checkout shared with WSL. Comparison is
+  now `-cnotcontains`, matching the `.sh` sibling's case-sensitive `grep -qxF`:
+  `-notcontains` treated a user's `thumbs.db` as covering `Thumbs.db`.
+- `tests/mcp-merge-cases.py` + `init.ps1`: the "`--xcode` on a non-mac host
+  aborts" case was unreachable from a Mac. `$IsMacOS` is an engine variable that
+  the `uname` stub cannot reach, and only the force-Darwin hatch existed, so the
+  case passed by accident on Linux and inverted on macOS. Added the inverse
+  hatch so both verdicts are reachable from either runner.
+- `tests/verify-on-edit-cases.py`: the hanging-check expectation is now
+  per-runner. The `.ps1` bounds processes with `WaitForExit` and always skips,
+  while the `.sh` needs a timeout binary stock macOS lacks — a single scalar
+  expectation could not describe both.
 - `guard-destructive.sh` / `guard-push-main.sh`: move the Python heredoc out of
   the `$( )` command substitution. Bash mishandles a heredoc inside a command
   substitution when the command is followed by an operator (`||` here): it stops

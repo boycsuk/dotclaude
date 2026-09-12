@@ -77,3 +77,17 @@ Validate by header (magic bytes), not by extension. Disable execution permission
 
 ### Secure logs
 Do not log sensitive data. Sanitize inputs before writing them to logs to prevent log injection (CRLF, escape sequences).
+
+## Optional hardening: the Bash sandbox
+
+The central `deny` rules stop Claude's own file tools and the file commands it recognizes in Bash — they do **not** stop an arbitrary subprocess. A script that opens `.env` itself slips past them. The OS-level Bash sandbox blocks every process, so it is a strictly stronger layer, not a redundant one.
+
+It is **opt-in, never a default** (DESIGN.md §21): it needs a host prerequisite the setup cannot guarantee (bubblewrap + socat on Linux/WSL2), has no native Windows support, and is incompatible with Docker — which the template's own `--compose` / `--runtime` scaffolds use. A default that breaks the template's Docker path is a bad default.
+
+Turn it on per machine in `~/.claude/settings.json` when the host supports it and you want defense against a prompt-injected subprocess read:
+
+```json
+{ "sandbox": { "enabled": true } }
+```
+
+Then narrow it with `sandbox.filesystem` (`allowRead`/`denyRead`/`allowWrite`/`denyWrite`), `sandbox.network.allowedDomains`, and `sandbox.credentials`. Add any Docker or container command you need to the documented exclusions, or the sandbox will block it. Run `/sandbox` in a session to check the current state.
