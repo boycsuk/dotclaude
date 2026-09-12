@@ -132,7 +132,7 @@ if os.path.exists(dst_path):
             % (dst_path, backup))
         dst = {}
 OWNED = ("permissions", "hooks", "attribution")
-SEEDED = ("outputStyle", "fileCheckpointingEnabled")
+SEEDED = ("outputStyle", "fileCheckpointingEnabled", "statusLine")
 for key in OWNED:
     if key in src:
         dst[key] = src[key]

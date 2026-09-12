@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `statusline.{sh,ps1}` and a seeded `statusLine` key, printing
+  `<model> · <context>% ctx` below the prompt. Context percentage is the point:
+  the number that decides when compaction hits is otherwise invisible until it
+  happens, and compaction is what `reinject-rules` exists to repair. The warning
+  marker is on remaining headroom, not a fixed percentage — a 1M-context session
+  sits in single digits for most of a long run, so a flat "warn at 70%" would
+  stay quiet until it was far too late.
+  Seeded rather than owned, so a personal status line is never reverted.
+  `install.ps1` rewrites its `command` to the `.ps1` form and adds
+  `"shell": "powershell"`, the way the hooks tree is already rewritten;
+  without that Windows would seed a status line invoking a bash script.
+  It parses with `python3`, not the docs' `jq` (DESIGN.md §5).
+- `tests/statusline-cases.py`, an 11-case matrix, required by `check.py`. Two
+  invariants matter more than what it prints: it must always exit 0 with an
+  empty stderr, because whatever it emits lands where the status belongs and a
+  traceback becomes permanent UI noise; and it must print nothing rather than a
+  fabricated `0% ctx` when `used_percentage` is null — which it is before the
+  first API call and again right after `/compact`, exactly when someone reads
+  the bar to decide whether to commit.
 - `changelog-reminder.{sh,ps1}`, a `Stop` hook that says so when a turn ends
   with code changed and `CHANGELOG.md` untouched — making the "a task is done
   only when it compiles, passes tests, and is logged in CHANGELOG.md" rule
@@ -119,6 +138,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   form is the one a future maintainer will reach for, so the test pins it.
 
 ### Changed
+- `check.py` no longer treats `statusline` as a hook in the doc-inventory
+  check. It lives in `hooks/` for the lockstep `.sh`/`.ps1` install machinery
+  but is wired through its own settings key on a different lifecycle, so the
+  hook inventories in CLAUDE.md and the template README do not describe it.
+  It is still required to carry a case matrix.
 - `rules/security.md` gains an "Optional hardening: the Bash sandbox" section,
   mirrored in `templates/project/docs/conventions.md`. DESIGN.md §21 decided
   against shipping sandbox config and said to "optionally" point power users at
@@ -133,7 +157,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stated as twelve, nine and fourteen in three places while the script printed
   its own live count).
 
+### Deprecated
+
+### Removed
+
 ### Fixed
+- `tests/inject.py`: the `diverge-seeded-lists` regression pinned the seeded
+  list verbatim, so it stopped applying the moment a key was added and reported
+  a false NOT CAUGHT. It now parses the declaration and drops the last entry,
+  whatever the list holds.
 - `install.ps1`: build a hook group without a `matcher` key when the source has
   none, instead of emitting `"matcher": null`. Events that take no matcher
   (`Stop`, `UserPromptSubmit`, …) had never appeared in the source before, so
@@ -203,11 +235,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it really is the guarded file) and returns BLOCK, making the matrix unpassable
   on the maintainer's own machine. The expectation is now platform-aware.
 
-### Deprecated
-
-### Removed
-
 ### Security
-
 - `guard-push-main.ps1`'s missing timeout (above) was a fail-open on a safety
   hook: on Windows only, and only under a slow or hung `git`.

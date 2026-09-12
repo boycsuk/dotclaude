@@ -180,14 +180,22 @@ def add_permissions_key(repo):
 def diverge_seeded_lists(repo):
     """The SEEDED list is hand-written in both installers; a key added to one
     only is silently never seeded on the other platform."""
+    import re
     path = os.path.join(repo, "install.ps1")
     with open(path) as fh:
         text = fh.read()
-    old = '$seeded = @("outputStyle", "fileCheckpointingEnabled")'
-    if old not in text:
+    # Match the declaration rather than its current contents: pinning the list
+    # verbatim made this regression rot the moment a key was added, and a
+    # regression that cannot apply reports a false NOT CAUGHT.
+    m = re.search(r'\$seeded\s*=\s*@\((.*?)\)', text)
+    if not m:
         raise SystemExit("inject: install.ps1 no longer declares $seeded as expected")
+    keys = re.findall(r'"([^"]+)"', m.group(1))
+    if len(keys) < 2:
+        raise SystemExit("inject: $seeded has too few keys to drop one")
+    dropped = '$seeded = @(%s)' % ", ".join('"%s"' % k for k in keys[:-1])
     with open(path, "w") as fh:
-        fh.write(text.replace(old, '$seeded = @("outputStyle")'))
+        fh.write(text[:m.start()] + dropped + text[m.end():])
 
 
 def own_a_seeded_key(repo):

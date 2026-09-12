@@ -267,7 +267,20 @@ if ($unmapped.Count -gt 0) {
 # SEEDED is written only when the key is absent, so a /config choice survives
 # a re-install.
 $owned  = @("permissions", "hooks", "attribution")
-$seeded = @("outputStyle", "fileCheckpointingEnabled")
+$seeded = @("outputStyle", "fileCheckpointingEnabled", "statusLine")
+
+# statusLine is seeded verbatim from the source like every other seeded key,
+# but its `command` is the .sh form. Rewrite it the way the hooks tree is
+# rewritten, or Windows seeds a status line that invokes a bash script.
+if ($srcSettings.PSObject.Properties.Name -contains "statusLine" -and $srcSettings.statusLine.command) {
+    $slName = [System.IO.Path]::GetFileNameWithoutExtension($srcSettings.statusLine.command)
+    $srcSettings.statusLine.command = "& `"$Target\hooks\$slName.ps1`""
+    if (-not ($srcSettings.statusLine.PSObject.Properties.Name -contains "shell")) {
+        $srcSettings.statusLine | Add-Member -NotePropertyName shell -NotePropertyValue "powershell"
+    } else {
+        $srcSettings.statusLine.shell = "powershell"
+    }
+}
 
 $settingsPath = Join-Path $Target "settings.json"
 $existing = [ordered]@{}

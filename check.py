@@ -206,9 +206,13 @@ def _():
                     for p in glob.glob(os.path.join(REPO, "global/.claude/skills/*/SKILL.md")))
 
     # Hooks that are opt-in (merged only by --serena) are not part of the
-    # always-on inventory those docs describe.
+    # always-on inventory those docs describe. `statusline` lives in hooks/ for
+    # the .sh/.ps1 install machinery but is NOT a hook — it is the statusLine
+    # command, wired through its own settings key and firing on a different
+    # lifecycle — so the hook inventories do not describe it either.
     optional_hooks = {"prefer-serena-bash", "prefer-graphify"}
-    core_hooks = [h for h in hooks if h not in optional_hooks]
+    not_hooks = {"statusline"}
+    core_hooks = [h for h in hooks if h not in optional_hooks | not_hooks]
 
     inventories = {
         "CLAUDE.md": read("CLAUDE.md"),
@@ -307,7 +311,12 @@ def _():
                          ("sync-mirror-docs", advisory),
                          ("prefer-serena-bash", advisory),
                          ("prefer-graphify", advisory),
-                         ("changelog-reminder", "tests/changelog-reminder-cases.py")):
+                         ("changelog-reminder", "tests/changelog-reminder-cases.py"),
+                         # Not a hook, but the same lockstep .sh/.ps1 pair, and
+                         # its failure mode is worse than silence: whatever it
+                         # emits lands in the status bar, so a traceback becomes
+                         # permanent UI noise.
+                         ("statusline", "tests/statusline-cases.py")):
         if not os.path.exists(os.path.join(REPO, matrix)):
             fail("hooks have case matrices",
                  f"{hook} has no case matrix at {matrix}")
