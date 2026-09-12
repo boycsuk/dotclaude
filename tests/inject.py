@@ -163,7 +163,22 @@ def heredoc_back_into_subshell(repo):
         fh.write(text.replace('if [ -s "$_GD_OUT" ]; then\n  CMD=$(cat "$_GD_OUT")\nfi', ')'))
 
 
+def add_permissions_key(repo):
+    """A new scalar key under permissions must reach Windows too.
+
+    install.ps1 rebuilds `permissions` key by key instead of copying the
+    object, so a key added to the source silently applies on Unix only.
+    """
+    path = os.path.join(repo, "global/.claude/settings.json")
+    with open(path) as fh:
+        settings = json.load(fh)
+    settings["permissions"]["blockReadsOutsideWorkingDirectories"] = True
+    with open(path, "w") as fh:
+        json.dump(settings, fh, indent=2)
+
+
 REGRESSIONS = {
+    "add-permissions-key": add_permissions_key,
     "heredoc-back-into-subshell": heredoc_back_into_subshell,
     "drop-hook-matrix": drop_hook_matrix,
     "delete-central-agent": delete_central_agent,

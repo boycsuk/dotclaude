@@ -55,8 +55,15 @@ CASES = [
     # --- dodging attempts ---------------------------------------------------
     ("~/.claude/hooks/../settings.json",           BLOCK, "../ traversal resolves inside"),
     ("~/projects/../.claude/settings.json",        BLOCK, "traversal from elsewhere"),
-    ("~/.Claude/settings.json", {"sh": ALLOW, "ps1": BLOCK},
-     "case variant: distinct path on ext4 (sh on Linux), same file on NTFS/APFS (ps1)"),
+    # The .sh folds both sides on Darwin (APFS is case-insensitive, so this IS
+    # the guarded file) and keeps the exact match on Linux (ext4, where it is
+    # genuinely a different path). Hard-coding ALLOW here made the matrix
+    # unpassable on macOS — and a matrix that cannot pass on the maintainer's
+    # own machine stops being run, which is how the unparseable-hook defect
+    # survived (DESIGN.md §32).
+    ("~/.Claude/settings.json",
+     {"sh": BLOCK if sys.platform == "darwin" else ALLOW, "ps1": BLOCK},
+     "case variant: same file on APFS/NTFS, distinct path on ext4"),
     ("SYMLINK",                                    BLOCK,
      "a symlink pointing at the guarded file is the guarded file"),
 ]

@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `tests/advisory-hooks-cases.py`: a 21-case matrix for `reinject-rules`,
+  `sync-mirror-docs`, `prefer-serena-bash` and `prefer-graphify` — the four
+  hooks `check.py` silently exempted from the matrix requirement, and the only
+  ones whose failure mode is silence. It asserts the delivery contract (exit 0,
+  `additionalContext` on stdout, the right `hookEventName`, and silence when
+  there is nothing to say), not merely that something was printed: that
+  distinction is what the dead-stderr channel passed for months. `check.py`
+  now requires their matrix and pins those two assertions.
+- `check.py`: a check that every scalar key under `permissions` in
+  `settings.json` is actually read by `install.ps1`, which rebuilds the object
+  key by key and so drops unknown keys on Windows. `defaultMode` was added that
+  way and was caught by this check.
+- `permissions.defaultMode: "auto"` in the central `settings.json`, making
+  explicit what is already the built-in default on Pro/Max/Team instead of
+  inheriting it silently — DESIGN.md §9's model was reasoned when the default
+  was Manual. Deny and ask rules are unaffected. Documented in the settings
+  comment: `auto` takes effect only from `~/.claude/settings.json`, never from
+  a project stub.
 - `check.py`: a `script syntax` check that runs `bash -n` over every shipped
   `.sh` and, when `pwsh` is on PATH, parses every `.ps1`. Every other check read
   these files as text, so an unparseable hook passed green (DESIGN.md §32).
@@ -40,6 +58,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Claude Code. The heredoc now runs at top level, writing to a temp file that
   bash reads back. Known bash bug, 4.x onward:
   https://lists.gnu.org/archive/html/bug-bash/2010-07/msg00043.html
+- `verify-on-edit.sh`: detect `timeout` / `gtimeout` instead of assuming
+  `timeout` exists. It is GNU coreutils and is absent from a stock macOS, so
+  under `set -e` every `run()` failed and **every edit to a code file reported a
+  phantom lint error** — on every macOS project, the platform this hook is most
+  used on. With neither binary the checks run unbounded, where the 60s per-hook
+  budget in `settings.json` is still a backstop. The `.ps1` sibling was never
+  affected: it bounds processes with `WaitForExit`, which needs no external
+  binary. Its matrix case is now platform-aware rather than unpassable on macOS.
 - `guard-push-main.ps1`: bound the `git symbolic-ref` branch lookup to 2s, as the
   `.sh` sibling already did. Unbounded, a hung git exceeded the hook's 5s budget;
   the harness then cancels the hook and discards its verdict, so a push to main
@@ -59,6 +85,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `templates/project/.claude/serena-hooks.json`: the comment advertised stderr as
   the advisory channel — the dead channel the §17 fix replaced with
   `hookSpecificOutput.additionalContext`.
+- `tests/guard-central-config-cases.py`: the `~/.Claude/settings.json` case
+  hard-coded ALLOW for the `.sh`, which is correct only on a case-sensitive
+  filesystem. On macOS the hook folds both paths (APFS is case-insensitive, so
+  it really is the guarded file) and returns BLOCK, making the matrix unpassable
+  on the maintainer's own machine. The expectation is now platform-aware.
 
 ### Deprecated
 

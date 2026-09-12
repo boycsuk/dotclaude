@@ -88,6 +88,10 @@ python3 "$SRC/tests/inject.py" "$WORK/repo" heredoc-back-into-subshell
 expect_fail "a hook folds its heredoc back inside \$( )"
 
 setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" add-permissions-key
+expect_fail "a new permissions key never reaches install.ps1"
+
+setup
 python3 "$SRC/tests/inject.py" "$WORK/repo" readd-if-gate
 expect_fail "a hook entry regains a prefix 'if' gate"
 

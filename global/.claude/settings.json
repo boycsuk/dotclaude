@@ -1,5 +1,5 @@
 {
-  "_comment": "CENTRAL settings, installed to ~/.claude/settings.json by install.sh/ps1. Hook commands point at $HOME/.claude/hooks and use the .sh form; install.ps1 rewrites them to .ps1 + adds \"shell\": \"powershell\" on Windows, and mirrors the Bash permission rules to PowerShell(...). These apply to EVERY project automatically; a project's own .claude/settings.json only adds to this (permissions and hooks merge across scopes). MODEL: Bash runs allow-by-default; the deny list + guard-destructive hook (which now matches ALL Bash) are the safety net. See DESIGN.md §9. HOOK GATING: hook entries carry NO \"if\" conditions on purpose — an \"if\" pattern is prefix-anchored and reopens exactly the wrapped-form bypasses the hooks' own parsers close (\"if\": \"Bash(git push *)\" let `git -C /repo push origin main` through unjudged); every hook self-gates precisely and exits 0 fast on non-matches.",
+  "_comment": "CENTRAL settings, installed to ~/.claude/settings.json by install.sh/ps1. Hook commands point at $HOME/.claude/hooks and use the .sh form; install.ps1 rewrites them to .ps1 + adds \"shell\": \"powershell\" on Windows, and mirrors the Bash permission rules to PowerShell(...). These apply to EVERY project automatically; a project's own .claude/settings.json only adds to this (permissions and hooks merge across scopes). MODEL: Bash runs allow-by-default; the deny list + guard-destructive hook (which now matches ALL Bash) are the safety net. See DESIGN.md §9. PERMISSION MODE: defaultMode is \"auto\" (classifier-reviewed), making explicit what is already the built-in default on Pro/Max/Team rather than inheriting it silently — §9's model was reasoned when the default was Manual. Deny rules still block in every mode and ask rules still prompt, so the safety net is unchanged. NOTE: \"auto\" only takes effect from ~/.claude/settings.json — set in a PROJECT's .claude/settings.json it is ignored and the session starts in Manual, so never copy this key into the per-project stub. HOOK GATING: hook entries carry NO \"if\" conditions on purpose — an \"if\" pattern is prefix-anchored and reopens exactly the wrapped-form bypasses the hooks' own parsers close (\"if\": \"Bash(git push *)\" let `git -C /repo push origin main` through unjudged); every hook self-gates precisely and exits 0 fast on non-matches.",
   "permissions": {
     "allow": [
       "Read",
@@ -54,7 +54,8 @@
       "Read(//**/credentials/**)",
       "Read(~/.claude/.credentials.json)"
     ],
-    "disableBypassPermissionsMode": "disable"
+    "disableBypassPermissionsMode": "disable",
+    "defaultMode": "auto"
   },
   "attribution": {
     "commit": "",

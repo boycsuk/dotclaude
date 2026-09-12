@@ -209,6 +209,7 @@ $central = [ordered]@{
         ask   = @(Convert-RuleList $srcSettings.permissions.ask)
         deny  = @(Convert-RuleList $srcSettings.permissions.deny) + $extraDeny
         disableBypassPermissionsMode = $srcSettings.permissions.disableBypassPermissionsMode
+        defaultMode = $srcSettings.permissions.defaultMode
     }
     # Derived, not hardcoded: every sibling above reads $srcSettings, and
     # install.sh copies "attribution" straight from the source JSON. A literal

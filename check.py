@@ -131,6 +131,17 @@ def _():
                  f"Bash({verb}) has no entry in install.ps1's $verbMap — it would "
                  f"be silently dropped on Windows")
 
+    # install.ps1 rebuilds `permissions` key by key rather than copying the
+    # object, so a NEW scalar key in the source reaches Unix and silently
+    # vanishes on Windows. defaultMode was added that way and was caught here.
+    for key in settings["permissions"]:
+        if key in ("allow", "ask", "deny"):
+            continue                      # handled by Convert-RuleList above
+        if key not in ps1:
+            fail("install.ps1 derives from settings.json",
+                 f"permissions.{key} is in settings.json but never read by "
+                 f"install.ps1 — it would be dropped on Windows")
+
 
 # --- 5. Doc inventories match the artifacts on disk --------------------------
 @check("doc inventories")
@@ -225,19 +236,39 @@ def _():
 
 
 # --- 8. Every safety hook that has a case matrix keeps it ---------------------
-@check("safety hooks have case matrices")
+@check("hooks have case matrices")
 def _():
     # Each of these hooks shipped a real defect that reading them did not
     # reveal (DESIGN.md §18, §26, §27). Their matrices are the regression net;
     # a hook silently losing its matrix would be invisible in a passing run.
+    #
+    # The four advisory hooks share ONE matrix: their failure mode is silence,
+    # not a wrong verdict, so nothing else would notice them breaking — which
+    # is how three of them sat on a dead delivery channel for months (§17).
+    advisory = "tests/advisory-hooks-cases.py"
     for hook, matrix in (("guard-push-main", "tests/guard-push-main-cases.py"),
                          ("guard-destructive", "tests/guard-destructive-cases.py"),
                          ("detect-secrets", "tests/detect-secrets-cases.py"),
                          ("guard-central-config", "tests/guard-central-config-cases.py"),
-                         ("verify-on-edit", "tests/verify-on-edit-cases.py")):
+                         ("verify-on-edit", "tests/verify-on-edit-cases.py"),
+                         ("reinject-rules", advisory),
+                         ("sync-mirror-docs", advisory),
+                         ("prefer-serena-bash", advisory),
+                         ("prefer-graphify", advisory)):
         if not os.path.exists(os.path.join(REPO, matrix)):
-            fail("safety hooks have case matrices",
+            fail("hooks have case matrices",
                  f"{hook} has no case matrix at {matrix}")
+
+    # The advisory matrix is only a net if it asserts the DELIVERY channel.
+    # Asserting "something was printed" would pass on the stderr form that was
+    # inert, so pin the two strings that make the assertion real.
+    if os.path.exists(os.path.join(REPO, advisory)):
+        body = read(advisory)
+        for needle in ("additionalContext", "hookEventName"):
+            if needle not in body:
+                fail("hooks have case matrices",
+                     f"{advisory} does not assert {needle} — it would pass on "
+                     f"the dead stderr channel (DESIGN.md §17)")
 
 
 # --- 9. The guard-push-main matrix still covers the known bypasses -----------
