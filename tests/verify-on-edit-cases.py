@@ -97,7 +97,14 @@ CASES = [
      "'lint' as a dependency is not a script — pseudo-failure otherwise"),
     ("npm missing is not an error", "js-no-npm", "src/app.ts", QUIET,
      "bun/pnpm-only environments: every other branch guards its binary"),
-    ("hanging check is skipped, not reported", "js-hanging-lint", "src/app.ts", QUIET,
+    # Only assertable where a timeout binary exists. Stock macOS ships neither
+    # `timeout` (GNU coreutils) nor `gtimeout`, so the hook runs checks
+    # unbounded there and a hanging check is caught by the 60s per-hook budget
+    # in settings.json instead. Asserting QUIET unconditionally made this
+    # matrix unpassable on macOS — and an unpassable matrix stops being run,
+    # which is how the unparseable-hook defect survived (DESIGN.md §32).
+    ("hanging check is skipped, not reported", "js-hanging-lint", "src/app.ts",
+     QUIET if (shutil.which("timeout") or shutil.which("gtimeout")) else FAIL,
      "a timeout is the budget's fault, not the code's — cry-wolf otherwise"),
     ("mts triggers the JS branch", "js-lint-fails", "src/app.mts", FAIL,
      "TS 4.7 module extension"),

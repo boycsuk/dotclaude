@@ -24,10 +24,26 @@ ERRORS=""
 # settings.json (two checks max 30s, headroom for the wrapper).
 CHECK_TIMEOUT="${VERIFY_TIMEOUT:-15}"
 
+# `timeout` is GNU coreutils and is NOT present on a stock macOS, where this
+# hook is most used. Calling it unconditionally made every run() fail, so with
+# `set -e` EVERY edit to a code file reported a phantom lint error — the
+# cry-wolf failure DESIGN.md §26 warns about, firing on all macOS projects.
+# Homebrew coreutils installs it as `gtimeout`; with neither, run unbounded:
+# the 60s per-hook timeout in settings.json is still a backstop, and losing the
+# per-check bound is far cheaper than fabricating lint errors.
+TIMEOUT_BIN=""
+if command -v timeout >/dev/null 2>&1; then TIMEOUT_BIN="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then TIMEOUT_BIN="gtimeout"
+fi
+
 run() {
   local desc="$1"; shift
   local out rc
-  out=$(timeout "$CHECK_TIMEOUT" "$@" 2>&1) && return 0
+  if [[ -n "$TIMEOUT_BIN" ]]; then
+    out=$("$TIMEOUT_BIN" "$CHECK_TIMEOUT" "$@" 2>&1) && return 0
+  else
+    out=$("$@" 2>&1) && return 0
+  fi
   rc=$?
   # 124 = the check itself timed out. That is the budget's fault, not the
   # code's: reporting it as a lint failure makes Claude "fix" errors that do
