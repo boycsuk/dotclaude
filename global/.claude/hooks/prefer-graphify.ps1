@@ -36,6 +36,11 @@ function Send-Nudge([string]$msg) {
 $searchMsg = 'Graphify hint: a knowledge graph exists at graphify-out/. For a focused where/what/who-calls question, run `graphify query "<question>"` (scoped subgraph, usually much smaller than grepping raw files) — or `graphify path "<A>" "<B>"` for relationships. Read raw files to modify or debug specific code, or when the graph lacks detail. Advisory; the command still runs.'
 $readMsg = 'Graphify hint: a knowledge graph exists at graphify-out/. To ANSWER a codebase question, run `graphify query "<question>"`, `graphify explain "<concept>"`, or `graphify path "<A>" "<B>"` (scoped subgraph, cheaper than reading files one by one). Read raw files to MODIFY or debug specific code, or when the graph lacks the detail. Advisory; the read still runs.'
 
+# Each arm ends in `break`: PowerShell's switch evaluates EVERY clause unless
+# told to stop, unlike the .sh sibling's `case`, where `;;` terminates. The
+# three conditions happen to be mutually exclusive today, so nothing
+# double-fires — but adding an overlapping clause would nudge twice, and
+# verify-on-edit.ps1 already uses break in every arm of its switch.
 switch ($tool) {
     'Bash' {
         $cmd = $data.tool_input.command
@@ -44,11 +49,13 @@ switch ($tool) {
         if ($cmd -match '(^|[\s|])(grep|rg|ripgrep|ack|ag)\s' -or $cmd -match '(^|[\s|])(find|fd)\s') {
             Send-Nudge $searchMsg
         }
+        break
     }
     'Grep' {
         # A content search across the codebase is exactly the question the graph
         # answers — no code-extension requirement (patterns rarely name one).
         Send-Nudge $searchMsg
+        break
     }
     { $_ -in 'Read', 'Glob' } {
         $t = $data.tool_input
@@ -60,6 +67,7 @@ switch ($tool) {
             -and $blob -match '\.(py|pyi|ts|tsx|js|jsx|mjs|cjs|go|rs|java|kt|kts|rb|php|c|cc|cpp|cxx|h|hpp|hh|cs|swift|scala|clj|ex|exs|erl|hs|ml|sql|vue|svelte|lua|sh)(\s|$)') {
             Send-Nudge $readMsg
         }
+        break
     }
 }
 

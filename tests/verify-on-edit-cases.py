@@ -103,8 +103,13 @@ CASES = [
     # in settings.json instead. Asserting QUIET unconditionally made this
     # matrix unpassable on macOS — and an unpassable matrix stops being run,
     # which is how the unparseable-hook defect survived (DESIGN.md §32).
+    # Per-runner: the .ps1 bounds processes with WaitForExit and always skips a
+    # hanging check, but the .sh needs a timeout binary and stock macOS ships
+    # neither, so there it runs unbounded and the stub's failure surfaces. The
+    # 60s per-hook budget in settings.json is the backstop in that case.
     ("hanging check is skipped, not reported", "js-hanging-lint", "src/app.ts",
-     QUIET if (shutil.which("timeout") or shutil.which("gtimeout")) else FAIL,
+     {"sh": QUIET if (shutil.which("timeout") or shutil.which("gtimeout")) else FAIL,
+      "ps1": QUIET},
      "a timeout is the budget's fault, not the code's — cry-wolf otherwise"),
     ("mts triggers the JS branch", "js-lint-fails", "src/app.mts", FAIL,
      "TS 4.7 module extension"),
@@ -176,7 +181,11 @@ def main():
                 results[rname] = invoke(runner, root, bindir, file_path)
             except subprocess.TimeoutExpired:
                 results[rname] = "TIMEOUT"
-        if any(got != want for got in results.values()):
+        # `want` is a dict when the two runners legitimately differ, the way
+        # guard-central-config-cases.py expresses platform-dependent verdicts.
+        bad = any(got != (want[n] if isinstance(want, dict) else want)
+                  for n, got in results.items())
+        if bad:
             failures += 1
             detail = ", ".join(f"{n}={g}" for n, g in results.items())
             print(f"  FAIL want {want} got {detail} | {name}   ({why})")

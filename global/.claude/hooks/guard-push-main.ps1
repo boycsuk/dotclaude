@@ -160,15 +160,15 @@ foreach ($seg in $segments) {
     # be judged, since it targets the checked-out branch.
     $pushArgs = Get-PushArgs $seg
     if ($null -eq $pushArgs) { continue }
-    $args = @($pushArgs)
+    $pushArgList = @($pushArgs)
 
     # --- Force, by flag, by --mirror, or by a leading '+' on a refspec -------
-    foreach ($a in $args) {
+    foreach ($a in $pushArgList) {
         if ($a -eq "-f" -or $a.StartsWith("--force")) { $verdict = "FORCE_FLAG"; break }
     }
     if ($verdict) { break }
-    if ($args -contains "--mirror") { $verdict = "MIRROR"; break }
-    foreach ($a in $args) {
+    if ($pushArgList -contains "--mirror") { $verdict = "MIRROR"; break }
+    foreach ($a in $pushArgList) {
         if (-not $a.StartsWith("-") -and $a.StartsWith("+")) { $verdict = "FORCE_REFSPEC"; break }
     }
     if ($verdict) { break }
@@ -176,8 +176,8 @@ foreach ($seg in $segments) {
     # --- Which branch would this land on? -----------------------------------
     $cleaned = @()
     $j = 0
-    while ($j -lt $args.Count) {
-        $a = $args[$j]
+    while ($j -lt $pushArgList.Count) {
+        $a = $pushArgList[$j]
         if ($a.StartsWith("-")) {
             $j += if ($VALUED_PUSH -contains $a) { 2 } else { 1 }
             continue
@@ -189,8 +189,8 @@ foreach ($seg in $segments) {
     # single-element slice would be iterated character by character.
     $refspecs = @(if ($cleaned.Count -gt 1) { $cleaned[1..($cleaned.Count - 1)] } else { @() })
 
-    $deleteMode = ($args -contains "--delete") -or ($args -contains "-d")
-    $allMode = ($args -contains "--all") -or ($args -contains "--branches")
+    $deleteMode = ($pushArgList -contains "--delete") -or ($pushArgList -contains "-d")
+    $allMode = ($pushArgList -contains "--all") -or ($pushArgList -contains "--branches")
 
     $targets = @()
     foreach ($spec in $refspecs) {
