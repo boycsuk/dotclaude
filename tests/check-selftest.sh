@@ -92,6 +92,10 @@ python3 "$SRC/tests/inject.py" "$WORK/repo" add-permissions-key
 expect_fail "a new permissions key never reaches install.ps1"
 
 setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" stop-hook-starts-blocking
+expect_fail "the Stop hook matrix stops asserting it never blocks"
+
+setup
 python3 "$SRC/tests/inject.py" "$WORK/repo" diverge-seeded-lists
 expect_fail "the seeded key lists diverge between the installers"
 

@@ -237,11 +237,17 @@ foreach ($event in $srcSettings.hooks.PSObject.Properties) {
             $timeout = if ($h.timeout) { $h.timeout } else { 5 }
             $hooks += (New-Hook $name $timeout)
         }
-        $groups += [ordered]@{ matcher = $group.matcher; hooks = $hooks }
+        # Events without matcher support (Stop, UserPromptSubmit, ...) carry no
+        # matcher in the source; emitting "matcher": null is not the same as
+        # omitting the key, so build the entry without it.
+        $entry = [ordered]@{}
+        if ($null -ne $group.matcher) { $entry["matcher"] = $group.matcher }
+        $entry["hooks"] = $hooks
+        $groups += $entry
     }
     # The Bash matcher is spelled PowerShell on Windows.
     foreach ($g in $groups) {
-        if ($g.matcher -eq "Bash") { $g.matcher = "PowerShell" }
+        if ($g.Contains("matcher") -and $g["matcher"] -eq "Bash") { $g["matcher"] = "PowerShell" }
     }
     $central.hooks[$event.Name] = $groups
 }

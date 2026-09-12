@@ -8,6 +8,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `changelog-reminder.{sh,ps1}`, a `Stop` hook that says so when a turn ends
+  with code changed and `CHANGELOG.md` untouched — making the "a task is done
+  only when it compiles, passes tests, and is logged in CHANGELOG.md" rule
+  visible rather than purely advisory. It is **advisory by construction**:
+  `systemMessage` and exit 0, never `decision: "block"` and never exit 2.
+  That is not a soft choice. On `Stop`, `decision`, exit 2 AND
+  `hookSpecificOutput.additionalContext` all CONTINUE the conversation — the
+  docs give additionalContext "the same loop protections as `decision: block`"
+  — and a Stop hook fires on every turn with no way to tell a finished task
+  from a half-done one, so anything that resumes the turn interrupts
+  legitimate mid-task work. `systemMessage` is the one combination that
+  surfaces text without resuming: plain stdout is added to context only for
+  `UserPromptSubmit`, `UserPromptExpansion`, `SessionStart` and
+  `PostModelSwitch`, and `Stop` is not among them. Silent on a clean tree, a
+  docs-only or lockfile-only change, a repo with no CHANGELOG.md, a non-git
+  directory, and when `stop_hook_active` is set.
+- `tests/changelog-reminder-cases.py`, an 11-case matrix, and a `check.py`
+  requirement that it exist and carry executable assertions on
+  `systemMessage`, `decision` and `hookSpecificOutput` — "it printed
+  something" would pass on a version that silently resumes every turn. The
+  check strips docstrings and comments before testing, because the matrix's
+  own prose names those fields while explaining why they must not be emitted;
+  the first version of this check was blind for exactly that reason and
+  `tests/check-selftest.sh` caught it.
+- `tests/inject.py`: a `stop-hook-starts-blocking` regression, wired into the
+  self-test (now 25 cases).
 - `rules/ai-collaboration.md`: a subagent's findings are hypotheses until
   verified at the source, not facts. Mirrored in
   `templates/project/docs/conventions.md` and added to the post-compaction
@@ -108,6 +134,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its own live count).
 
 ### Fixed
+- `install.ps1`: build a hook group without a `matcher` key when the source has
+  none, instead of emitting `"matcher": null`. Events that take no matcher
+  (`Stop`, `UserPromptSubmit`, …) had never appeared in the source before, so
+  the translation had never met the case; the subsequent Bash→PowerShell rename
+  now tests for the key's presence rather than dereferencing it.
 - `guard-push-main.ps1`: renamed the loop variable off `$args`, a PowerShell
   automatic variable. Harmless today (nothing read it back) but a correctness
   landmine in a safety hook.

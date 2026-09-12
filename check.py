@@ -306,10 +306,31 @@ def _():
                          ("reinject-rules", advisory),
                          ("sync-mirror-docs", advisory),
                          ("prefer-serena-bash", advisory),
-                         ("prefer-graphify", advisory)):
+                         ("prefer-graphify", advisory),
+                         ("changelog-reminder", "tests/changelog-reminder-cases.py")):
         if not os.path.exists(os.path.join(REPO, matrix)):
             fail("hooks have case matrices",
                  f"{hook} has no case matrix at {matrix}")
+
+    # changelog-reminder fires on Stop, where `decision: "block"`, exit 2 AND
+    # hookSpecificOutput.additionalContext all CONTINUE the turn. Its matrix is
+    # only a net if it asserts the hook emits none of them — "it printed
+    # something" would pass on a version that silently resumes every turn.
+    stop_matrix = "tests/changelog-reminder-cases.py"
+    if os.path.exists(os.path.join(REPO, stop_matrix)):
+        # Strip docstrings and comments first: the field names appear in this
+        # matrix's own prose explaining why they must not be emitted, so a
+        # whole-file substring test passes on a matrix that stopped asserting
+        # anything — the false pass the $verbMap block-parse already avoids.
+        body = read(stop_matrix)
+        body = re.sub(r'""".*?"""', "", body, flags=re.S)
+        body = re.sub(r"^\s*#.*$", "", body, flags=re.M)
+        for needle in ("systemMessage", "decision", "hookSpecificOutput"):
+            if f'"{needle}"' not in body:
+                fail("hooks have case matrices",
+                     f'{stop_matrix} has no executable assertion on "{needle}" — '
+                     f"it cannot tell an advisory Stop hook from one that "
+                     f"resumes the turn")
 
     # The advisory matrix is only a net if it asserts the DELIVERY channel.
     # Asserting "something was printed" would pass on the stderr form that was

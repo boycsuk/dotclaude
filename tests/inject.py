@@ -203,6 +203,23 @@ def own_a_seeded_key(repo):
         fh.write(text.replace(old, 'OWNED = ("permissions", "hooks", "attribution", "outputStyle")'))
 
 
+def stop_hook_starts_blocking(repo):
+    """A Stop hook that emits `decision` resumes the turn on every fire.
+
+    On Stop, decision/exit 2/additionalContext all continue the conversation,
+    and the hook cannot tell a finished task from a half-done one. The matrix
+    asserts none of those appear; dropping the assertion must not pass green.
+    """
+    path = os.path.join(repo, "tests/changelog-reminder-cases.py")
+    with open(path) as fh:
+        text = fh.read()
+    if '"decision"' not in text:
+        raise SystemExit("inject: changelog-reminder matrix no longer asserts on `decision`")
+    # Strip every mention, the way a rewrite that stops caring would.
+    with open(path, "w") as fh:
+        fh.write(text.replace('"decision"', '"_dropped"'))
+
+
 def add_unclassified_key(repo):
     """A top-level key in neither class never reaches ~/.claude at all."""
     path = os.path.join(repo, "global/.claude/settings.json")
@@ -214,6 +231,7 @@ def add_unclassified_key(repo):
 
 
 REGRESSIONS = {
+    "stop-hook-starts-blocking": stop_hook_starts_blocking,
     "diverge-seeded-lists": diverge_seeded_lists,
     "own-a-seeded-key": own_a_seeded_key,
     "add-unclassified-key": add_unclassified_key,

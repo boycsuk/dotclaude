@@ -29,7 +29,7 @@ and applies to every project automatically. See DESIGN.md §23.
 Installed from the dotclaude repo (`global/.claude/`) via `install.sh`; updated
 for all projects at once with `git pull && ./install.sh`:
 
-- **hooks/** — verify-on-edit, guard-destructive, guard-push-main, detect-secrets, sync-mirror-docs, guard-central-config (blocks editing the central `~/.claude/` config from inside a project), reinject-rules (re-primes the non-negotiable conventions after a context compaction).
+- **hooks/** — verify-on-edit, guard-destructive, guard-push-main, detect-secrets, sync-mirror-docs, guard-central-config (blocks editing the central `~/.claude/` config from inside a project), reinject-rules (re-primes the non-negotiable conventions after a context compaction), changelog-reminder (says so when a turn ends with code changed and CHANGELOG.md untouched — advisory, never blocks).
 - **agents/** — researcher, code-reviewer, debugger, db-inspector.
 - **skills/** — verify, commit, changes, plan-feature, compound, resume-context, update-docs, audit, readme, implement-ui (design reference → tokens in `docs/ui.md` → section-by-section build with a screenshot-vs-reference loop; pairs with the playwright MCP deployed by `init.sh --ui`).
 - **rules/** — code-quality, security, workflow, ai-collaboration.
