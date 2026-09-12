@@ -2,7 +2,7 @@
 
 The PER-PROJECT half of the dotclaude setup, deployed with `/init-project`. The
 reusable core (hooks, agents, skills, rules, output-styles) is NOT here — it is
-central in `~/.claude/` (installed from the dotclaude repo's `.claude/`)
+central in `~/.claude/` (installed from the dotclaude repo's `global/.claude/`)
 and applies to every project automatically. See DESIGN.md §23.
 
 ## What `/init-project` deploys (per-project only)
@@ -26,7 +26,7 @@ and applies to every project automatically. See DESIGN.md §23.
 
 ## The central core (in `~/.claude/`, shared by every project)
 
-Installed from the dotclaude repo (`.claude/`) via `install.sh`; updated
+Installed from the dotclaude repo (`global/.claude/`) via `install.sh`; updated
 for all projects at once with `git pull && ./install.sh`:
 
 - **hooks/** — verify-on-edit, guard-destructive, guard-push-main, detect-secrets, sync-mirror-docs, guard-central-config (blocks editing the central `~/.claude/` config from inside a project), reinject-rules (re-primes the non-negotiable conventions after a context compaction).

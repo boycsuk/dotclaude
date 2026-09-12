@@ -25,6 +25,13 @@ dotclaude/
 ├── CLAUDE.md                    # ← THIS FILE (project guide for Claude Code)
 ├── DESIGN.md                    # rationale for every architectural choice
 ├── README.md                    # human-facing install/usage doc
+├── check.py                     # the coherence validator — run before EVERY commit
+├── tests/                       # the behavioural net (see "Operating in this repo")
+│   ├── guard-push-main-cases.py        # + guard-destructive, detect-secrets,
+│   │                                   # guard-central-config, verify-on-edit
+│   ├── mcp-merge-cases.py / install-cases.py   # deployer + installer matrices
+│   ├── inject.py                       # injects one regression into a scratch copy
+│   └── check-selftest.sh               # asserts check.py fails on what it claims
 ├── global/.claude/              # CENTRAL config — installed into ~/.claude/, applies to ALL projects
 │   ├── settings.json            # base permissions + hooks + attribution (install resolves OS form)
 │   ├── hooks/                   # .sh + .ps1 pairs — must stay in lockstep
@@ -33,7 +40,9 @@ dotclaude/
 │   ├── skills/                  # workflow skills (verify, commit, audit, update-docs, …)
 │   └── output-styles/           # opt-in tone/language conventions (dotclaude.md)
 ├── skills/init-project/         # the global deployer skill (also installed into ~/.claude/skills/)
-│   └── SKILL.md
+│   ├── SKILL.md                 # the router; loads a reference per phase (progressive disclosure)
+│   ├── references/              # update-mode.md, stack-interview.md, mcp-and-db.md
+│   └── scripts/detect-drift.py  # drift report for --update
 └── templates/project/           # the PER-PROJECT skeleton (deployed by /init-project)
     ├── init.sh / init.ps1       # internal deployer — copies only per-project files
     ├── CLAUDE.md.template       # per-project CLAUDE.md with {{placeholders}}
@@ -73,7 +82,7 @@ Same rule for `install.sh` ↔ `install.ps1` and `templates/project/init.sh` ↔
 
 ### 3. Re-running the installer must be idempotent and never touch user content
 
-`install.sh` overwrites the central artifacts it owns (`~/.claude/{hooks,agents,skills,rules,output-styles}`, `templates/project/`, `skills/init-project/`) wholesale, and **merges** the base `settings.json` into `~/.claude/settings.json` preserving the user's own keys. It does **not** touch `~/.claude/CLAUDE.md` at all — the repo's `CLAUDE.md` is this repo's maintenance guide, not user global preferences, so it is never copied out. The user can `git pull && ./install.sh` repeatedly without losing global preferences.
+`install.sh` refreshes the central artifacts it owns in `~/.claude/{hooks,agents,skills,rules,output-styles}` by removing only the files it shipped **last time** (tracked in `~/.claude/.dotclaude-manifest`) and then copying the current set — files the user added to those directories are left alone, and files this repo stops shipping are still cleaned up. Do **not** "simplify" this back to an `rm -rf` per directory: that was the previous form and it silently deleted the user's own skills/agents/rules on every re-install (DESIGN.md §29). `templates/project/` and `skills/init-project/` *are* replaced wholesale — nothing user-owned lives there. The base `settings.json` is **merged** into `~/.claude/settings.json` preserving the user's own keys. It does **not** touch `~/.claude/CLAUDE.md` at all — the repo's `CLAUDE.md` is this repo's maintenance guide, not user global preferences, so it is never copied out. The user can `git pull && ./install.sh` repeatedly without losing global preferences.
 
 If you change install behaviour, preserve this: the installer owns the central artifacts, merges settings non-destructively, and leaves everything else in `~/.claude/` (CLAUDE.md, projects/, credentials) untouched.
 
@@ -139,7 +148,7 @@ DESIGN.md captures the reasoning behind every structural choice — read it befo
 
 ## Operating in this repo
 
-- **Run `python3 check.py` before every commit.** It is the closest thing this repo has to a test suite: twelve checks over the duplications the architecture requires (`.sh`/`.ps1` pairs, `install.ps1` deriving its rules from `settings.json`, doc inventories, shared extension globs, no inline interpreters in skills, hook wiring — no `if` gates and advisory hooks still emitting `additionalContext` — the safety-hook matrices and their known-bypass cases, DESIGN.md's structural headings, JSON validity). It exists because prose asking for lockstep did not hold — four of five spot-checked duplications had already diverged. See DESIGN.md §25.
+- **Run `python3 check.py` before every commit.** It is the closest thing this repo has to a test suite: one check per duplication the architecture requires (`.sh`/`.ps1` pairs, `install.ps1` deriving its rules from `settings.json`, doc inventories, shared extension globs, no inline interpreters in skills, hook wiring — no `if` gates and advisory hooks still emitting `additionalContext` — the safety-hook matrices and their known-bypass cases, DESIGN.md's structural headings, JSON validity, and that every shipped `.sh`/`.ps1` actually parses). It prints its own check count on every run, so don't hard-code that number here or in DESIGN.md — a stale count is the same drift this validator exists to catch. It exists because prose asking for lockstep did not hold — four of five spot-checked duplications had already diverged. See DESIGN.md §25.
 - **After touching a safety hook, run its case matrix** — `tests/guard-push-main-cases.py` (61 cases), `tests/guard-destructive-cases.py` (48), `tests/detect-secrets-cases.py` (39), `tests/guard-central-config-cases.py` (17), `tests/verify-on-edit-cases.py` (11). Add `--pwsh <path>` to verify the PowerShell sibling agrees on every case. Every one of these hooks shipped defects that reading them did not reveal, so a newly discovered case goes in the matrix *before* the fix. See DESIGN.md §18, §26 and §27.
 - **After touching a deployer or installer, run their matrices** — `tests/mcp-merge-cases.py` (composition, prerequisite exit codes, the serena-hooks settings merge) and `tests/install-cases.py` (settings merge preserves personal keys, manifest add/remove cycle, unparseable-settings backup). Both take `--pwsh <path>`.
 - **Hook entries in `settings.json` carry no `if:` gates, on purpose.** An `if` pattern is prefix-anchored, so it reopens exactly the wrapped-form bypasses the hooks' own parsers close (`"if": "Bash(git push *)"` let `git -C /repo push origin main` through unjudged, while the matrix passed because it invokes the hook directly). Every hook self-gates and exits 0 fast on non-matches. DESIGN.md §27(b).

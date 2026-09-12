@@ -141,7 +141,30 @@ def delete_central_skill(repo):
     shutil.rmtree(os.path.join(repo, "global/.claude/skills/implement-ui"))
 
 
+def heredoc_back_into_subshell(repo):
+    """Fold the python heredoc back inside a $( ), the DESIGN.md §32 defect.
+
+    Bash mishandles a heredoc opened within a command substitution when the
+    command is followed by an operator: it stops treating the quoted body as
+    opaque and lexes it for parens, quotes and backticks while hunting the
+    closing paren. The Python body contains all three, so the script becomes
+    unparseable -- and since both guards are PreToolUse hooks on Bash, that
+    blocks every Bash call in every project. Looks tidier, which is exactly
+    why someone will try it again.
+    """
+    path = os.path.join(repo, "global/.claude/hooks/guard-destructive.sh")
+    with open(path) as fh:
+        text = fh.read()
+    marker = 'CMD="$CMD" python3 > "$_GD_OUT" 2>/dev/null <<\'PY\''
+    if marker not in text:
+        raise SystemExit("inject: guard-destructive.sh no longer writes python output to a temp file")
+    text = text.replace(marker, 'CMD=$(CMD="$CMD" python3 <<\'PY\' 2>/dev/null || printf \'%s\' "$CMD"')
+    with open(path, "w") as fh:
+        fh.write(text.replace('if [ -s "$_GD_OUT" ]; then\n  CMD=$(cat "$_GD_OUT")\nfi', ')'))
+
+
 REGRESSIONS = {
+    "heredoc-back-into-subshell": heredoc_back_into_subshell,
     "drop-hook-matrix": drop_hook_matrix,
     "delete-central-agent": delete_central_agent,
     "break-frontmatter": break_frontmatter,

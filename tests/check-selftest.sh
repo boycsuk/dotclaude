@@ -84,6 +84,10 @@ printf 'not json' > "$WORK/repo/templates/project/.claude/settings.json"
 expect_fail "a shipped JSON file stops parsing"
 
 setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" heredoc-back-into-subshell
+expect_fail "a hook folds its heredoc back inside \$( )"
+
+setup
 python3 "$SRC/tests/inject.py" "$WORK/repo" readd-if-gate
 expect_fail "a hook entry regains a prefix 'if' gate"
 

@@ -7,9 +7,11 @@
 #
 # Also installs the per-project template and the /init-project skill.
 #
-# Re-running is safe: it overwrites the central artifacts (owned by this repo)
-# but never clobbers your personal CLAUDE.md, and MERGES the base settings into
-# $HOME\.claude\settings.json without dropping your own keys.
+# Re-running is safe: it refreshes the central artifacts it owns by removing only
+# the files it shipped last time (per the manifest), so your own skills/agents/
+# rules in those directories survive. It never clobbers your personal CLAUDE.md,
+# and MERGES the base settings into $HOME\.claude\settings.json without dropping
+# your own keys.
 #
 # This is the lockstep sibling of install.sh. On Windows the .ps1 hooks run
 # under PowerShell, so the central settings.json points at the .ps1 files with
@@ -33,6 +35,28 @@ if (-not (Get-Command python3 -ErrorAction SilentlyContinue) -and
     -not (Get-Command python -ErrorAction SilentlyContinue)) {
     [Console]::Error.WriteLine("ERROR: python3 not found — the hooks parse hook input with it. Install Python and re-run.")
     exit 1
+}
+
+# --- Syntax pre-flight: never install a hook that cannot be parsed -----------
+# Lockstep with install.sh. A hook that fails to parse is a wall, not a degraded
+# hook: the central guards run on PreToolUse, so an unparseable one breaks every
+# session, and that state cannot be repaired from inside Claude Code (the broken
+# hook blocks the installer that would replace it). See DESIGN.md §32. Abort
+# before copying, leaving the previously installed working hooks in place.
+$hookDir = Join-Path $ScriptDir "global/.claude/hooks"
+if (Test-Path $hookDir) {
+    foreach ($hook in @(Get-ChildItem -Path $hookDir -Filter "*.ps1" -File)) {
+        $tokens = $null
+        $errors = $null
+        [System.Management.Automation.Language.Parser]::ParseFile(
+            $hook.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+        if ($errors -and $errors.Count -gt 0) {
+            [Console]::Error.WriteLine("  ! $($hook.Name) does not parse — aborting before anything is copied.")
+            [Console]::Error.WriteLine("    $($errors[0].Message)")
+            [Console]::Error.WriteLine("    Your currently installed hooks are untouched. Fix the source and re-run.")
+            exit 1
+        }
+    }
 }
 
 New-Item -ItemType Directory -Force -Path (Join-Path $Target "templates") | Out-Null
@@ -186,7 +210,12 @@ $central = [ordered]@{
         deny  = @(Convert-RuleList $srcSettings.permissions.deny) + $extraDeny
         disableBypassPermissionsMode = $srcSettings.permissions.disableBypassPermissionsMode
     }
-    attribution = [ordered]@{ commit = ""; pr = "" }
+    # Derived, not hardcoded: every sibling above reads $srcSettings, and
+    # install.sh copies "attribution" straight from the source JSON. A literal
+    # pair here meant any future change to attribution in
+    # global/.claude/settings.json silently never reached Windows — exactly the
+    # drift CLAUDE.md requires install.ps1 to avoid by deriving its config.
+    attribution = $srcSettings.attribution
     hooks = [ordered]@{}
 }
 
@@ -247,7 +276,12 @@ if (Test-Path $settingsPath) {
         [Console]::Error.WriteLine("    A copy is saved at $backup — merge anything you need back by hand.")
     }
 }
-foreach ($k in $central.Keys) { $existing[$k] = $central[$k] }
+# Skip null-valued central keys: install.sh copies an owned key only `if key in
+# src`, so a key absent from the source JSON must be absent here too rather than
+# written as an explicit "attribution": null.
+foreach ($k in $central.Keys) {
+    if ($null -ne $central[$k]) { $existing[$k] = $central[$k] }
+}
 # BOM-less on purpose: PS 5.1's Set-Content -Encoding UTF8 writes a BOM, which
 # strict JSON parsers reject — settings.json is read by more than PowerShell.
 [System.IO.File]::WriteAllText($settingsPath, ($existing | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))

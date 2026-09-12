@@ -223,10 +223,15 @@ if ($InstallSerena) {
         # NOT run 'graphify install'/'graphify claude install' - those append a raw
         # CLAUDE.md block + per-project skill that duplicate the template + central
         # prefer-graphify hook. '/graphify .' still builds the graph; hooks keep it fresh.
-        try {
-            graphify hook install *> $null
+        # $LASTEXITCODE, not try/catch: a native executable returning non-zero
+        # does NOT throw in PowerShell (even under $ErrorActionPreference =
+        # "Stop", which governs cmdlets and ErrorRecords, not native exit
+        # codes). The catch never fired, so a FAILED install printed the
+        # success line. Same shape as the xcrun check below.
+        graphify hook install *> $null
+        if ($LASTEXITCODE -eq 0) {
             Write-Host "  - graphify git hooks installed (graph auto-rebuilds on commit/checkout)"
-        } catch {
+        } else {
             Write-Warning "graphify hook install failed (non-fatal); run 'graphify hook install' manually"
         }
     }

@@ -27,7 +27,18 @@ CMD=$(printf '%s' "$INPUT" | python3 -c "import sys, json; d=json.load(sys.stdin
 # Parse the command into a verdict. Python does the shell-aware tokenising
 # (quote stripping, operator splitting) that a regex over the raw string
 # cannot do correctly.
-VERDICT=$(CMD="$CMD" python3 <<'PY' 2>/dev/null || echo ""
+# The heredoc is NOT opened inside $( ): bash's parser mishandles a heredoc
+# within a command substitution when the command is followed by an operator
+# (pipe, ||, &&). It stops treating the body as opaque data and lexes it for
+# parens, quotes and backticks while hunting the closing paren, so a regex or
+# comment in the Python body can make the whole script unparseable -- which,
+# for a PreToolUse hook on Bash, blocks every Bash call in every project.
+# Known bash bug, 4.x onward: https://lists.gnu.org/archive/html/bug-bash/2010-07/msg00043.html
+# Writing to a temp file and reading it back keeps the heredoc at top level,
+# where a quoted delimiter really is opaque. Do not fold this back into $( ).
+_GPM_OUT="$(mktemp -t guard-push-main.XXXXXX)"
+trap 'rm -f "$_GPM_OUT"' EXIT
+CMD="$CMD" python3 > "$_GPM_OUT" 2>/dev/null <<'PY'
 import os, re, shlex, subprocess, sys
 
 cmd = os.environ["CMD"]
@@ -44,7 +55,7 @@ WRITER = re.compile(r"""
       |tee\s+(?:-a\s+)?[^\s|;&<>()]+)         # tee file / tee -a file
     \s*<<-?\s*["']?[A-Za-z_][A-Za-z0-9_]*["']?\s*$
 """, re.X)
-UNSAFE = re.compile(r"[|`]|\$\(|;|&&|\|\||\bsh\b|\bbash\b|\bzsh\b|\bssh\b|\bdocker\b"
+UNSAFE = re.compile(r"[|\x60]|\$\x28|;|&&|\|\||\bsh\b|\bbash\b|\bzsh\b|\bssh\b|\bdocker\b"
                     r"|\bkubectl\b|\beval\b|\bpython[0-9.]*\b|\bnode\b|\bperl\b|\bruby\b")
 
 lines = cmd.split("\n")
@@ -224,7 +235,9 @@ for seg in pushes:
             print(f"MAIN:{t}")
             sys.exit(0)
 PY
-)
+# An empty verdict means "nothing to judge" and falls through to exit 0, which
+# is the same outcome as a python failure -- matching the previous `|| echo ""`.
+VERDICT=$(cat "$_GPM_OUT" 2>/dev/null || echo "")
 
 case "$VERDICT" in
   FORCE_FLAG)

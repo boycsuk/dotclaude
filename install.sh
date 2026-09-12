@@ -9,10 +9,11 @@
 #
 # Also installs the per-project template and the /init-project skill.
 #
-# Re-running is safe: it overwrites the central artifacts (they are owned by
-# this repo) but never clobbers your personal ~/.claude/CLAUDE.md, and it
-# MERGES the base settings into ~/.claude/settings.json without dropping your
-# own keys (theme, effortLevel, etc.).
+# Re-running is safe: it refreshes the central artifacts it owns by removing
+# only the files it shipped last time (see the manifest below), so your own
+# skills/agents/rules in those directories survive. It never clobbers your
+# personal ~/.claude/CLAUDE.md, and it MERGES the base settings into
+# ~/.claude/settings.json without dropping your own keys (theme, etc.).
 
 set -euo pipefail
 
@@ -29,6 +30,26 @@ if ! command -v python3 >/dev/null 2>&1; then
   echo "    and this installer merges settings with it. Install python3 (e.g. apt install python3) and re-run." >&2
   exit 1
 fi
+
+# --- Syntax pre-flight: never install a hook that cannot be parsed -----------
+# A hook that fails to parse is not a degraded hook, it is a wall: the central
+# guards run on PreToolUse for Bash, so an unparseable one makes EVERY Bash call
+# in EVERY project fail. That state is also unrecoverable from inside Claude
+# Code — the broken hook blocks the `install.sh` that would replace it, and
+# guard-central-config blocks editing the installed copy (DESIGN.md §32). So
+# check before copying: abort with the source tree untouched and the previously
+# installed (working) hooks still in place.
+for hook in "$SCRIPT_DIR"/global/.claude/hooks/*.sh; do
+  [ -f "$hook" ] || continue
+  if ! bash -n "$hook" 2>/tmp/dotclaude-parse.$$; then
+    echo "  ! $(basename "$hook") does not parse — aborting before anything is copied." >&2
+    sed 's/^/    /' /tmp/dotclaude-parse.$$ >&2
+    rm -f /tmp/dotclaude-parse.$$
+    echo "    Your currently installed hooks are untouched. Fix the source and re-run." >&2
+    exit 1
+  fi
+  rm -f /tmp/dotclaude-parse.$$
+done
 
 mkdir -p "$TARGET/templates" "$TARGET/skills"
 

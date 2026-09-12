@@ -419,6 +419,71 @@ def _():
             fail("JSON validity", f"{rel} does not parse: {exc}")
 
 
+# --- 12. Every shipped script actually parses ---------------------------------
+@check("script syntax")
+def _():
+    # Every other check reads these files as TEXT: it globs names, greps for
+    # markers, compares inventories. None of them would notice a script that
+    # cannot be parsed at all. That is not hypothetical: a literal backtick
+    # inside a Python heredoc opened inside $( ) made guard-destructive.sh and
+    # guard-push-main.sh unparseable (bash scans the heredoc body for backtick
+    # substitutions while hunting the closing paren, and quoting the delimiter
+    # does not stop it). Both are PreToolUse hooks on Bash, so EVERY Bash call
+    # in EVERY project failed — while this validator reported a clean pass.
+    #
+    # The case matrices would have caught it (they pipe real JSON through the
+    # real script), but they need a working shell to run, and the hook had
+    # already broken the shell. So the cheap syntax gate belongs here, in the
+    # thing CLAUDE.md says to run before every commit.
+    #
+    # pwsh is optional (absent on most Unix dev machines); skip rather than
+    # fail, since CLAUDE.md is explicit that a .ps1 parse pass proves nothing
+    # about whether it RUNS — the matrices remain the behavioural net.
+    import shutil
+    import subprocess
+
+    roots = ["global/.claude/hooks", "templates/project", "tests"]
+    scripts = sorted(walk_files(roots, ".sh")) + [
+        os.path.join(REPO, n) for n in ("install.sh",)
+        if os.path.exists(os.path.join(REPO, n))]
+    for path in scripts:
+        rel = os.path.relpath(path, REPO)
+        try:
+            proc = subprocess.run(["bash", "-n", path], capture_output=True,
+                                  text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError) as exc:
+            fail("script syntax", f"could not parse-check {rel}: {exc}")
+            continue
+        if proc.returncode != 0:
+            detail = (proc.stderr or "").strip().splitlines()
+            fail("script syntax",
+                 f"{rel} does not parse: {detail[0] if detail else 'bash -n failed'}")
+
+    if not shutil.which("pwsh"):
+        return
+    ps_scripts = sorted(walk_files(roots, ".ps1")) + [
+        os.path.join(REPO, n) for n in ("install.ps1",)
+        if os.path.exists(os.path.join(REPO, n))]
+    for path in ps_scripts:
+        rel = os.path.relpath(path, REPO)
+        # Parse without executing: the AST parser reports syntax errors only.
+        probe = ("$ErrorActionPreference='Stop';"
+                 "$t=$null;$e=$null;"
+                 "[System.Management.Automation.Language.Parser]::ParseFile("
+                 f"'{path}',[ref]$t,[ref]$e)|Out-Null;"
+                 "if($e.Count){$e[0].Message;exit 1};exit 0")
+        try:
+            proc = subprocess.run(["pwsh", "-NoProfile", "-Command", probe],
+                                  capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError) as exc:
+            fail("script syntax", f"could not parse-check {rel}: {exc}")
+            continue
+        if proc.returncode != 0:
+            detail = (proc.stdout or proc.stderr or "").strip().splitlines()
+            fail("script syntax",
+                 f"{rel} does not parse: {detail[0] if detail else 'parse failed'}")
+
+
 def main():
     print(f"dotclaude coherence check — {checks_run} checks\n")
     if not failures:

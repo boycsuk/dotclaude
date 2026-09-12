@@ -400,7 +400,7 @@ One feature appears in all three under a different lens, with no duplicated deta
 
 **Problem (found by auditing, 2026-07-26).** The repo carries ~28 hand-maintained duplications — 17 `.sh`/`.ps1` pairs, permission rules mirrored into `install.ps1`, extension globs repeated across two rules and two hooks, artifact inventories restated in three docs. Their only enforcement was prose (`CLAUDE.md`: "when you change one, change the other in the same commit"). An audit found **four of the five spot-checked duplications had already diverged**, including Windows silently losing the `sudo`/`dd`/`mkfs`/`shred`/`truncate` denies. This contradicts §10 on its own terms: §10 says a non-negotiable guarantee belongs in a deterministic check rather than in prose, and lockstep parity was being treated as non-negotiable while enforced only by prose.
 
-**Chosen:** `check.py` at the repo root, run by the maintainer (`python3 check.py`). Nine checks, each encoding a duplication the architecture genuinely requires: hook `.sh`/`.ps1` pairs, installer/deployer pairs, every hook wired in `settings.json` existing on disk, `install.ps1` deriving its rules from the JSON, doc inventories matching the artifacts, the shared extension lists agreeing, no inline interpreters in skills (§5), DESIGN.md's structural headings surviving, and every shipped JSON parsing.
+**Chosen:** `check.py` at the repo root, run by the maintainer (`python3 check.py`). One check per duplication the architecture genuinely requires: hook `.sh`/`.ps1` pairs, installer/deployer pairs, every hook wired in `settings.json` existing on disk, `install.ps1` deriving its rules from the JSON, doc inventories matching the artifacts, the shared extension lists agreeing, no inline interpreters in skills (§5), DESIGN.md's structural headings surviving, every shipped JSON parsing, and every shipped script parsing (§32). The script prints its own check count; the count is deliberately not restated in prose, since a hand-copied number is the very drift this validator exists to catch.
 
 **Not CI.** "CI/CD templates" is rejected below, but that rejection is about *what projects deploy* — a GitHub Action is project infrastructure. This is internal validation of this repo, the same category as the manual `python3 -m json.tool` step `install.sh` already runs. It stays a script the maintainer invokes, with no new dependency and no hosted runner.
 
@@ -467,7 +467,7 @@ The §27 round covered the config artifacts. The remaining ten units — the two
 
 Three more were silent-failure bugs of the §27 classes, found in new places: a `## graphify` marker in `detect-drift.py` that the template never emits (so the gap re-offered itself forever), the whole Serena/Graphify guidance sealed inside an HTML comment (stripped before CLAUDE.md reaches the model — invisible in *every* deploy), and `Bash(mkfs.*:*)` still vanishing on Windows because the two verb extractors disagreed by one character even after 9b24223 supposedly aligned them.
 
-**The validator's own blind spots.** `check.py` derived its inventories *from disk*, so deleting an agent or an entire skill directory just shrank the glob and passed green — it verified that docs match reality, never that reality is complete. It also never looked at frontmatter, so a broken `---` fence or a `model:` pin on a reasoning agent (the §27 drift) sailed through. Both are now checks with self-test cases, bringing it to 14 checks and 16 self-tests. **Lesson: a check derived from the artifact it validates can only catch documentation drift, never loss.**
+**The validator's own blind spots.** `check.py` derived its inventories *from disk*, so deleting an agent or an entire skill directory just shrank the glob and passed green — it verified that docs match reality, never that reality is complete. It also never looked at frontmatter, so a broken `---` fence or a `model:` pin on a reasoning agent (the §27 drift) sailed through. Both are now checks with self-test cases. **Lesson: a check derived from the artifact it validates can only catch documentation drift, never loss.**
 
 ### 30. `.mcp.json` is composed, not copied (2026-08-15)
 
@@ -503,6 +503,33 @@ The recurring failure in design-to-code work was handing the model a whole HTML 
 
 **Rejected:** user-scope installation (`claude mcp add --scope user`) as the default recommendation. It works, but leaves nothing versioned in the project, so a second machine or collaborator silently loses the browser loop the skill's verification gate depends on.
 
+### 32. `check.py` parses every shipped script (2026-09-12)
+
+**Problem (found by auditing).** `guard-destructive.sh` and `guard-push-main.sh` both opened their Python heredoc *inside* a command substitution, with an operator after the command:
+
+```sh
+CMD=$(CMD="$CMD" python3 <<'PY' 2>/dev/null || printf '%s' "$CMD"
+```
+
+This is a [long-standing bash parser limitation](https://lists.gnu.org/archive/html/bug-bash/2010-07/msg00043.html) (4.x onward): with a heredoc inside `$( )` followed by a pipe or `||`, bash stops treating the quoted body as opaque data and lexes it for parens, quotes and backticks while hunting the closing paren. Quoting the delimiter (`<<'PY'`) does *not* help — quoting governs expansion of the body, not how bash finds the end of the substitution. The Python bodies contain regexes full of all three characters, so both scripts were unparseable. Both are `PreToolUse` hooks on `Bash`, so **every Bash call in every project failed**, and the only way out was a terminal outside Claude Code.
+
+**The debugging lesson is as valuable as the fix.** The symptom is an unbalanced-character error (`unexpected EOF while looking for matching` a backtick, or a paren) pointing at whichever line bash gave up on — never at a real defect. That invites a character hunt: escape the backtick, and the count flips and the error moves to a paren; escape that, and it moves again. Five such rounds were spent here before the structure was questioned. **When the error names a quoting character but every count balances, the shape is wrong, not the characters.**
+
+Two things made it worse than a one-line bug:
+
+- **The validator could not see it.** Every existing check reads the hooks as *text* — globbing names, grepping markers, comparing inventories. `check.py` reported a clean pass on a repo whose safety hooks could not execute at all.
+- **The net that would have caught it needs the thing it validates.** The case matrices do invoke the real script with real JSON on stdin, and a syntax error (bash exits 2 → `BLOCK`) would have failed every `ALLOW` case loudly. But they need a working shell, and the broken hook had already taken the shell down. A test you cannot run is not a net.
+
+**Chosen, two parts.**
+
+1. **The heredocs move out of `$( )`.** Each runs at top level, redirected to a `mktemp` file that bash reads back, with a `trap` cleaning up. A quoted delimiter at top level really is opaque, so the whole class of defect disappears rather than being escaped around. The fallback behaviour is preserved exactly: `guard-destructive` keeps the raw `$CMD` if Python wrote nothing (an empty `CMD` would disable every rule below it — fail-open on a safety hook), and `guard-push-main` treats an empty verdict as "nothing to judge". Both files carry a comment saying not to fold it back, because the `$( )` form looks tidier and is what someone will reach for; `tests/inject.py` pins it with the `heredoc-back-into-subshell` regression.
+
+2. **A `bash -n` gate over every shipped `.sh`**, in `check.py` — the thing CLAUDE.md says to run before every commit. The `.ps1` half runs through `[Parser]::ParseFile` only when `pwsh` is on PATH, and skips silently otherwise: a parse pass proves nothing about whether a `.ps1` *runs* (the §28 lesson), so the matrices stay the behavioural net and this is strictly a syntax pre-flight. `install.sh` and `install.ps1` run the same gate *before copying anything*, so a broken hook never reaches `~/.claude/`.
+
+**Lesson: a validator that only reads its subject as text will certify a corpse.** Anything this repo *ships as executable* must be parsed by the validator, not just inventoried — and the cheap gate belongs in the always-run check, not only in the matrices that need a healthy environment to run at all.
+
+**Corollary on recovery.** The incident also exposed that a broken central hook is unrecoverable from inside Claude Code: the hook blocks Bash, so `install.sh` cannot run; `guard-central-config` blocks editing the installed copy and points back at `install.sh`. All three paths fail. That is a gap in §23's model, not in this check, and it is listed as an open question below.
+
 ## Things deliberately not included
 
 - **Pre-baked stack variants.** See decision 2.
@@ -523,6 +550,7 @@ These came up in design but were intentionally left for after real-world use:
 - Whether the `Stop` hook for compound prompts should be added later if `/compound` is forgotten in practice.
 - Whether the template should grow stack-specific overlay directories once enough patterns repeat.
 - Whether `db-inspector` should grow MySQL support (easy, similar shape to Postgres) and Mongo support (different — needs a JSON-schema filter, not a SQL substring denylist). Defer until real usage demands it.
+- **How to recover from a broken central hook without leaving Claude Code** (§32). Today the three obvious paths deadlock: a broken Bash hook blocks `install.sh`, and `guard-central-config` blocks editing the installed copy while pointing back at `install.sh`. Candidates: let `guard-central-config` permit a write when the installed hook fails its own `bash -n`; have `install.sh` verify syntax *before* copying (so a broken hook never reaches `~/.claude/` in the first place — cheapest and probably correct); or ship a `claude-doctor`-style repair path that bypasses the hook chain. The pre-copy gate prevents the common case but does not help a copy already installed.
 - Whether to publish the stack-neutral skills/agents as an *optional* plugin (decision 20's hybrid) for users who want them globally, while keeping rules + CLAUDE.md + hooks in `init.sh`. Doubles maintenance surface; defer until there's demand.
 
 ## What evolves and how

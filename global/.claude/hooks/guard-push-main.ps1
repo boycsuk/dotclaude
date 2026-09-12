@@ -217,9 +217,32 @@ foreach ($seg in $segments) {
     foreach ($t in $targets) { if ($t -in @("HEAD", "@", "")) { $needsHead = $true } }
     if ($needsHead) {
         $targets = @($targets | Where-Object { $_ -notin @("HEAD", "@", "") })
+        # Bounded like the .sh sibling's subprocess.run(timeout=2). A bare `&`
+        # has no wall-clock bound: a hung git (network FS, lock contention)
+        # blows the 5s hook budget in settings.json, the harness cancels the
+        # hook, and "harness cancellation drops all output" (see
+        # verify-on-edit.ps1) — the verdict is discarded and the push to main
+        # proceeds UNJUDGED. Fail closed on timeout: no branch, no fallback.
         try {
-            $branch = & git symbolic-ref --quiet --short HEAD 2>$null
-            if ($LASTEXITCODE -eq 0 -and $branch) { $targets += $branch.Trim() }
+            $git = Get-Command git -ErrorAction SilentlyContinue
+            if ($git) {
+                $psi = New-Object System.Diagnostics.ProcessStartInfo
+                $psi.FileName = $git.Source
+                $psi.Arguments = "symbolic-ref --quiet --short HEAD"
+                $psi.RedirectStandardOutput = $true
+                $psi.RedirectStandardError = $true
+                $psi.UseShellExecute = $false
+                $p = [System.Diagnostics.Process]::Start($psi)
+                $outTask = $p.StandardOutput.ReadToEndAsync()
+                if ($p.WaitForExit(2000)) {
+                    if ($p.ExitCode -eq 0) {
+                        $branch = $outTask.Result.Trim()
+                        if ($branch) { $targets += $branch }
+                    }
+                } else {
+                    try { $p.Kill($true) } catch { try { $p.Kill() } catch { } }
+                }
+            }
         } catch { }
     }
 
