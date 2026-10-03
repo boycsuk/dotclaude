@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Behavioural contract for detect-secrets.{sh,ps1}.
+"""Behavioural contract for detect-secrets.py.
 
 Run:  python3 tests/detect-secrets-cases.py
-      python3 tests/detect-secrets-cases.py --pwsh PATH   # verify parity
+      python3 tests/detect-secrets-cases.py --pwsh PATH   # also through PowerShell
 
 This hook warns on edits that touch a secret-bearing file or that contain a
 literal credential. Both halves were miscalibrated in opposite directions
@@ -31,8 +31,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pyhook  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SH = os.path.join(REPO, "global/.claude/hooks/detect-secrets.sh")
-PS1 = os.path.join(REPO, "global/.claude/hooks/detect-secrets.ps1")
 
 WARN, QUIET = "WARN", "QUIET"
 
@@ -167,17 +165,15 @@ def invoke(runner, file_path, content):
     payload = {"tool_input": tool_input}
     proc = subprocess.run(runner, input=json.dumps(payload),
                           capture_output=True, text=True, timeout=30)
-    return WARN if proc.returncode == 2 else QUIET
+    return WARN if proc.returncode == 2 else QUIET if proc.returncode == 0 else f"CRASH(rc={proc.returncode})"
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to verify .sh/.ps1 parity")
+    ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
     args = ap.parse_args()
 
-    runners = [("sh", ["bash", SH])]
-    if args.pwsh:
-        runners.append(("ps1", pyhook.ps1_hook(args.pwsh, PS1)))
+    runners = [(label, pyhook.argv("detect-secrets", pwsh)) for label, pwsh in pyhook.runners(args.pwsh)]
 
     failures = 0
     for path, content, want, why in CASES:
@@ -196,7 +192,7 @@ def main():
     if failures:
         print(f"{failures} FAILED")
         return 1
-    scope = "bash + powershell" if args.pwsh else "bash only (pass --pwsh for parity)"
+    scope = "python + powershell" if args.pwsh else "python only (pass --pwsh for the Windows form)"
     print(f"All cases pass — {scope}.")
     return 0
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Behavioural contract for the ADVISORY shell hooks.
+"""Behavioural contract for the advisory hooks reinject-rules.py and sync-mirror-docs.py.
 
 Run:  python3 tests/advisory-hooks-cases.py
-      python3 tests/advisory-hooks-cases.py --pwsh PATH   # verify parity
+      python3 tests/advisory-hooks-cases.py --pwsh PATH   # also through PowerShell
 
 Covers reinject-rules and sync-mirror-docs (prefer-serena-bash and prefer-graphify
 were removed with Serena and Graphify, DESIGN.md §33) — the hooks check.py's matrix requirement silently exempted, and the only ones
@@ -18,8 +18,7 @@ printed:
     rule, grepping, or reading a file are all legitimate.
   - the nudge arrives on STDOUT as hookSpecificOutput.additionalContext, with
     the right hookEventName. stderr at exit 0 goes to the debug log only, so a
-    hook "warning" there reaches nobody (§27a). reinject-rules is the one
-    exception: SessionStart adds plain-text stdout to context directly.
+    hook "warning" there reaches nobody (§27a).
   - silence when there is nothing to say, so the nudges stay credible. A hook
     that fires on every call is noise, and noise teaches the model to ignore
     it (the cry-wolf failure DESIGN.md §26 warns about).
@@ -27,54 +26,34 @@ printed:
 
 import argparse
 import atexit
-import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pyhook  # noqa: E402
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HOOKS = os.path.join(REPO, "global/.claude/hooks")
 
-NUDGE, SILENT = "NUDGE", "SILENT"
-
-
-def run(runner, hook, payload, cwd, env_extra=None):
-    """Pipe real hook JSON through the script; return (verdict, stdout, rc)."""
-    script = os.path.join(HOOKS, hook + (".ps1" if runner == "ps1" else ".sh"))
-    cmd = (pyhook.ps1_hook(PWSH, script) if runner == "ps1"
-           else ["bash", script])
-    env = dict(os.environ, CLAUDE_PROJECT_DIR=cwd)
-    # An empty HOME per case: nothing in the developer's ~/.claude can leak
-    # into a verdict.
-    env["HOME"] = tempfile.mkdtemp()
-    atexit.register(shutil.rmtree, env["HOME"], True)
-    if env_extra:
-        env.update(env_extra)
-    proc = subprocess.run(cmd, input=json.dumps(payload), capture_output=True,
-                          text=True, cwd=cwd, env=env, timeout=30)
-    return proc
+def scratch():
+    path = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, path, True)
+    return path
 
 
-def delivered_context(stdout):
-    """The additionalContext string if stdout carries the documented shape."""
-    for line in stdout.strip().splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            data = json.loads(line)
-        except ValueError:
-            continue
-        specific = data.get("hookSpecificOutput") or {}
-        ctx = specific.get("additionalContext")
-        if ctx:
-            return ctx, specific.get("hookEventName")
-    return None, None
+def run(runner, hook, payload, cwd):
+    """Run the hook as production does; return an object with returncode, out (parsed) and stderr."""
+    code, out, err = pyhook.run(hook, payload, cwd=cwd, pwsh=PWSH if runner == "ps1" else None,
+                                env={"HOME": scratch()})
+    return SimpleNamespace(returncode=code, out=out, stderr=err)
+
+
+def delivered_context(out):
+    """The additionalContext string and event if the output carries the documented shape."""
+    specific = (out or {}).get("hookSpecificOutput") or {}
+    ctx = specific.get("additionalContext")
+    return (ctx, specific.get("hookEventName")) if ctx else (None, None)
 
 
 def check(label, cond, detail=""):
@@ -87,14 +66,15 @@ def check(label, cond, detail=""):
 
 
 def case_reinject(runner):
-    """SessionStart: plain stdout IS the channel here, so assert content."""
-    cwd = tempfile.mkdtemp()
-    proc = run(runner, "reinject-rules", {"source": "compact"}, cwd)
+    """SessionStart: the digest arrives as additionalContext."""
+    cwd = scratch()
+    proc = run(runner, "reinject-rules", {"hook_event_name": "SessionStart", "source": "compact"}, cwd)
     check(f"[{runner}] reinject-rules exits 0", proc.returncode == 0,
           f"rc={proc.returncode}")
-    out = proc.stdout
-    check(f"[{runner}] reinject-rules emits the digest on stdout",
-          "POST-COMPACTION REMINDER" in out, repr(out[:120]))
+    out, event = delivered_context(proc.out)
+    out = out or ""
+    check(f"[{runner}] reinject-rules delivers the digest as SessionStart context",
+          "POST-COMPACTION REMINDER" in out and event == "SessionStart", repr(proc.out)[:160])
     # The digest's whole purpose is rules enforced ONLY by prose. If it starts
     # restating deterministic guarantees it will grow without bound.
     check(f"[{runner}] digest covers the prose-only workflow rules",
@@ -109,16 +89,16 @@ def case_reinject(runner):
 
 def case_sync_mirror(runner):
     """PostToolUse: fires on rule edits only, via additionalContext."""
-    cwd = tempfile.mkdtemp()
+    cwd = scratch()
 
     edited = os.path.join(cwd, "global/.claude/rules/workflow.md")
     proc = run(runner, "sync-mirror-docs",
                {"tool_name": "Edit", "tool_input": {"file_path": edited}}, cwd)
-    ctx, event = delivered_context(proc.stdout)
+    ctx, event = delivered_context(proc.out)
     check(f"[{runner}] sync-mirror-docs exits 0 on a rule edit",
           proc.returncode == 0, f"rc={proc.returncode}")
     check(f"[{runner}] rule edit delivers additionalContext", ctx is not None,
-          f"stdout={proc.stdout[:160]!r} stderr={proc.stderr[:160]!r}")
+          f"out={proc.out!r} stderr={proc.stderr[:160]!r}")
     check(f"[{runner}] names the conventions mirror",
           bool(ctx) and "conventions.md" in ctx, repr(ctx))
     check(f"[{runner}] hookEventName is PostToolUse", event == "PostToolUse",
@@ -131,7 +111,7 @@ def case_sync_mirror(runner):
     other = os.path.join(cwd, "src/main.py")
     proc = run(runner, "sync-mirror-docs",
                {"tool_name": "Edit", "tool_input": {"file_path": other}}, cwd)
-    ctx, _ = delivered_context(proc.stdout)
+    ctx, _ = delivered_context(proc.out)
     check(f"[{runner}] a non-rule edit stays silent", ctx is None, repr(ctx))
     check(f"[{runner}] silent path still exits 0", proc.returncode == 0,
           f"rc={proc.returncode}")
@@ -139,7 +119,7 @@ def case_sync_mirror(runner):
     ai = os.path.join(cwd, ".claude/rules/ai-collaboration.md")
     proc = run(runner, "sync-mirror-docs",
                {"tool_name": "Edit", "tool_input": {"file_path": ai}}, cwd)
-    ctx, _ = delivered_context(proc.stdout)
+    ctx, _ = delivered_context(proc.out)
     check(f"[{runner}] ai-collaboration.md names the output style",
           bool(ctx) and "output-styles" in ctx, repr(ctx))
     # ai-collaboration also feeds the digest; dropping that arm passed before.
@@ -148,7 +128,7 @@ def case_sync_mirror(runner):
     security = os.path.join(cwd, ".claude/rules/security.md")
     proc = run(runner, "sync-mirror-docs",
                {"tool_name": "Edit", "tool_input": {"file_path": security}}, cwd)
-    ctx, _ = delivered_context(proc.stdout)
+    ctx, _ = delivered_context(proc.out)
     check(f"[{runner}] security.md names the mirror but not the digest",
           bool(ctx) and "conventions.md" in ctx and "reinject-rules" not in ctx, repr(ctx))
 
@@ -156,18 +136,18 @@ def case_sync_mirror(runner):
 def main():
     global failures, PWSH
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to verify .ps1 parity")
+    ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
     args = ap.parse_args()
     PWSH = args.pwsh
     failures = 0
 
-    runners = ["sh"] + (["ps1"] if args.pwsh else [])
+    runners = ["py"] + (["ps1"] if args.pwsh else [])
     for runner in runners:
         print(f"\n=== {runner}")
         case_reinject(runner)
         case_sync_mirror(runner)
 
-    scope = "bash + powershell" if args.pwsh else "bash only (pass --pwsh for parity)"
+    scope = "python + powershell" if args.pwsh else "python only (pass --pwsh for the Windows form)"
     print(f"\nadvisory-hooks: {failures} bad — {scope}")
     return 1 if failures else 0
 

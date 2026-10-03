@@ -81,14 +81,14 @@ def unwire_shell_hook(repo):
 
 
 def reinject_to_stderr(repo):
-    """SessionStart context written to stderr never reaches the model."""
-    path = os.path.join(repo, "global/.claude/hooks/reinject-rules.sh")
+    """A Stop notice that delivers as additionalContext resumes every turn."""
+    path = os.path.join(repo, "global/.claude/hooks/changelog-reminder.py")
     with open(path) as fh:
         text = fh.read()
-    if "cat <<'EOF'" not in text:
-        raise SystemExit("inject: reinject-rules.sh no longer emits with cat <<'EOF'")
+    if "hookio.notice(" not in text:
+        raise SystemExit("inject: changelog-reminder.py no longer speaks through hookio.notice")
     with open(path, "w") as fh:
-        fh.write(text.replace("cat <<'EOF'", "cat >&2 <<'EOF'", 1))
+        fh.write(text.replace("hookio.notice(", 'hookio.context("Stop", ', 1))
 
 
 def wire_missing_hook(repo):
@@ -130,11 +130,13 @@ def readd_if_gate(repo):
 
 def revert_advisory_to_stderr(repo):
     """An advisory hook back on stderr+exit 0 is invisible to the model."""
-    path = os.path.join(repo, "global/.claude/hooks/sync-mirror-docs.sh")
+    path = os.path.join(repo, "global/.claude/hooks/sync-mirror-docs.py")
     with open(path) as fh:
         text = fh.read()
+    if "hookio.context(" not in text:
+        raise SystemExit("inject: sync-mirror-docs.py no longer delivers through hookio.context")
     with open(path, "w") as fh:
-        fh.write(text.replace("additionalContext", "someOtherField"))
+        fh.write(text.replace("hookio.context(", "print(file=sys.stderr, *(", 1))
 
 
 def delete_central_agent(repo):
@@ -276,22 +278,21 @@ def heredoc_back_into_subshell(repo):
 
     Bash 4.1 and older (macOS /bin/bash is 3.2) mishandle a heredoc opened
     within a command substitution: they lex the quoted body for parens, quotes
-    and backticks while hunting the closing paren. The Python body contains all
-    three, so the script becomes unparseable there -- and since both guards are
-    PreToolUse hooks on Bash, that blocks every Bash call in every project.
-    bash 4.2+ parses it, so only check.py's static rule catches it on a modern
-    host. Looks tidier, which is exactly why someone will try it again.
+    and backticks while hunting the closing paren, so a stray quote in the body
+    makes the script unparseable there. bash 4.2+ parses it, so only check.py's
+    static rule catches it on a modern host. Looks tidier, which is exactly why
+    someone will try it again.
     """
-    path = os.path.join(repo, "global/.claude/hooks/changelog-reminder.sh")
+    path = os.path.join(repo, "templates/project/init.sh")
     with open(path) as fh:
         text = fh.read()
-    marker = 'INPUT="$INPUT" python3 > "$_CR_OUT" 2>/dev/null <<\'PY\' || true'
+    marker = '  spec=$(lsp_spec "$plugin" || true)'
     if marker not in text:
-        raise SystemExit("inject: changelog-reminder.sh no longer writes python output to a temp file")
-    text = text.replace(marker, 'PARSED=$(INPUT="$INPUT" python3 <<\'PY\' 2>/dev/null || true', 1)
-    head, sep, tail = text.partition("\nPY\n")
+        raise SystemExit("inject: init.sh no longer looks the LSP spec up through lsp_spec")
+    text = text.replace(marker, '  spec=$(python3 - "$TEMPLATE_DIR/lsp-plugins.json" "$plugin" <<\'PY\' 2>/dev/null || true\n'
+                                'print("x")\nPY\n)', 1)
     with open(path, "w") as fh:
-        fh.write(head + sep + ")\n" + tail)
+        fh.write(text)
 
 
 def add_permissions_key(repo):
@@ -378,6 +379,23 @@ def add_unclassified_key(repo):
         json.dump(settings, fh, indent=2)
 
 
+def silence_feedback_hook(repo):
+    """A feedback hook that stops calling hookio.feedback reports nothing to Claude."""
+    path = os.path.join(repo, "global/.claude/hooks/detect-secrets.py")
+    with open(path) as fh:
+        text = fh.read()
+    if "hookio.feedback(" not in text:
+        raise SystemExit("inject: detect-secrets.py no longer reports through hookio.feedback")
+    with open(path, "w") as fh:
+        fh.write(text.replace("hookio.feedback(", "print(", 1))
+
+
+def orphan_shell_hook(repo):
+    """A shell hook shipped without its .ps1 twin silently skips Windows."""
+    with open(os.path.join(repo, "global/.claude/hooks/new-check.sh"), "w") as fh:
+        fh.write("#!/usr/bin/env bash\nexit 0\n")
+
+
 def drop_ps1_exit_code(repo):
     """Write the .ps1 hook command without re-raising its exit code.
 
@@ -388,11 +406,10 @@ def drop_ps1_exit_code(repo):
     path = os.path.join(repo, "install.ps1")
     with open(path) as fh:
         text = fh.read()
-    fixed = '$command = "& `"$Target\\hooks\\$name.ps1`"; exit `$LASTEXITCODE"'
-    if fixed not in text:
-        raise SystemExit("inject: install.ps1 no longer writes the .ps1 hook command this way")
+    if "; exit `$LASTEXITCODE\"" not in text:
+        raise SystemExit("inject: install.ps1 no longer re-raises the hook exit code")
     with open(path, "w") as fh:
-        fh.write(text.replace(fixed, '$command = "& `"$Target\\hooks\\$name.ps1`""'))
+        fh.write(text.replace("; exit `$LASTEXITCODE\"", "\""))
 
 
 def drop_fork_from_verify(repo):
@@ -417,6 +434,8 @@ def unpin_mcp_fragment(repo):
 
 
 REGRESSIONS = {
+    "orphan-shell-hook": orphan_shell_hook,
+    "silence-feedback-hook": silence_feedback_hook,
     "unpin-mcp-fragment": unpin_mcp_fragment,
     "drop-fork-from-verify": drop_fork_from_verify,
     "drop-skill-from-readme": drop_skill_from_readme,
@@ -460,6 +479,13 @@ REGRESSIONS = {
 def main():
     if len(sys.argv) != 3 or sys.argv[2] not in REGRESSIONS:
         print(f"usage: inject.py <repo-copy> <{'|'.join(REGRESSIONS)}>", file=sys.stderr)
+        return 2
+    # Every injection is destructive; pointed at the real checkout it would
+    # quietly break the repo it is meant to test.
+    here = os.path.realpath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if os.path.realpath(sys.argv[1]) == here:
+        print("inject.py: refusing to inject into the repository itself; pass a scratch copy",
+              file=sys.stderr)
         return 2
     REGRESSIONS[sys.argv[2]](sys.argv[1])
     return 0

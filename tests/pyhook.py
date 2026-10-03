@@ -33,18 +33,27 @@ def powershell_hook(pwsh, command):
             f"{command}; exit $LASTEXITCODE"]
 
 
+def ps_quote(text):
+    """A PowerShell single-quoted literal: no `$` expansion, `'` doubled."""
+    return "'" + text.replace("'", "''") + "'"
+
+
 def ps1_hook(pwsh, script):
     """argv for a .ps1 hook, in the exact command form install.ps1 writes."""
-    return powershell_hook(pwsh, f'& "{script}"')
+    return powershell_hook(pwsh, f"& {ps_quote(script)}")
+
+
+def argv(name, pwsh=None):
+    """The argv that runs hook (or script) `name`, through PowerShell's production form if `pwsh`."""
+    script = hook_path(name)
+    if pwsh:
+        return powershell_hook(pwsh, f"& {ps_quote(sys.executable)} {ps_quote(script)}")
+    return [sys.executable, script]
 
 
 def run(name, payload, cwd=None, env=None, pwsh=None):
     """Run hook `name` with `payload` on stdin; return (exit_code, parsed_stdout_or_None, stderr)."""
-    script = hook_path(name)
-    if pwsh:
-        cmd = powershell_hook(pwsh, f'& "{sys.executable}" "{script}"')
-    else:
-        cmd = [sys.executable, script]
+    cmd = argv(name, pwsh)
     full_env = dict(os.environ, **(env or {}))
     if cwd:
         full_env.setdefault("CLAUDE_PROJECT_DIR", cwd)

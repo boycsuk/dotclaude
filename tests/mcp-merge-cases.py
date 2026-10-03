@@ -29,6 +29,7 @@ the machine's own npx leaks in and exit 7 is untestable.
 """
 
 import argparse
+import atexit
 import json
 import os
 import shutil
@@ -75,6 +76,7 @@ def syspath():
     global _SYSPATH
     if _SYSPATH is None:
         _SYSPATH = tempfile.mkdtemp(prefix="mcp-syspath-")
+        atexit.register(shutil.rmtree, _SYSPATH, True)
         for tool in ("bash", "sh", "python3", "cp", "mkdir", "grep", "cmp",
                      "dirname", "basename", "cat", "sed", "chmod", "env"):
             src = shutil.which(tool)

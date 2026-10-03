@@ -59,8 +59,12 @@ expect_fail() {
 echo "== self-test of check.py"
 
 setup
-rm "$WORK/repo/global/.claude/hooks/detect-secrets.ps1"
-expect_fail "hook .sh/.ps1 pairs" "a hook loses its .ps1 sibling"
+inject silence-feedback-hook
+expect_fail "hook wiring" "a feedback hook stops reporting to Claude"
+
+setup
+inject orphan-shell-hook
+expect_fail "hook .sh/.ps1 pairs" "a shell hook ships without its .ps1 twin"
 
 setup
 inject add-deny-rule
@@ -211,8 +215,8 @@ rm "$WORK/repo/templates/project/init.ps1"
 expect_fail "installer/deployer pairs" "the Windows deployer is deleted"
 
 setup
-printf '\nif true; then\n' >> "$WORK/repo/global/.claude/hooks/verify-on-edit.sh"
-expect_fail "script syntax" "a hook gains a plain bash syntax error"
+printf '\nif true; then\n' >> "$WORK/repo/templates/project/init.sh"
+expect_fail "script syntax" "the deployer gains a plain bash syntax error"
 
 setup
 printf '\ndef broken(:\n' >> "$WORK/repo/global/.claude/hooks/_lib/hookio.py"
@@ -224,7 +228,7 @@ expect_fail "hook wiring" "a safety .sh hook ships but is wired to no event"
 
 setup
 inject reinject-to-stderr
-expect_fail "hook wiring" "the SessionStart digest moves to stderr"
+expect_fail "hook wiring" "the Stop notice starts resuming the turn"
 
 setup
 inject drop-skill-from-readme

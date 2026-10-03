@@ -152,6 +152,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--remove-obsolete-mcp` for `init.sh`/`init.ps1`: removes the MCP servers listed in `obsolete.json` from `.mcp.json`, with their `mcp__<name>` permission rules.
 
 ### Changed
+- Every hook is one Python file now: reinject-rules, sync-mirror-docs, changelog-reminder, verify-on-edit, detect-secrets and the statusline script left their `.sh`/`.ps1` pairs (DESIGN.md §39), so no hook can drift between platforms again and each call starts one Python process instead of two to four. Two hook kinds joined check.py's list with their own obligations: `notice` (Stop; speaks only through `systemMessage`, never resuming the turn) and `feedback` (PostToolUse; reports through exit 2). `verify-on-edit` now bounds every check on every OS, without the `timeout` binary stock macOS lacks. On Windows the status line is seeded in a form Git Bash, cmd and PowerShell all run, and both installers repair a status line an earlier install seeded for the retired scripts. Hook commands on Windows quote paths with single quotes, so a `$` in a path is never expanded. NotebookEdit now reaches only detect-secrets, the one hook that reads a notebook.
+- Test harness: `tests/pyhook.py` gained `argv()` for matrices that need raw stdin, `inject.py` refuses to inject into the real checkout, the self-test covers the `feedback` and `notice` obligations, and the remaining leaked temporary directories are cleaned up.
 - `check.py` no longer treats `statusline` as a hook in the doc-inventory
   check. It lives in `hooks/` for the lockstep `.sh`/`.ps1` install machinery
   but is wired through its own settings key on a different lifecycle, so the

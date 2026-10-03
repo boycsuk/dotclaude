@@ -53,10 +53,11 @@ def case_fresh_install(home, pwsh):
             json.load(fh)
     except (OSError, ValueError) as e:
         return f"settings.json unreadable after install: {e}"
-    keep, drop = (".ps1", ".sh") if pwsh else (".sh", ".ps1")
     hooks = os.listdir(claude(home, "hooks"))
-    if not any(h.endswith(keep) for h in hooks):
-        return f"no {keep} hooks installed"
+    shipped = {n for n in os.listdir(os.path.join(REPO, "global/.claude/hooks")) if n.endswith(".py")}
+    if not shipped <= set(hooks):
+        return f"hooks missing after install: {sorted(shipped - set(hooks))}"
+    drop = ".sh" if pwsh else ".ps1"
     if any(h.endswith(drop) for h in hooks):
         return f"{drop} siblings not stripped from hooks/"
     manifest = claude(home, ".dotclaude-manifest")
@@ -325,6 +326,16 @@ def case_statusline_runs_under_any_shell(home, pwsh):
         status = json.load(fh).get("statusLine", {})
     if "shell" in status or status.get("command", "").startswith("&"):
         return f"statusLine still in the bash-incompatible form: {status}"
+    # Run the seeded command the way Git Bash would, with this pwsh standing
+    # in for powershell.exe: it must reach the Python script with stdin intact.
+    command = status["command"]
+    if not command.startswith("powershell "):
+        return f"unexpected status line form: {command!r}"
+    probe = json.dumps({"model": {"display_name": "Opus"}, "context_window": {"used_percentage": 12}})
+    proc = subprocess.run(["bash", "-c", f'"$PWSH_EXE"{command[len("powershell"):]}'], input=probe,
+                          capture_output=True, text=True, env=dict(os.environ, PWSH_EXE=pwsh, HOME=home))
+    if proc.returncode != 0 or "Opus · 12% ctx" not in proc.stdout:
+        return f"the seeded status line does not run under bash: rc={proc.returncode} out={proc.stdout!r} err={proc.stderr[-200:]!r}"
     custom = {"type": "command", "command": "my-own-status"}
     with open(claude(home, "settings.json"), "w") as fh:
         json.dump({"statusLine": custom}, fh)
@@ -512,6 +523,23 @@ def case_hook_fields_and_permission_keys_carry_over(home, pwsh):
     return None
 
 
+def case_retired_shell_statusline_is_repaired(home, pwsh):
+    # Earlier installs seeded the status line as the retired statusline.sh /
+    # statusline.ps1; once install removes that file the bar goes blank unless
+    # the seeded value is repaired. A status line the user chose stays.
+    legacy = ('& "' + claude(home) + '\\hooks\\statusline.ps1"') if pwsh else '"$HOME"/.claude/hooks/statusline.sh'
+    os.makedirs(claude(home), exist_ok=True)
+    with open(claude(home, "settings.json"), "w") as fh:
+        json.dump({"statusLine": {"type": "command", "command": legacy}}, fh)
+    if run_install(home, pwsh) != 0:
+        return "installer exited non-zero"
+    with open(claude(home, "settings.json")) as fh:
+        command = json.load(fh).get("statusLine", {}).get("command", "")
+    if "statusline.py" not in command:
+        return f"the retired status line was not repaired: {command!r}"
+    return None
+
+
 def case_output_style_defaults_on(home, pwsh):
     if run_install(home, pwsh) != 0:
         return "installer exited non-zero"
@@ -542,6 +570,7 @@ CASES = [
     ("the manifest cannot delete outside ~/.claude", case_manifest_cannot_escape_claude_dir),
     ("a broken hook aborts before anything is copied", case_broken_hook_aborts_before_copying),
     ("the installed template deploys a project", case_installed_template_deploys),
+    ("a status line seeded as the retired shell script is repaired", case_retired_shell_statusline_is_repaired),
     ("new hook fields and permission keys reach both platforms", case_hook_fields_and_permission_keys_carry_over),
     ("shell guards and rules cover both Bash and PowerShell", case_shell_guards_cover_both_tools),
     ("the status line runs under any shell, a broken seed is repaired", case_statusline_runs_under_any_shell),

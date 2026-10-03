@@ -137,7 +137,6 @@ if [ -f "$MANIFEST.old" ]; then
     echo "    Projects that wired them: run /init-project --update (or init.sh) to prune the entries."
   fi
 fi
-chmod +x "$TARGET/hooks/"*.sh 2>/dev/null || true
 # Removing a skill's files leaves its directory behind, and an empty
 # ~/.claude/skills/<name>/ still shows up in the skill listing as a phantom.
 # Prune only the directories that removing our own files emptied — an empty
@@ -208,6 +207,11 @@ for key in OWNED:
         dst[key] = src[key]
 # After an unparseable settings.json dst is empty, so everything seeds — the
 # user's old values are unrecoverable anyway and the backup holds them.
+# A status line an earlier install seeded points at the retired statusline.sh;
+# that value is ours to repair. Any other value is the user's choice and stays.
+LEGACY_STATUSLINE = ('"$HOME"/.claude/hooks/statusline.sh',)
+if (dst.get("statusLine") or {}).get("command") in LEGACY_STATUSLINE:
+    del dst["statusLine"]
 seeded = [k for k in SEEDED if k in src and k not in dst]
 for key in seeded:
     dst[key] = src[key]

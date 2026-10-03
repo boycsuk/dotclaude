@@ -75,6 +75,31 @@ def context(event, text):
     _emit({"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}})
 
 
+def notice(text):
+    """Stop: show `text` to the user without resuming the turn.
+
+    `systemMessage` is the one Stop output that does not continue the
+    conversation: `decision: "block"`, exit 2 and `additionalContext` all do.
+    """
+    _emit({"systemMessage": text})
+
+
+FEEDBACK_EXIT = 2
+
+
+def feedback(text):
+    """PostToolUse: show `text` to Claude; return the exit code that delivers it.
+
+    Exit 2 with stderr is the PostToolUse channel that reaches Claude without
+    stopping the turn (`decision: "block"` would stop it, and the tool already
+    ran). The caller returns the value: `return hookio.feedback(msg)`.
+    """
+    err = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+    err.write(text.rstrip("\n") + "\n")
+    err.flush()
+    return FEEDBACK_EXIT
+
+
 def update_input(tool_input):
     """PreToolUse: replace the tool's input with `tool_input`."""
     _emit({"hookSpecificOutput": {"hookEventName": "PreToolUse",

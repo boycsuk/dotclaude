@@ -73,10 +73,16 @@ def code_only(text):
     return re.sub(r"^\s*#.*$", "", text, flags=re.M)
 
 
+# Lives in hooks/ for the install machinery but is the statusLine command,
+# wired through its own settings key: not a hook.
+NOT_HOOKS = {"statusline"}
+
+
 def py_hooks():
     """Names of the single-file Python hooks (no .sh/.ps1 twin by design)."""
-    return sorted(os.path.basename(p)[:-3]
-                  for p in glob.glob(os.path.join(REPO, "global/.claude/hooks/*.py")))
+    return sorted(name for name in (os.path.basename(p)[:-3]
+                                    for p in glob.glob(os.path.join(REPO, "global/.claude/hooks/*.py")))
+                  if name not in NOT_HOOKS)
 
 
 # --- 1. Every shell hook ships as a .sh + .ps1 pair --------------------------
@@ -531,21 +537,7 @@ def _():
     # An advisory hook must deliver via hookSpecificOutput.additionalContext on
     # stdout: with exit 0, stderr reaches the debug log only, so three hooks
     # were inert for months (DESIGN.md §17, 2026-08-15).
-    for name in ("sync-mirror-docs",):
-        for ext in ("sh", "ps1"):
-            body = code_only(read(f"global/.claude/hooks/{name}.{ext}"))
-            if "additionalContext" not in body:
-                fail("hook wiring",
-                     f"{name}.{ext} does not emit additionalContext — an advisory "
-                     f"written to stderr with exit 0 never reaches the model")
-    # reinject-rules runs on SessionStart, where plain stdout is the context
-    # channel; the same stderr regression would silence it.
-    for ext, stderr_marks in (("sh", (">&2",)), ("ps1", ("[Console]::Error", "Write-Error"))):
-        body = code_only(read(f"global/.claude/hooks/reinject-rules.{ext}"))
-        if any(mark in body for mark in stderr_marks):
-            fail("hook wiring",
-                 f"reinject-rules.{ext} writes to stderr — on SessionStart only "
-                 f"stdout reaches the model")
+    # (Advisory delivery is checked per hook-kind below.)
 
     hook_entries = [h for groups in settings.get("hooks", {}).values()
                     for g in groups for h in g.get("hooks", [])]
@@ -553,25 +545,26 @@ def _():
     for name in py_hooks():
         if f"{name}.py" not in wired:
             fail("hook wiring", f"{name}.py ships but no event in settings.json runs it")
+    status_command = settings.get("statusLine", {}).get("command", "")
+    for name in sorted(NOT_HOOKS):
+        if os.path.exists(os.path.join(REPO, "global/.claude/hooks", f"{name}.py")) \
+                and f"{name}.py" not in status_command:
+            fail("hook wiring", f"{name}.py ships but statusLine.command does not run it")
     # Shell hooks too: a safety hook dropped from settings.json still has its
     # file and its matrix, so nothing else notices it stopped running.
-    status_command = settings.get("statusLine", {}).get("command", "")
     for path in sorted(glob.glob(os.path.join(REPO, "global/.claude/hooks/*.sh"))):
         name = os.path.basename(path)
-        if name == "statusline.sh":
-            if name not in status_command:
-                fail("hook wiring", "statusline.sh ships but statusLine.command does not run it")
-        elif name not in wired:
+        if name not in wired:
             fail("hook wiring", f"{name} ships but no event in settings.json runs it")
 
     # Python hooks declare their kind instead of being listed here by hand, so
     # a new hook cannot dodge this check by never being added to a tuple.
     for name in py_hooks():
         raw = read(f"global/.claude/hooks/{name}.py")
-        m = re.search(r"^# hook-kind: (guard|advisory|rewrite)\s*$", raw, re.M)
+        m = re.search(r"^# hook-kind: (guard|advisory|rewrite|notice|feedback)\s*$", raw, re.M)
         if not m:
             fail("hook wiring",
-                 f"{name}.py has no `# hook-kind: guard|advisory|rewrite` header line")
+                 f"{name}.py has no `# hook-kind: guard|advisory|rewrite|notice|feedback` header line")
             continue
         kind = m.group(1)
         body = code_only(raw)
@@ -585,9 +578,21 @@ def _():
         if kind == "rewrite" and "hookio.update_input(" not in body:
             fail("hook wiring",
                  f"{name}.py is a rewrite hook but never calls hookio.update_input()")
-        # A guard decides, a rewrite alters what a tool receives: both are
-        # pinned by a matrix, since neither failure shows up in normal use.
-        if kind in ("guard", "rewrite") and not os.path.exists(
+        # A Stop notice must not resume the turn: additionalContext, a deny or
+        # an ask all do, so only systemMessage (hookio.notice) is allowed.
+        if kind == "notice" and ("hookio.notice(" not in body
+                                 or any(c in body for c in ("hookio.context(", "hookio.deny(", "hookio.ask("))):
+            fail("hook wiring",
+                 f"{name}.py is a notice hook: it must speak only through hookio.notice() — "
+                 f"anything else resumes the turn")
+        if kind == "feedback" and "hookio.feedback(" not in body:
+            fail("hook wiring",
+                 f"{name}.py is a feedback hook but never calls hookio.feedback() — its "
+                 f"findings would not reach Claude")
+        # A guard decides, a rewrite alters what a tool receives, feedback and
+        # notices speak only when something is wrong: each is pinned by a
+        # matrix, since none of those failures shows up in normal use.
+        if kind in ("guard", "rewrite", "notice", "feedback") and not os.path.exists(
                 os.path.join(REPO, "tests", f"{name}-cases.py")):
             fail("hook wiring",
                  f"{name}.py is a {kind} hook with no tests/{name}-cases.py matrix — "

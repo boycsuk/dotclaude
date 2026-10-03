@@ -90,9 +90,9 @@ function New-Hook($src, $name, $isPython) {
     if ($isPython) {
         $script = Join-Path (Join-Path $Target "hooks") "$name.py"
         $launcherArgs = if ($PythonArgs) { " $PythonArgs" } else { "" }
-        $command = "& `"$PythonExe`"$launcherArgs `"$script`"; exit `$LASTEXITCODE"
+        $command = "& '$($PythonExe -replace "'", "''")'$launcherArgs '$($script -replace "'", "''")'; exit `$LASTEXITCODE"
     } else {
-        $command = "& `"$Target\hooks\$name.ps1`"; exit `$LASTEXITCODE"
+        $command = "& '$("$Target\hooks\$name.ps1" -replace "'", "''")'; exit `$LASTEXITCODE"
     }
     # Every other field of the source entry is carried over as is (timeout,
     # async, statusMessage, ...): re-typing a fixed set silently dropped any
@@ -348,15 +348,21 @@ $owned  = @("permissions", "hooks", "attribution")
 $seeded = @("outputStyle", "fileCheckpointingEnabled", "statusLine")
 
 # statusLine is seeded verbatim from the source like every other seeded key,
-# but its `command` is the .sh form. statusLine has no `shell` field: Claude
+# but its `command` is the POSIX form. statusLine has no `shell` field: Claude
 # Code runs it through Git Bash when that is installed, where `& "C:\..."` is a
-# syntax error. The form the statusline docs give works under either shell.
-$slLegacy = $null
+# syntax error. A command starting with a bare `powershell` runs under Git Bash,
+# cmd and PowerShell alike, and hands stdin to the Python it starts.
+$slLegacy = @()
 if ($srcSettings.PSObject.Properties.Name -contains "statusLine" -and $srcSettings.statusLine.command) {
-    $slName = [System.IO.Path]::GetFileNameWithoutExtension($srcSettings.statusLine.command)
-    $slLegacy = "& `"$Target\hooks\$slName.ps1`""
-    $slPath = (Join-Path (Join-Path $Target "hooks") "$slName.ps1") -replace '\\', '/'
-    $srcSettings.statusLine.command = "powershell -NoProfile -File `"$slPath`""
+    $slName = [System.IO.Path]::GetFileNameWithoutExtension(($srcSettings.statusLine.command -split '[/\\]')[-1].Trim('"'))
+    # The forms earlier installs seeded (the .ps1 twin is gone), ours to repair.
+    $slLegacy = @("& `"$Target\hooks\$slName.ps1`"",
+                  "powershell -NoProfile -File `"$((Join-Path (Join-Path $Target "hooks") "$slName.ps1") -replace '\\', '/')`"")
+    $q = { param($s) "'" + ($s -replace "'", "''") + "'" }
+    $slScript = (Join-Path (Join-Path $Target "hooks") "$slName.py") -replace '\\', '/'
+    $slExe = $PythonExe -replace '\\', '/'
+    $launcher = if ($PythonArgs) { " $PythonArgs" } else { "" }
+    $srcSettings.statusLine.command = "powershell -NoProfile -Command `"& $(& $q $slExe)$launcher $(& $q $slScript)`""
 }
 
 $settingsPath = Join-Path $Target "settings.json"
@@ -407,7 +413,7 @@ foreach ($k in $central.Keys) {
 }
 # A statusLine an earlier install seeded in the broken form is ours to repair;
 # any other value is the user's choice and stays.
-if ($slLegacy -and $existing.Contains("statusLine") -and $existing["statusLine"].command -eq $slLegacy) {
+if ($existing.Contains("statusLine") -and $slLegacy -contains $existing["statusLine"].command) {
     $existing.Remove("statusLine")
 }
 # Seed AFTER the user's keys were copied in, so an existing value wins.

@@ -606,6 +606,14 @@ A Deep audit (12 agents, then 4 adversarial verifiers, every claim reproduced) f
 
 **What stays out of reach of a hook.** Each verifier also checked the harness layer behind the hooks: Claude Code's `ask`/`deny` rules split compound commands, so most push bypasses still prompted; the `git -c` forms did not, and auto mode allows default-branch pushes. That is why the `-c` forms are handled in the hook rather than left to the permission rules.
 
+### 39. Every hook is Python now; the shell pairs are retired (2026-10-03)
+
+§36 made new hooks a single `.py` and let existing pairs migrate "when next touched". The audit touched all of them, and every pair it looked at had diverged: the `.ps1` exit code that never blocked (§38), `detect-secrets` reading across newlines on Windows only, `statusline` rounding where the `.sh` truncated, `changelog-reminder` dead under Windows PowerShell 5.1, `verify-on-edit` unbounded on macOS for lack of a `timeout` binary. So the remaining six — reinject-rules, sync-mirror-docs, changelog-reminder, verify-on-edit, detect-secrets and the statusline script — moved too, and no hook ships twice any more.
+
+Two hook kinds joined `guard|advisory|rewrite`, each with the obligation check.py enforces: **`notice`** for a Stop hook, which may speak only through `hookio.notice` (`systemMessage`) because `additionalContext`, a deny and exit 2 all resume the turn; and **`feedback`** for a PostToolUse hook that reports a problem through `hookio.feedback` — exit 2 with the text on stderr, the one PostToolUse channel that reaches Claude without stopping the turn (`decision: "block"` stops it, and the tool already ran).
+
+The status line is not a hook (no hook-kind); `install.ps1` seeds it as `powershell -NoProfile -Command "& '<python>' '<script>'"`, the one form that runs under Git Bash, cmd and PowerShell alike, and both installers repair a value an earlier install seeded for the retired shell scripts. Cost: one Python start per hook call instead of two to four.
+
 ## Things deliberately not included
 
 - **Pre-baked stack variants.** See decision 2.
@@ -623,7 +631,7 @@ These came up in design but were intentionally left for after real-world use:
 
 - Agent memory (`memory: user|project|local` in a subagent's frontmatter) is deliberately unused. It rides on auto memory, so with `autoMemoryEnabled` false or `CLAUDE_CODE_DISABLE_AUTO_MEMORY` set the field is ignored silently; and enabling it auto-enables Read/Write/Edit, which collides with the `disallowedTools: Write, Edit` of `researcher`, `code-reviewer` and `debugger` (their Bash restriction is prompt-only, so "read-only" is a convention, not a guarantee). The docs do not say which side wins; resolve it empirically before giving memory to one of them. (Moved here from `rules/ai-collaboration.md`, which loads in every session of every project.)
 - Whether the model override policy (Haiku for mechanical) is too aggressive or too conservative — needs usage data.
-- Whether `detect-secrets.sh` false-positive rate is tolerable or needs tuning.
+- Whether `detect-secrets.py` false-positive rate is tolerable or needs tuning.
 - Whether the `Stop` hook for compound prompts should be added later if `/compound` is forgotten in practice.
 - Whether the template should grow stack-specific overlay directories once enough patterns repeat.
 - Whether `db-inspector` should grow MySQL support (easy, similar shape to Postgres) and Mongo support (different — needs a JSON-schema filter, not a SQL substring denylist). Defer until real usage demands it.

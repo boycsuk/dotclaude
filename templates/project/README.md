@@ -200,7 +200,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\templates\pro
 
 ### Sync rule for hooks
 
-New hooks are a single Python file that serves both platforms. The older hooks still ship as a `.sh` (Bash) and `.ps1` (PowerShell) pair that must stay logically equivalent: **when you change one, change the other** — or migrate the pair to `.py` — and run its case matrix with `--pwsh`. Diverging silently breaks Windows users.
+Every hook is a single Python file that serves both platforms; run its case matrix with `--pwsh` to exercise the exact PowerShell command form Windows uses. The deployer (`init.sh` / `init.ps1`) still ships as a pair that must stay logically equivalent: **when you change one, change the other**.
 
 ### Promoting a project-local extension to every project
 

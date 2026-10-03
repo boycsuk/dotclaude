@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Behavioural contract for verify-on-edit.{sh,ps1}.
+"""Behavioural contract for verify-on-edit.py.
 
 Run:  python3 tests/verify-on-edit-cases.py
-      python3 tests/verify-on-edit-cases.py --pwsh PATH   # verify parity
+      python3 tests/verify-on-edit-cases.py --pwsh PATH   # also through PowerShell
 
 This hook runs the project's linter/typechecker after edits. It joined the
-matrix club because its siblings diverged in ways reading them did not reveal
-(same story as guard-push-main and detect-secrets, DESIGN.md §26):
+matrix club because its old .sh/.ps1 twins diverged in ways reading them did
+not reveal (same story as guard-push-main and detect-secrets, DESIGN.md §26):
 
   - The .ps1 accepted sibling directories sharing a prefix (root C:\\proj also
     matched C:\\proj-other\\x.ts) where the .sh required a separator.
@@ -22,20 +22,17 @@ does not take 15 real seconds.
 """
 
 import argparse
+import atexit
 import json
 import os
 import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pyhook  # noqa: E402
-import tempfile
-
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SH = os.path.join(REPO, "global/.claude/hooks/verify-on-edit.sh")
-PS1 = os.path.join(REPO, "global/.claude/hooks/verify-on-edit.ps1")
 
 FAIL, QUIET = "FAIL", "QUIET"          # FAIL = exit 2 (errors surfaced)
 
@@ -51,6 +48,8 @@ def write_stub(bindir, name, body):
 
 def build_fixture(kind):
     root = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, root, True)
+    atexit.register(shutil.rmtree, root + "-other", True)
     bindir = os.path.join(root, "_bin")
     os.makedirs(bindir)
     if kind == "js-lint-fails":
@@ -127,19 +126,9 @@ CASES = [
      "'lint' as a dependency is not a script — pseudo-failure otherwise"),
     ("npm missing is not an error", "js-no-npm", "src/app.ts", QUIET,
      "bun/pnpm-only environments: every other branch guards its binary"),
-    # Only assertable where a timeout binary exists. Stock macOS ships neither
-    # `timeout` (GNU coreutils) nor `gtimeout`, so the hook runs checks
-    # unbounded there and a hanging check is caught by the 60s per-hook budget
-    # in settings.json instead. Asserting QUIET unconditionally made this
-    # matrix unpassable on macOS — and an unpassable matrix stops being run,
-    # which is how the unparseable-hook defect survived (DESIGN.md §32).
-    # Per-runner: the .ps1 bounds processes with WaitForExit and always skips a
-    # hanging check, but the .sh needs a timeout binary and stock macOS ships
-    # neither, so there it runs unbounded and the stub's failure surfaces. The
-    # 60s per-hook budget in settings.json is the backstop in that case.
-    ("hanging check is skipped, not reported", "js-hanging-lint", "src/app.ts",
-     {"sh": QUIET if (shutil.which("timeout") or shutil.which("gtimeout")) else FAIL,
-      "ps1": QUIET},
+    # The Python hook bounds each check with its own subprocess timeout, so this
+    # holds on every OS; the .sh twin needed a `timeout` binary stock macOS lacks.
+    ("hanging check is skipped, not reported", "js-hanging-lint", "src/app.ts", QUIET,
      "a timeout is the budget's fault, not the code's — cry-wolf otherwise"),
     ("mts triggers the JS branch", "js-lint-fails", "src/app.mts", FAIL,
      "TS 4.7 module extension"),
@@ -194,12 +183,10 @@ def invoke(runner, root, bindir, file_path, stderr=None):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to verify .sh/.ps1 parity")
+    ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
     args = ap.parse_args()
 
-    runners = [("sh", ["bash", SH])]
-    if args.pwsh:
-        runners.append(("ps1", pyhook.ps1_hook(args.pwsh, PS1)))
+    runners = [(label, pyhook.argv("verify-on-edit", pwsh)) for label, pwsh in pyhook.runners(args.pwsh)]
 
     failures = 0
     for name, kind, rel, want, why in CASES:
@@ -245,7 +232,7 @@ def main():
     if failures:
         print(f"{failures} FAILED")
         return 1
-    scope = "bash + powershell" if args.pwsh else "bash only (pass --pwsh for parity)"
+    scope = "python + powershell" if args.pwsh else "python only (pass --pwsh for the Windows form)"
     print(f"All cases pass — {scope}.")
     return 0
 

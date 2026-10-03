@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Behavioural contract for changelog-reminder.{sh,ps1}.
+"""Behavioural contract for changelog-reminder.py.
 
 Run:  python3 tests/changelog-reminder-cases.py
-      python3 tests/changelog-reminder-cases.py --pwsh PATH   # verify parity
+      python3 tests/changelog-reminder-cases.py --pwsh PATH   # also through PowerShell
 
 The hook is ADVISORY: it must emit `systemMessage` and exit 0, and must never
 emit `decision` or exit 2. On Stop, `decision: "block"`, exit 2 AND
@@ -23,14 +23,11 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pyhook  # noqa: E402
-import tempfile
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SH = os.path.join(REPO, "global/.claude/hooks/changelog-reminder.sh")
-PS1 = os.path.join(REPO, "global/.claude/hooks/changelog-reminder.ps1")
 
 
 def git(repo, *args):
@@ -63,7 +60,7 @@ def run_hook(repo, pwsh=None, stop_hook_active=False, session_cwd=None):
         "session_id": "test",
         "last_assistant_message": "done",
     })
-    cmd = pyhook.ps1_hook(pwsh, PS1) if pwsh else ["bash", SH]
+    cmd = pyhook.argv("changelog-reminder", pwsh)
     p = subprocess.run(cmd, input=payload, capture_output=True, text=True, cwd=repo)
     return p.returncode, p.stdout.strip(), p.stderr.strip()
 
@@ -170,7 +167,7 @@ def case_lockfile_only(tmp, pwsh):
 
 def case_missing_cwd(tmp, pwsh):
     """A payload without cwd must not crash or warn about the wrong repo."""
-    cmd = pyhook.ps1_hook(pwsh, PS1) if pwsh else ["bash", SH]
+    cmd = pyhook.argv("changelog-reminder", pwsh)
     p = subprocess.run(cmd, input='{"hook_event_name":"Stop"}',
                        capture_output=True, text=True, cwd=tmp)
     if p.returncode != 0:
@@ -179,7 +176,7 @@ def case_missing_cwd(tmp, pwsh):
 
 
 def case_garbage_input(tmp, pwsh):
-    cmd = pyhook.ps1_hook(pwsh, PS1) if pwsh else ["bash", SH]
+    cmd = pyhook.argv("changelog-reminder", pwsh)
     p = subprocess.run(cmd, input="not json at all", capture_output=True,
                        text=True, cwd=tmp)
     if p.returncode != 0:
@@ -205,10 +202,10 @@ CASES = [
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to verify the .ps1 too")
+    ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
     args = ap.parse_args()
 
-    targets = [(None, "sh")]
+    targets = [(None, "py")]
     if args.pwsh:
         targets.append((args.pwsh, "ps1"))
 
@@ -226,7 +223,7 @@ def main():
             status = "ok  " if problem is None else "BAD "
             print(f"  {status}[{label}] {name}" + (f" — {problem}" if problem else ""))
 
-    suffix = "" if args.pwsh else " — bash only (pass --pwsh for parity)"
+    suffix = "" if args.pwsh else " — python only (pass --pwsh for the Windows form)"
     print(f"\nchangelog-reminder: {total - bad} ok, {bad} bad{suffix}")
     return 1 if bad else 0
 
