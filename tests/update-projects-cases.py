@@ -57,6 +57,8 @@ def build_tree(root):
     write(os.path.join(a, ".mcp.json"), {"mcpServers": {
         "serena": {"command": "serena"}, "graphify": {"command": "uv"},
         "playwright": OLD_PLAYWRIGHT, "mine": MINE}})
+    write(os.path.join(a, ".claude/settings.local.json"),
+          {"enabledMcpjsonServers": ["serena", "graphify", "playwright"], "allowPushToMain": True})
     os.makedirs(os.path.join(a, ".serena", "memories"))
     write(os.path.join(a, "sub", ".claude/settings.json"), stub_with())          # nested: not visited
     b = os.path.join(root, "b")
@@ -141,6 +143,9 @@ def check(tmp, pwsh):
     allow = settings_a.get("permissions", {}).get("allow", [])
     if allow != ["mcp__playwright__*", "Bash(make:*)"]:
         problems.append(f"project a: permissions wrong after removal: {allow}")
+    local_a = load(os.path.join(a, ".claude/settings.local.json"))
+    if local_a != {"enabledMcpjsonServers": ["playwright"], "allowPushToMain": True}:
+        problems.append(f"project a: settings.local.json not cleaned or changed beyond that: {local_a}")
     servers_a = load(os.path.join(a, ".mcp.json"))["mcpServers"]
     if set(servers_a) != {"playwright", "mine"} or servers_a["mine"] != MINE:
         problems.append(f"project a: servers wrong: {servers_a}")
