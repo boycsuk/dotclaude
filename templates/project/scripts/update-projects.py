@@ -78,8 +78,11 @@ def find_projects(root, matches, depth):
         level = current[len(root):].count(os.sep)
         if is_project(current, matches):
             found.append(current)
-            dirs[:] = []
-            continue
+            # Never stop at the root: a folder of projects that was once
+            # deployed into by mistake still has its projects underneath.
+            if current != root:
+                dirs[:] = []
+                continue
         if level >= depth:
             dirs[:] = []
             continue
