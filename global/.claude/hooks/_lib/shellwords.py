@@ -45,6 +45,10 @@ WRAPPERS = {
     "timeout": {"-s", "--signal", "-k", "--kill-after"},
     "xargs": {"-I", "-i", "-n", "-L", "-l", "-P", "-d", "-E", "-e", "-a", "-s", "--max-args",
               "--max-procs", "--delimiter", "--arg-file", "--replace"},
+    "sudo": {"-u", "--user", "-g", "--group", "-C", "--close-from", "-D", "--chdir", "-h", "--host",
+             "-p", "--prompt", "-r", "--role", "-t", "--type", "-U", "--other-user", "-T",
+             "--command-timeout"},
+    "doas": {"-u", "-C"},
 }
 _POSITIONAL_ARG_WRAPPERS = {"timeout"}          # `timeout 60 cmd`: the duration comes first
 _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
@@ -60,6 +64,10 @@ def _decode_ansi_c(body):
 
 def _from_powershell(cmd):
     """Rewrite the PowerShell syntax a command line commonly uses into POSIX form."""
+    # A backslash is an ordinary character in PowerShell (C:\Users\x); POSIX
+    # tokenizing would read it as an escape and mangle every Windows path.
+    cmd = cmd.replace("\\", "\\\\")
+
     def herestring(m):
         body = m.group(2)
         if m.group(1) == '"':
@@ -79,8 +87,17 @@ def normalize(cmd, shell="bash"):
     """Resolve the constructs shlex cannot: PowerShell syntax, cat-heredoc substitutions, $'...'."""
     if shell == "powershell":
         cmd = _from_powershell(cmd)
-    cmd = _CAT_SUBST.sub(lambda m: _quote(m.group(4)), cmd)
-    return _ANSI_C.sub(lambda m: _quote(_decode_ansi_c(m.group(1))), cmd)
+    executed = []
+
+    def cat_subst(m):
+        # The body becomes one quoted word, but with an unquoted delimiter its
+        # own $( ) still runs: those are appended as commands of their own.
+        if not m.group(2):
+            executed.extend(substitutions(m.group(4), in_heredoc=True))
+        return _quote(m.group(4))
+    cmd = _CAT_SUBST.sub(cat_subst, cmd)
+    cmd = _ANSI_C.sub(lambda m: _quote(_decode_ansi_c(m.group(1))), cmd)
+    return "\n".join([cmd] + executed)
 
 
 def heredocs(cmd, shell="bash"):
@@ -108,15 +125,26 @@ def _split_heredocs(cmd):
             continue
         header = line[:m.start()]
         target = _WRITER_TARGET.search(header)
-        if not target and not _COMMIT_STDIN.search(header):
-            i += 1                                # may be executed: its body is more commands
-            continue
         body = "\n".join(lines[i + 1:j])
+        rest = "\n".join(lines[j + 1:])
+        if (not target and not _COMMIT_STDIN.search(header)) or \
+                (target and _runs_file(target.group(1), rest)):
+            i += 1                                # executed: its body is more commands
+            continue
         found.append({"header": line, "body": body, "target": target.group(1) if target else None})
         if not m.group(1):                        # unquoted: $( ) in the body still runs
             kept.extend(substitutions(body, in_heredoc=True))
         i = j + 1
     return "\n".join(kept), found
+
+
+def _runs_file(path, text):
+    """True when `text` executes the file `path` (written by a heredoc earlier in the command)."""
+    name = re.escape(path)
+    base = re.escape(re.split(r"[/\\]", path)[-1])
+    return bool(re.search(
+        rf"(^|[\s;&|(])((ba|z|da|k)?sh|source|\.|python[0-9.]*|perl|ruby|node)\s+(-\S+\s+)*(\./)?{name}(\s|$|;)"
+        rf"|(^|[\s;&|(])\./{base}(\s|$|;)", text))
 
 
 def substitutions(text, in_heredoc=False):
@@ -265,8 +293,46 @@ def segments(cmd, shell="bash", _depth=0):
     return result
 
 
+def code_text(cmd, shell="bash"):
+    """`cmd` as the shell will run it: data-heredoc bodies and comments removed, one line.
+
+    For the checks that need the raw shape a token list loses, such as a
+    process substitution `bash <(curl ...)`.
+    """
+    return _newlines_to_separators(_split_heredocs(normalize(cmd, shell))[0])
+
+
+def pipelines(cmd, shell="bash"):
+    """`cmd` split into pipelines, each a list of the segments joined by `|`.
+
+    Returns None when the quoting is unbalanced. Substitutions are not
+    descended into; `segments` covers those.
+    """
+    try:
+        lexer = shlex.shlex(code_text(cmd, shell), posix=True, punctuation_chars=";&|()")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        tokens = list(lexer)
+    except ValueError:
+        return None
+    result, pipeline, current = [], [], []
+    for tok in tokens + [";"]:
+        if tok in ("|", "|&"):
+            pipeline.append(current)
+            current = []
+        elif tok and set(tok) <= SEPARATOR_CHARS:
+            pipeline.append(current)
+            result.append([seg for seg in pipeline if seg])
+            pipeline, current = [], []
+        else:
+            current.append(tok)
+    return [p for p in result if p]
+
+
 def _shell_c_argument(seg):
     seg = unwrap(seg)
+    if seg and seg[0] == "eval":
+        return " ".join(seg[1:])                  # eval runs its arguments as a command line
     if not seg or basename(seg[0]) not in SHELLS:
         return None
     for i, arg in enumerate(seg[1:], 1):

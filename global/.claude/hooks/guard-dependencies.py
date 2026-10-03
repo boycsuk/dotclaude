@@ -10,7 +10,11 @@ behind a wrapper. This hook asks the user whenever:
     `pip install -r requirements.txt` pass: they add nothing new);
   - an Edit/Write adds a dependency entry to a manifest (package.json,
     pyproject.toml, requirements*.txt, Cargo.toml, go.mod, Gemfile,
-    composer.json, *.csproj).
+    composer.json, *.csproj);
+  - a runner fetches a package to execute or install it outside any
+    manifest: npx / bunx / pnpm dlx / yarn dlx / npm exec (unless the tool
+    is in node_modules/.bin or --no-install is given), uvx / uv tool,
+    pipx run|install, cargo install, go install of a remote module.
 The reason names the packages, flags unpinned version specs, and gives the
 ecosystem's audit command. It never denies: adding a dependency is often
 right; it is the user's call (DESIGN.md §36).
@@ -86,6 +90,49 @@ def _editable_packages(args):
     return pkgs
 
 
+# Commands that fetch a package and run or install it without touching a
+# manifest: (ecosystem, the subcommand path that selects that mode). Outside
+# a terminal npx assumes --yes, so `npx some-tool` downloads and executes
+# registry code with no prompt at all.
+RUNNERS = {
+    "npx": ("npm", []), "bunx": ("npm", []), "pnpx": ("npm", []),
+    "pnpm": ("npm", ["dlx"]), "yarn": ("npm", ["dlx"]), "npm": ("npm", ["exec"]),
+    "uvx": ("python", []), "pipx": ("python", None),
+    "uv": ("python", ["tool"]), "cargo": ("cargo", ["install"]), "go": ("go", ["install"]),
+}
+RUNNER_VALUED = {"-p", "--package", "--from", "--with", "--python", "-c", "--call", "--registry",
+                 "--cache", "--index", "--git", "--branch", "--tag", "--rev", "--version", "--root"}
+LOCAL_BIN_DIR = os.path.join("node_modules", ".bin")
+CWD = [os.getcwd()]
+
+
+def runner_additions(prog, args):
+    """(ecosystem, [packages]) for a command that fetches and runs or installs a package."""
+    if prog not in RUNNERS:
+        return None
+    ecosystem, path = RUNNERS[prog]
+    if prog == "pipx":
+        path = [args[0]] if args[:1] and args[0] in ("run", "install") else None
+    if path is None or args[:len(path)] != path:
+        return None
+    rest = args[len(path):]
+    if prog == "uv":
+        if not rest or rest[0] not in ("run", "install"):
+            return None
+        rest = rest[1:]
+    if any(a in ("--no-install", "--offline") for a in rest):
+        return None
+    pkgs, _ = split_options(rest, RUNNER_VALUED)
+    named = [rest[i + 1] for i, a in enumerate(rest[:-1]) if a in ("-p", "--package", "--from")]
+    named += [a.split("=", 1)[1] for a in rest if a.startswith(("--package=", "--from="))]
+    target = named or pkgs[:1]
+    if not target or LOCAL_SPEC.search(target[0]) or (prog == "go" and not re.search(r"[./]", target[0])):
+        return None
+    if ecosystem == "npm" and not named and os.path.exists(os.path.join(CWD[0], LOCAL_BIN_DIR, target[0])):
+        return None                               # a locally installed tool runs without a download
+    return ecosystem, target
+
+
 def bash_additions(seg):
     """Return (ecosystem, [packages]) when the segment adds named packages."""
     seg = shellwords.unwrap(seg)
@@ -108,6 +155,9 @@ def bash_additions(seg):
             pkgs, _ = split_options(args[args.index("package") + 1:], {"-v", "--version", "-s", "--source", "-f", "--framework"})
             return ("dotnet", pkgs[:1]) if pkgs else None
         return None
+    runner = runner_additions(prog, args)
+    if runner:
+        return runner
     if prog not in TOOLS:
         return None
     ecosystem, subcommands, valued = TOOLS[prog]
@@ -311,6 +361,8 @@ def main():
         command = tool_input.get("command")
         if not isinstance(command, str):
             return 0
+        if isinstance(payload.get("cwd"), str):
+            CWD[0] = payload["cwd"]
         segments = shellwords.segments(command, shellwords.shell_of(payload)) or []
         found = [bash_additions(seg) for seg in segments]
         found = [f for f in found if f]

@@ -282,15 +282,16 @@ def heredoc_back_into_subshell(repo):
     bash 4.2+ parses it, so only check.py's static rule catches it on a modern
     host. Looks tidier, which is exactly why someone will try it again.
     """
-    path = os.path.join(repo, "global/.claude/hooks/guard-destructive.sh")
+    path = os.path.join(repo, "global/.claude/hooks/changelog-reminder.sh")
     with open(path) as fh:
         text = fh.read()
-    marker = 'CMD="$CMD" python3 > "$_GD_OUT" 2>/dev/null <<\'PY\''
+    marker = 'INPUT="$INPUT" python3 > "$_CR_OUT" 2>/dev/null <<\'PY\' || true'
     if marker not in text:
-        raise SystemExit("inject: guard-destructive.sh no longer writes python output to a temp file")
-    text = text.replace(marker, 'CMD=$(CMD="$CMD" python3 <<\'PY\' 2>/dev/null || printf \'%s\' "$CMD"')
+        raise SystemExit("inject: changelog-reminder.sh no longer writes python output to a temp file")
+    text = text.replace(marker, 'PARSED=$(INPUT="$INPUT" python3 <<\'PY\' 2>/dev/null || true', 1)
+    head, sep, tail = text.partition("\nPY\n")
     with open(path, "w") as fh:
-        fh.write(text.replace('if [ -s "$_GD_OUT" ]; then\n  CMD=$(cat "$_GD_OUT")\nfi', ')'))
+        fh.write(head + sep + ")\n" + tail)
 
 
 def add_permissions_key(repo):

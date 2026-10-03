@@ -26,6 +26,25 @@ ASK, ALLOW = "ask", "allow"
 BASH_CASES = [
     # Adds a named package — ask, in every spelling.
     ("npm install lodash", ASK, "npm install <pkg>"),
+    # Runners fetch a package and execute it; outside a terminal npx assumes --yes.
+    ("npx some-tool", ASK, "npx downloads and runs a registry package"),
+    ("npx -y create-vite@5 app", ASK, "npx -y"),
+    ("npx --no-install tsc --noEmit", ALLOW, "--no-install never downloads"),
+    ("npx localtool", ALLOW, "a tool already in node_modules/.bin runs locally"),
+    ("bunx cowsay hi", ASK, "bunx"),
+    ("pnpm dlx create-vite", ASK, "pnpm dlx"),
+    ("yarn dlx create-react-app x", ASK, "yarn dlx"),
+    ("npm exec --package=cowsay -- cowsay hi", ASK, "npm exec --package"),
+    ("uvx ruff check .", ASK, "uvx"),
+    ("uv tool install ruff", ASK, "uv tool install"),
+    ("uv tool run black .", ASK, "uv tool run"),
+    ("pipx run black .", ASK, "pipx run"),
+    ("pipx install poetry", ASK, "pipx install"),
+    ("cargo install ripgrep", ASK, "cargo install"),
+    ("go install golang.org/x/tools/gopls@latest", ASK, "go install of a remote module"),
+    ("go install ./...", ALLOW, "go install of the local module"),
+    ("cargo build --release", ALLOW, "cargo build adds nothing"),
+    ("uv run pytest", ALLOW, "uv run runs the project"),
     ("ls # list\nnpm install left-pad", ASK, "a comment on an earlier line must not hide the install"),
     ('echo "$(npm install left-pad)"', ASK, "a substitution inside double quotes runs"),
     ("cat > f <<EOF\n$(npm install left-pad)\nEOF", ASK, "an unquoted heredoc runs its $( )"),
@@ -145,6 +164,8 @@ def main():
     failures = total = 0
     for label, pwsh in pyhook.runners(args.pwsh):
         tmp = tempfile.mkdtemp(prefix="guard-deps-")
+        os.makedirs(os.path.join(tmp, "node_modules", ".bin"))
+        open(os.path.join(tmp, "node_modules", ".bin", "localtool"), "w").close()
         try:
             print(f"\n=== {label}")
             for command, want, why in BASH_CASES:

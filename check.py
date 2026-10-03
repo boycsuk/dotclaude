@@ -318,7 +318,7 @@ def _():
 # --- 7. Skills never use inline interpreters (guard-destructive blocks them) --
 @check("skills avoid inline interpreters")
 def _():
-    # The same forms guard-destructive.sh blocks, so a skill that passes here
+    # The same forms guard-destructive.py blocks, so a skill that passes here
     # cannot die with exit 2 at runtime. A narrower list let `bash -c`,
     # `sh -c`, `node --eval` and `python3 -Ic` through. A quote right after
     # the flag is the common shape, so the terminator also accepts quotes.
