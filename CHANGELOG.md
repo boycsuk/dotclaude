@@ -181,6 +181,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `check.py` no longer reads a code-extension list from a hook (check 6 compares the two path-scoped rules only).
 
 ### Fixed
+- `guard-push-main` judged a push against the session's project instead of the repository being pushed: `git -C <other> push origin main` from a project with `allowPushToMain` went through for any other repository, and a bare `git -C <other> push` resolved HEAD in the wrong repo. Both `.sh` and `.ps1` now follow `-C` and `cd` to the target repo and read its own opt-out from its root. Pinned in `tests/guard-push-main-cases.py` (pushing another repo).
+- The deploy now also removes the git hooks `graphify hook install` left in `.git/hooks` (old `--serena` deploys), which fail on every commit once Graphify is uninstalled: `obsolete.json` `gitHooks` cuts only the block between graphify's own start/end markers (verified against the graphifyy 0.8.33 wheel) and deletes a hook left empty.
 - `tests/inject.py`: the `diverge-seeded-lists` regression pinned the seeded
   list verbatim, so it stopped applying the moment a key was added and reported
   a false NOT CAUGHT. It now parses the declaration and drops the last entry,

@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 
 SETTINGS_FILES = ("settings.json", "settings.local.json")
@@ -162,6 +163,55 @@ def remove_mcp(project, names):
                 print(f"  ! could not write {path} ({exc}); remove {dropped} by hand", file=sys.stderr)
 
 
+def prune_git_hooks(project, entries):
+    """Strip obsolete tool blocks from the repo's git hooks (e.g. graphify's rebuild hooks).
+
+    Only the block between the entry's start marker and its matching end
+    marker is removed; a hook left with nothing but its shebang is deleted.
+    A block without an end marker is reported and left alone: guessing where
+    someone else's script ends could cut the user's own hook code.
+    """
+    try:
+        out = subprocess.run(["git", "rev-parse", "--git-path", "hooks"], cwd=project,
+                             capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return
+    if out.returncode != 0:
+        return
+    hooks_dir = os.path.join(project, out.stdout.strip())
+    for entry in entries:
+        start, end = entry.get("start", ""), entry.get("end", "")
+        path = os.path.join(hooks_dir, entry.get("file", ""))
+        if not start or not end or not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        if start not in text:
+            continue
+        i, j = text.index(start), text.find(end, text.index(start))
+        if j == -1:
+            print(f"  ! {path} holds an obsolete block ({entry.get('reason', '')}) without its end "
+                  f"marker; remove it by hand", file=sys.stderr)
+            continue
+        line_start = text.rfind("\n", 0, i) + 1
+        line_end = text.find("\n", j)
+        rest = text[:line_start] + (text[line_end + 1:] if line_end != -1 else "")
+        meaningful = [l for l in rest.splitlines() if l.strip() and not l.startswith("#!")]
+        try:
+            if meaningful:
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write(rest)
+                print(f"  - removed obsolete block from git hook {path}", file=sys.stderr)
+            else:
+                os.remove(path)
+                print(f"  - removed obsolete git hook {path}", file=sys.stderr)
+        except OSError as exc:
+            print(f"  ! could not update {path} ({exc})", file=sys.stderr)
+
+
 def obsolete_mcp(project, names):
     try:
         servers = load(os.path.join(project, ".mcp.json")).get("mcpServers", {})
@@ -183,6 +233,7 @@ def main():
         return 0
 
     matches = active_hook_matches(manifest)
+    prune_git_hooks(project, manifest.get("gitHooks", []))
     for name in SETTINGS_FILES:
         prune_settings_file(os.path.join(project, ".claude", name), matches)
 

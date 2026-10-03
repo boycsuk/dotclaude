@@ -224,7 +224,35 @@ def case_serena_kept_while_installed(project, pwsh):
     return None
 
 
+GRAPHIFY_COMMIT = "# graphify-hook-start\n# Installed by: graphify hook install\ngraphify update . || true\n# graphify-hook-end\n"
+GRAPHIFY_CHECKOUT = "# graphify-checkout-hook-start\ngraphify update .\n# graphify-checkout-hook-end\n"
+
+
+def case_graphify_git_hooks(project, pwsh):
+    """`graphify hook install` (old init --serena) left git hooks that fail on
+    every commit once Graphify is gone. Only its marked block may go: a hook
+    with the user's own lines keeps them."""
+    subprocess.run(["git", "init", "-q", project], check=True)
+    hooks = os.path.join(project, ".git", "hooks")
+    write(os.path.join(hooks, "post-commit"), "#!/bin/sh\n" + GRAPHIFY_COMMIT)
+    write(os.path.join(hooks, "post-checkout"), "#!/bin/sh\necho mine\n" + GRAPHIFY_CHECKOUT + "echo also mine\n")
+    write(os.path.join(hooks, "pre-push"), "#!/bin/sh\n# graphify-hook-start\nno end marker here\n")
+    if run_init(project, pwsh).returncode != 0:
+        return "init exited non-zero"
+    if os.path.exists(os.path.join(hooks, "post-commit")):
+        return "a hook holding only the graphify block was not removed"
+    with open(os.path.join(hooks, "post-checkout")) as fh:
+        checkout = fh.read()
+    if "graphify" in checkout or checkout.count("mine") != 2:
+        return f"post-checkout should keep only the user's lines: {checkout!r}"
+    with open(os.path.join(hooks, "pre-push")) as fh:
+        if "no end marker here" not in fh.read():
+            return "a hook not listed in obsolete.json was touched"
+    return None
+
+
 CASES = [
+    ("graphify git hooks: block removed, user lines kept", case_graphify_git_hooks),
     ("Serena's hooks are kept while serena-hooks is installed", case_serena_kept_while_installed),
     ("a Microsoft Store python3 stub does not silence the prune", case_store_stub_python_is_skipped),
     ("sh-form obsolete hooks pruned, user hook kept", case_prunes_sh_form_keeps_user_hook),
