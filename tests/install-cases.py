@@ -279,6 +279,59 @@ def case_installed_guard_blocks(home, pwsh):
     return None
 
 
+def case_shell_guards_cover_both_tools(home, pwsh):
+    # With Git for Windows the Bash tool stays available next to PowerShell.
+    # install.ps1 used to RENAME the Bash matcher and replace every Bash rule,
+    # so Git Bash calls ran with no guard and no deny on Windows.
+    if run_install(home, pwsh) != 0:
+        return "installer exited non-zero"
+    with open(claude(home, "settings.json")) as fh:
+        installed = json.load(fh)
+    guard_groups = [g for g in installed["hooks"].get("PreToolUse", [])
+                    if any("guard-destructive" in h["command"] for h in g["hooks"])]
+    if len(guard_groups) != 1:
+        return f"expected one group wiring guard-destructive, found {len(guard_groups)}"
+    tools = set(guard_groups[0].get("matcher", "").split("|"))
+    if not {"Bash", "PowerShell"} <= tools:
+        return f"shell guards match {sorted(tools)}, not both Bash and PowerShell"
+    deny = installed["permissions"]["deny"]
+    if not any(r.startswith("Bash(rm -rf") for r in deny):
+        return "the Bash rm -rf deny rule is missing"
+    if pwsh:
+        if not any(r.startswith("PowerShell(Remove-Item") for r in deny):
+            return "the PowerShell Remove-Item deny rule is missing"
+        if "PowerShell(Remove-Item *)" in deny:
+            return "PowerShell(Remove-Item *) denies every single-file delete"
+    return None
+
+
+def case_statusline_runs_under_any_shell(home, pwsh):
+    if not pwsh:
+        return None
+    # statusLine has no `shell` key; with Git Bash installed Claude Code runs
+    # the command through bash, where `& "C:\..."` is a syntax error. An
+    # earlier install seeded exactly that, so a re-install must repair it.
+    legacy = '& "' + claude(home) + '\\hooks\\statusline.ps1"'
+    os.makedirs(claude(home), exist_ok=True)
+    with open(claude(home, "settings.json"), "w") as fh:
+        json.dump({"statusLine": {"type": "command", "command": legacy, "shell": "powershell"}}, fh)
+    if run_install(home, pwsh) != 0:
+        return "installer exited non-zero"
+    with open(claude(home, "settings.json")) as fh:
+        status = json.load(fh).get("statusLine", {})
+    if "shell" in status or status.get("command", "").startswith("&"):
+        return f"statusLine still in the bash-incompatible form: {status}"
+    custom = {"type": "command", "command": "my-own-status"}
+    with open(claude(home, "settings.json"), "w") as fh:
+        json.dump({"statusLine": custom}, fh)
+    if run_install(home, pwsh) != 0:
+        return "re-install exited non-zero"
+    with open(claude(home, "settings.json")) as fh:
+        if json.load(fh).get("statusLine") != custom:
+            return "a re-install replaced the user's own status line"
+    return None
+
+
 def case_output_style_defaults_on(home, pwsh):
     if run_install(home, pwsh) != 0:
         return "installer exited non-zero"
@@ -302,6 +355,8 @@ CASES = [
     ("output style defaults on, a user choice is kept", case_output_style_defaults_on),
     ("a .py hook is installed, manifested and runs as wired", case_python_hook_installed_and_runs),
     ("an installed guard blocks through its wired command", case_installed_guard_blocks),
+    ("shell guards and rules cover both Bash and PowerShell", case_shell_guards_cover_both_tools),
+    ("the status line runs under any shell, a broken seed is repaired", case_statusline_runs_under_any_shell),
     ("fresh install: settings, hooks, manifest", case_fresh_install),
     ("personal settings keys survive the merge", case_user_keys_survive),
     ("re-install keeps user-added files", case_rerun_keeps_user_files),

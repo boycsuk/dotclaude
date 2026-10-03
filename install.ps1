@@ -15,7 +15,7 @@
 #
 # This is the lockstep sibling of install.sh. On Windows the .ps1 hooks run
 # under PowerShell, so the central settings.json points at the .ps1 files with
-# "shell": "powershell" and mirrors the Bash permission rules to PowerShell(...).
+# "shell": "powershell", and every Bash permission rule gets a PowerShell(...) twin.
 
 $ErrorActionPreference = "Stop"
 
@@ -167,7 +167,7 @@ function New-Hook($name, $t, $isPython) {
 # global/.claude/settings.json is the single source of truth. Re-typing its
 # rules here is how the two drifted before (Windows silently lost the sudo/dd/
 # mkfs/shred/truncate denies). Everything below TRANSLATES that file:
-#   - Bash(x)          -> PowerShell(<mapped equivalent>), dropped if unmappable
+#   - Bash(x)          -> kept, plus PowerShell(<mapped equivalent>) unless unmappable
 #   - hooks .sh        -> .ps1 + "shell": "powershell"
 #   - hooks .py        -> same .py, run by the verified $PythonExe
 # Adding a rule to the JSON therefore reaches Windows with no edit here — and a
@@ -179,13 +179,15 @@ $srcSettings = Get-Content (Join-Path $ScriptDir "global\.claude\settings.json")
 # (e.g. sudo). A verb absent from this table is reported below, so a new rule in
 # the JSON can never be silently lost.
 $verbMap = @{
-    "rm -rf"          = "Remove-Item *"
-    "rm -fr"          = "Remove-Item *"
+    # Claude Code canonicalises rm/del/ri to Remove-Item, so a bare
+    # `Remove-Item *` denied every single-file delete on Windows.
+    "rm -rf"          = "Remove-Item *-Recurse*"
+    "rm -fr"          = "Remove-Item *-Recurse*"
     "git push --force" = "git push --force *"
     "git push -f"     = "git push -f *"
     "git reset --hard" = "git reset --hard *"
-    "git clean -fd"   = "git clean *"
-    "git clean -fdx"  = "git clean *"
+    "git clean -fd"   = "git clean *-f*"
+    "git clean -fdx"  = "git clean *-f*"
     "git branch -D"   = "git branch -D *"
     "sudo"            = $null
     "dd"              = "dd *"
@@ -229,10 +231,14 @@ function Convert-Rule($rule) {
 }
 
 function Convert-RuleList($rules) {
+    # The Bash rule stays next to its PowerShell translation: with Git for
+    # Windows the Bash tool remains available alongside PowerShell, and a
+    # replaced rule left every Git Bash call with no deny or ask at all.
     $out = @()
     foreach ($r in $rules) {
-        $c = Convert-Rule $r
-        if ($c -and $out -notcontains $c) { $out += $c }
+        foreach ($c in @($r, (Convert-Rule $r))) {
+            if ($c -and $out -notcontains $c) { $out += $c }
+        }
     }
     return $out
 }
@@ -286,10 +292,6 @@ foreach ($event in $srcSettings.hooks.PSObject.Properties) {
         $entry["hooks"] = $hooks
         $groups += $entry
     }
-    # The Bash matcher is spelled PowerShell on Windows.
-    foreach ($g in $groups) {
-        if ($g.Contains("matcher") -and $g["matcher"] -eq "Bash") { $g["matcher"] = "PowerShell" }
-    }
     $central.hooks[$event.Name] = $groups
 }
 
@@ -311,16 +313,15 @@ $owned  = @("permissions", "hooks", "attribution")
 $seeded = @("outputStyle", "fileCheckpointingEnabled", "statusLine")
 
 # statusLine is seeded verbatim from the source like every other seeded key,
-# but its `command` is the .sh form. Rewrite it the way the hooks tree is
-# rewritten, or Windows seeds a status line that invokes a bash script.
+# but its `command` is the .sh form. statusLine has no `shell` field: Claude
+# Code runs it through Git Bash when that is installed, where `& "C:\..."` is a
+# syntax error. The form the statusline docs give works under either shell.
+$slLegacy = $null
 if ($srcSettings.PSObject.Properties.Name -contains "statusLine" -and $srcSettings.statusLine.command) {
     $slName = [System.IO.Path]::GetFileNameWithoutExtension($srcSettings.statusLine.command)
-    $srcSettings.statusLine.command = "& `"$Target\hooks\$slName.ps1`""
-    if (-not ($srcSettings.statusLine.PSObject.Properties.Name -contains "shell")) {
-        $srcSettings.statusLine | Add-Member -NotePropertyName shell -NotePropertyValue "powershell"
-    } else {
-        $srcSettings.statusLine.shell = "powershell"
-    }
+    $slLegacy = "& `"$Target\hooks\$slName.ps1`""
+    $slPath = (Join-Path (Join-Path $Target "hooks") "$slName.ps1") -replace '\\', '/'
+    $srcSettings.statusLine.command = "powershell -NoProfile -File `"$slPath`""
 }
 
 $settingsPath = Join-Path $Target "settings.json"
@@ -349,6 +350,11 @@ if (Test-Path $settingsPath) {
 # written as an explicit "attribution": null.
 foreach ($k in $central.Keys) {
     if ($null -ne $central[$k]) { $existing[$k] = $central[$k] }
+}
+# A statusLine an earlier install seeded in the broken form is ours to repair;
+# any other value is the user's choice and stays.
+if ($slLegacy -and $existing.Contains("statusLine") -and $existing["statusLine"].command -eq $slLegacy) {
+    $existing.Remove("statusLine")
 }
 # Seed AFTER the user's keys were copied in, so an existing value wins.
 $seededNow = @()
