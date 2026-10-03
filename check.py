@@ -175,9 +175,10 @@ def _():
     # install.ps1 rebuilds `permissions` key by key rather than copying the
     # object, so a NEW scalar key in the source reaches Unix and silently
     # vanishes on Windows. defaultMode was added that way and was caught here.
+    generic_copy = re.search(r"foreach \(\$\w+ in \$srcSettings\.permissions\.PSObject\.Properties\)", ps1)
     for key in settings["permissions"]:
-        if key in ("allow", "ask", "deny"):
-            continue                      # handled by Convert-RuleList above
+        if key in ("allow", "ask", "deny") or generic_copy:
+            continue                      # rules: Convert-RuleList; scalars: the generic copy
         if key not in ps1:
             fail("install.ps1 derives from settings.json",
                  f"permissions.{key} is in settings.json but never read by "
@@ -456,6 +457,7 @@ def _():
                 "templates/project/scripts/prune-obsolete.py",
                 "templates/project/scripts/merge-permissions.py",
                 "templates/project/scripts/update-projects.py",
+                "templates/project/scripts/merge-mcp.py",
                 "templates/project/docs/README.md",
                 "templates/project/docs/backend.md",
                 "templates/project/docs/ui.md",
@@ -679,6 +681,14 @@ def _():
     settings = json.loads(read("global/.claude/settings.json"))
     live = [h["command"] for groups in settings["hooks"].values() for g in groups for h in g["hooks"]]
     live += [c.replace("/", "\\") for c in live]
+    # The exact forms install.ps1's New-Hook writes, not just a slash swap.
+    win_hooks = "C:\\Users\\u\\.claude\\hooks"
+    for c in list(live):
+        name = os.path.basename(c.replace("\\", "/").rstrip('"'))
+        if name.endswith(".py"):
+            live.append(f'& "C:\\Python\\python.exe" "{win_hooks}\\{name}"; exit $LASTEXITCODE')
+        elif name.endswith(".sh"):
+            live.append(f'& "{win_hooks}\\{name[:-3]}.ps1"; exit $LASTEXITCODE')
     for entry in manifest.get("hooks", []):
         match = entry.get("match", "")
         if not match or not entry.get("reason"):

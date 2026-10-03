@@ -297,9 +297,18 @@ def heredoc_back_into_subshell(repo):
 def add_permissions_key(repo):
     """A new scalar key under permissions must reach Windows too.
 
-    install.ps1 rebuilds `permissions` key by key instead of copying the
-    object, so a key added to the source silently applies on Unix only.
+    install.ps1 builds `permissions` from named keys plus a generic copy of the
+    rest. Without that copy a key added to the source applies on Unix only, so
+    this drops the copy and adds a key.
     """
+    ps1 = os.path.join(repo, "install.ps1")
+    with open(ps1) as fh:
+        text = fh.read()
+    loop = "foreach ($p in $srcSettings.permissions.PSObject.Properties) {"
+    if loop not in text:
+        raise SystemExit("inject: install.ps1 no longer copies the remaining permissions keys")
+    with open(ps1, "w") as fh:
+        fh.write(text.replace(loop, "foreach ($p in @()) {", 1))
     path = os.path.join(repo, "global/.claude/settings.json")
     with open(path) as fh:
         settings = json.load(fh)

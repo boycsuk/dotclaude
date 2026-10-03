@@ -78,7 +78,7 @@ if (Test-Path $hookDir) {
 # --- Central settings.json: derive the PowerShell form BEFORE copying anything --
 # Its hard failures (an `if` gate, an unmapped rule) must abort while the
 # previously installed hooks and settings still match each other.
-function New-Hook($name, $t, $isPython) {
+function New-Hook($src, $name, $isPython) {
     # No `if` parameter on purpose: hook entries carry no `if` gates (a
     # prefix-anchored pattern reopens the wrapped-form bypasses the hooks'
     # own parsers close — DESIGN.md §27b). check.py enforces the same on the
@@ -94,12 +94,16 @@ function New-Hook($name, $t, $isPython) {
     } else {
         $command = "& `"$Target\hooks\$name.ps1`"; exit `$LASTEXITCODE"
     }
-    return [ordered]@{
-        type    = "command"
-        command = $command
-        shell   = "powershell"
-        timeout = $t
+    # Every other field of the source entry is carried over as is (timeout,
+    # async, statusMessage, ...): re-typing a fixed set silently dropped any
+    # field added to settings.json later, and invented a 5s timeout.
+    $entry = [ordered]@{}
+    foreach ($p in $src.PSObject.Properties) {
+        if ($p.Name -notin @("command", "if")) { $entry[$p.Name] = $p.Value }
     }
+    $entry["command"] = $command
+    $entry["shell"] = "powershell"
+    return $entry
 }
 
 # --- Derive the Windows config FROM the Unix source, never re-typed ----------
@@ -205,6 +209,11 @@ $central = [ordered]@{
     attribution = $srcSettings.attribution
     hooks = [ordered]@{}
 }
+# Any other permissions key (a scalar added to the source later) reaches
+# Windows as is: rebuilding the object from named keys dropped new ones.
+foreach ($p in $srcSettings.permissions.PSObject.Properties) {
+    if (-not $central.permissions.Contains($p.Name)) { $central.permissions[$p.Name] = $p.Value }
+}
 
 # Translate the hooks tree: same events, same matchers, same order — only the
 # script extension, the shell, and any "if" rule change.
@@ -220,14 +229,15 @@ foreach ($event in $srcSettings.hooks.PSObject.Properties) {
                 [Console]::Error.WriteLine("       hooks' own parsers close (DESIGN.md 27b). Remove it; hooks self-gate.")
                 exit 1
             }
-            $timeout = if ($h.timeout) { $h.timeout } else { 5 }
-            $hooks += (New-Hook $name $timeout ($h.command -match '\.py"?$'))
+            $hooks += (New-Hook $h $name ($h.command -match '\.py"?$'))
         }
-        # Events without matcher support (Stop, UserPromptSubmit, ...) carry no
-        # matcher in the source; emitting "matcher": null is not the same as
-        # omitting the key, so build the entry without it.
+        # Every group key is carried over; only `hooks` is rebuilt. Events
+        # without matcher support (Stop, ...) carry no matcher in the source,
+        # and copying keys (rather than writing "matcher": $null) keeps it so.
         $entry = [ordered]@{}
-        if ($null -ne $group.matcher) { $entry["matcher"] = $group.matcher }
+        foreach ($p in $group.PSObject.Properties) {
+            if ($p.Name -ne "hooks") { $entry[$p.Name] = $p.Value }
+        }
         $entry["hooks"] = $hooks
         $groups += $entry
     }

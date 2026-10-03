@@ -25,8 +25,6 @@ import sys
 import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SH = os.path.join(REPO, "install.sh")
-PS1 = os.path.join(REPO, "install.ps1")
 
 
 def run_install(home, pwsh=None, repo=REPO):
@@ -480,6 +478,40 @@ def case_installed_template_deploys(home, pwsh):
     return None
 
 
+def case_hook_fields_and_permission_keys_carry_over(home, pwsh):
+    # install.ps1 re-typed each hook as type/command/shell/timeout and rebuilt
+    # `permissions` from five named keys: a field or key added to the source
+    # later reached Unix and silently vanished on Windows.
+    repo = tempfile.mkdtemp(prefix="install-repo-")
+    try:
+        for item in ("install.sh", "install.ps1", "global", "templates", "skills"):
+            src = os.path.join(REPO, item)
+            (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, os.path.join(repo, item))
+        settings_src = os.path.join(repo, "global/.claude/settings.json")
+        with open(settings_src) as fh:
+            settings = json.load(fh)
+        entry = settings["hooks"]["PreToolUse"][0]["hooks"][0]
+        entry["statusMessage"] = "checking"
+        entry.pop("timeout", None)
+        settings["permissions"]["additionalDirectories"] = ["/tmp/shared"]
+        with open(settings_src, "w") as fh:
+            json.dump(settings, fh, indent=2)
+        if run_install(home, pwsh, repo) != 0:
+            return "installer exited non-zero"
+    finally:
+        shutil.rmtree(repo, ignore_errors=True)
+    with open(claude(home, "settings.json")) as fh:
+        installed = json.load(fh)
+    got = installed["hooks"]["PreToolUse"][0]["hooks"][0]
+    if got.get("statusMessage") != "checking":
+        return f"a hook field added to the source was dropped: {got}"
+    if "timeout" in got:
+        return f"a timeout the source does not set was invented: {got}"
+    if installed["permissions"].get("additionalDirectories") != ["/tmp/shared"]:
+        return "a permissions key added to the source was dropped"
+    return None
+
+
 def case_output_style_defaults_on(home, pwsh):
     if run_install(home, pwsh) != 0:
         return "installer exited non-zero"
@@ -510,6 +542,7 @@ CASES = [
     ("the manifest cannot delete outside ~/.claude", case_manifest_cannot_escape_claude_dir),
     ("a broken hook aborts before anything is copied", case_broken_hook_aborts_before_copying),
     ("the installed template deploys a project", case_installed_template_deploys),
+    ("new hook fields and permission keys reach both platforms", case_hook_fields_and_permission_keys_carry_over),
     ("shell guards and rules cover both Bash and PowerShell", case_shell_guards_cover_both_tools),
     ("the status line runs under any shell, a broken seed is repaired", case_statusline_runs_under_any_shell),
     ("fresh install: settings, hooks, manifest", case_fresh_install),

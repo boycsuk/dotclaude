@@ -91,59 +91,12 @@ if ($Unknown.Count -gt 0) {
 # See tests/mcp-merge-cases.py for the cases this must satisfy.
 function Merge-McpServers {
     param([string[]]$Fragments)
-
-    $dst = ".\.mcp.json"
-    if (Test-IsLink $dst) { return }
-    try {
-        if (Test-Path $dst) {
-            $cfg = Get-Content $dst -Raw | ConvertFrom-Json
-        } else {
-            $cfg = [PSCustomObject]@{ mcpServers = [PSCustomObject]@{} }
-        }
-        if (-not $cfg.PSObject.Properties.Name.Contains("mcpServers")) {
-            $cfg | Add-Member -NotePropertyName mcpServers -NotePropertyValue ([PSCustomObject]@{})
-        }
-        # PS 5.1's ConvertFrom-Json collapses empty JSON arrays to $null: a
-        # hand-added server with "args": [] must not round-trip to "args": null
-        # (same restore the settings merge below does for permissions).
-        foreach ($srv in $cfg.mcpServers.PSObject.Properties) {
-            if ($srv.Value.PSObject.Properties['args'] -and ($null -eq $srv.Value.args)) {
-                $srv.Value | Add-Member -NotePropertyName args -NotePropertyValue @() -Force
-            }
-        }
-
-        $added = @(); $updated = @(); $skipped = @()
-        foreach ($frag in $Fragments) {
-            $spec = Get-Content $frag -Raw | ConvertFrom-Json
-            foreach ($prop in $spec.PSObject.Properties) {
-                $name = $prop.Name
-                $existing = $cfg.mcpServers.PSObject.Properties[$name]
-                # Compare serialized form: PSCustomObject has no structural equality.
-                if ($existing -and (($existing.Value | ConvertTo-Json -Depth 20 -Compress) -eq ($prop.Value | ConvertTo-Json -Depth 20 -Compress))) {
-                    $skipped += $name
-                } elseif ($existing) {
-                    $cfg.mcpServers.$name = $prop.Value
-                    $updated += $name
-                } else {
-                    $cfg.mcpServers | Add-Member -NotePropertyName $name -NotePropertyValue $prop.Value
-                    $added += $name
-                }
-            }
-        }
-
-        if ($added.Count -or $updated.Count) {
-            Write-Utf8NoBom $dst (($cfg | ConvertTo-Json -Depth 20) + "`n")
-        }
-        foreach ($pair in @(@("merged", $added), @("updated", $updated), @("skip", $skipped))) {
-            if ($pair[1].Count) {
-                [Console]::Error.WriteLine("  - $($pair[0]): $(($pair[1] | Sort-Object) -join ', ') in $dst")
-            }
-        }
-    } catch {
-        # Never fatal, matching init.sh: a broken .mcp.json must not abort the deploy.
-        [Console]::Error.WriteLine("WARN: could not compose $dst ($_); deploy continues.")
-        [Console]::Error.WriteLine("      Merge the server fragments manually from $(Join-Path $TemplateDir 'mcp')")
-    }
+    if (Test-IsLink ".\.mcp.json") { return }
+    # One implementation for both deployers (scripts/merge-mcp.py): the
+    # PowerShell version compared servers by serialized key order and
+    # rewrote the file through ConvertTo-Json, reformatting a committed one.
+    Invoke-TemplatePython -What "composing .\.mcp.json (merge the fragments from $(Join-Path $TemplateDir 'mcp') by hand)" `
+        -ScriptArgs (@((Join-Path $TemplateDir "scripts/merge-mcp.py"), (Get-Location).Path) + $Fragments)
 }
 
 # PS 5.1's Set-Content -Encoding UTF8 writes a BOM, which strict JSON parsers
@@ -403,8 +356,18 @@ if ($InstallCodebaseMemory) {
 # --- LSP plugins (opt-in, one per --lsp=<plugin>) -----------------------------
 # Lockstep sibling of the init.sh block: same catalog (lsp-plugins.json), same
 # never-fatal contract — every problem is a WARN carrying the command that fixes it.
+$catalog = $null
 if ($LspPlugins.Count -gt 0) {
-    $catalog = Get-Content -Raw (Join-Path $TemplateDir "lsp-plugins.json") | ConvertFrom-Json
+    # Guarded: under $ErrorActionPreference = "Stop" an unreadable catalog
+    # aborted the whole deploy with exit 1, read by the skill as "template
+    # missing" — against this block's never-fatal contract.
+    try {
+        $catalog = Get-Content -Raw (Join-Path $TemplateDir "lsp-plugins.json") | ConvertFrom-Json
+    } catch {
+        [Console]::Error.WriteLine("WARN: the LSP plugin catalog could not be read ($_); --lsp skipped. Re-run install.ps1.")
+    }
+}
+if ($catalog) {
     foreach ($plugin in $LspPlugins) {
         $entry = $catalog.plugins.PSObject.Properties[$plugin]
         if (-not $entry) {

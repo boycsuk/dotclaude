@@ -146,54 +146,9 @@ fi
 # (DESIGN.md §5). Never fatal: a broken .mcp.json warns and the deploy continues.
 merge_mcp_servers() {
   is_link ./.mcp.json && return 0
-  # Fragments travel as argv, not a whitespace-split env var: a $HOME with a
-  # space broke every fragment path and degraded silently to the WARN path.
-  if python3 - "$@" <<'PY'
-import json, os, sys
-
-dst = "./.mcp.json"
-fragments = sys.argv[1:]
-
-if os.path.exists(dst):
-    try:
-        with open(dst) as fh:
-            cfg = json.load(fh)
-    except (OSError, ValueError) as e:
-        print("  ! ./.mcp.json exists but is not readable JSON (%s) — merge the" % e, file=sys.stderr)
-        print("    server fragments manually from the template's mcp/ directory", file=sys.stderr)
-        sys.exit(1)
-else:
-    cfg = {}
-
-servers = cfg.setdefault("mcpServers", {})
-added, updated, skipped = [], [], []
-
-for frag_path in fragments:
-    with open(frag_path) as fh:
-        for name, spec in json.load(fh).items():
-            if servers.get(name) == spec:
-                skipped.append(name)
-            elif name in servers:
-                servers[name] = spec
-                updated.append(name)
-            else:
-                servers[name] = spec
-                added.append(name)
-
-if added or updated:
-    try:
-        with open(dst, "w") as fh:
-            json.dump(cfg, fh, indent=2)
-            fh.write("\n")
-    except OSError as e:
-        print("  ! could not write %s (%s)" % (dst, e), file=sys.stderr)
-        sys.exit(1)
-
-for label, names in (("merged", added), ("updated", updated), ("skip", skipped)):
-    if names:
-        print("  - %s: %s in %s" % (label, ", ".join(sorted(names)), dst), file=sys.stderr)
-PY
-  then
+  # One implementation for init.sh and init.ps1 (scripts/merge-mcp.py).
+  # Fragments travel as argv: a $HOME with a space broke a whitespace-split list.
+  if python3 "$TEMPLATE_DIR/scripts/merge-mcp.py" . "$@"; then
     return 0
   fi
   echo "WARN: could not compose ./.mcp.json; deploy continues. Merge the server" >&2
