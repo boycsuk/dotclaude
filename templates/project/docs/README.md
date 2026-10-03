@@ -43,6 +43,16 @@ kind:
   are NOT checked in — so `conventions.md` is the one source present in a fresh
   clone, and must be kept in sync by hand when a convention changes.
 
+When the UI is designed as a Design canvas (an Artifact made with Claude),
+`/implement-ui` also writes **`design/`**: one spec per screen
+(`design/screens/<screen>.md`: components, placement, sizes in tokens, phone
+behaviour, content and copy) and one per component
+(`design/components/<component>/README.md`: parameters, variants, states,
+events, keyboard), each with an acceptance checklist, plus an index tracking
+which items are designed, implemented and verified. It is derived from the canvas, not from the
+code: when the design changes, regenerate it; when the code deliberately
+departs from it, record the deviation there.
+
 Add more files (`cli.md`, `bot.md`, `events.md`, …) only when there is a *new
 producer or consumer of contracts* another part of the system must understand
 (e.g. a webhook feed, a CLI, a message bus). Do not create files just because

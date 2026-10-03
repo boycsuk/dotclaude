@@ -67,7 +67,7 @@ guard-dependencies and guard-commit hooks enforce them in every project.)
 - When opening a new session in an ongoing project: `/resume-context`.
 - When I correct a systematic mistake: use `/compound` so it does not happen again.
 - Before merging anything that touches I/O, auth, or deps: `/audit` (Security category, Uncommitted-changes scope).
-- UI work from a design reference (mockup, screenshot, handoff bundle): `/implement-ui` — tokens into `docs/ui.md` first, then section-by-section with visual verification.
+- UI work, with or without a design yet (Design canvas, mockup, screenshot, handoff bundle): `/implement-ui` — no design means it builds a Design canvas with parameterised components first; then tokens into `docs/ui.md`, a canvas becomes a per-screen and per-component spec in `docs/design/`, then section-by-section with visual verification.
 - Branch model: feature branches by default. The `guard-push-main` hook blocks direct pushes to main/master. If this project intentionally lives on main (solo project, prototype, scratch repo), add `"allowPushToMain": true` to `.claude/settings.local.json` (see `settings.local.json.example`). Force pushes stay blocked regardless.
 
 ## Portable docs — `docs/`

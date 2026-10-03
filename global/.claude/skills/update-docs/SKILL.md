@@ -46,6 +46,8 @@ not skip it either.
 
 List `docs/` with the **Glob tool** (`Glob: docs/*`) — portable across Unix and
 Windows, unlike `ls ... 2>/dev/null`. An empty result just means no docs yet.
+A `docs/design/` entry means the project has a design spec; list it with
+`Glob: docs/design/**/*.md` only when the diff touches UI code.
 
 Then `Read` (the tool, not `cat`) the specific `docs/*.md` file(s) the change
 touches — usually one or two. Do not bulk-read every doc: read only what you
@@ -81,6 +83,12 @@ will edit, plus any file the coverage audit below points you at.
      so neither takes precedence — reconcile by hand. Keep the mirror a concise
      summary, not a paste. This is the one doc driven by a config change rather
      than a product change.
+   - **`design/` (the design spec, when it exists)** — derived from a Design
+     canvas by `/implement-ui`, never from code. Do not rewrite it to match
+     the diff. If the diff makes a screen or component differ from its spec
+     (a parameter added or dropped, a region moved), flag it and propose an
+     `## Accepted deviations` line in that spec file; if the design itself
+     changed, point at `/implement-ui` to regenerate it.
    - **Cross-component** — a new contract producer or consumer appears
      (e.g. a new bot, CLI, mobile target, webhook feed) that warrants its own
      `docs/` file.

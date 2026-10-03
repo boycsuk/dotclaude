@@ -9,10 +9,11 @@
 > implementation detail and stays in that client's source.
 >
 > **What this file is NOT.** Not component docs (buttons, inputs, cards live
-> in source), not per-section endpoint wiring (that is backend's contract,
-> in `backend.md`), not behavior (what the user can DO lives in
-> `user-stories.md`). This file answers "what does it look like and what
-> screens exist", nothing more.
+> in source; a design made as a Design canvas gets its per-screen and
+> per-component spec in `docs/design/`, written by `/implement-ui`), not
+> per-section endpoint wiring (that is backend's contract, in `backend.md`),
+> not behavior (what the user can DO lives in `user-stories.md`). This file
+> answers "what does it look like and what screens exist", nothing more.
 >
 > **How to keep it true (no tooling required).** This is a plain Markdown
 > file — maintain it by hand in any editor. With Claude Code you can run
@@ -36,6 +37,8 @@ client sharing the tokens below. Light and dark mode supported." -->
 <!-- One bullet per top-level area the user can navigate to, with a one-line
 purpose. Just the map of screens — NOT what the user does in detail (that is
 user-stories.md) and NOT which endpoints they call (that is backend.md).
+
+When `docs/design/screens/` exists, link each section to its screen spec.
 
 Platform parity is the default: list a section once. Only annotate a platform
 when the section genuinely exists on some clients and not others, e.g.
