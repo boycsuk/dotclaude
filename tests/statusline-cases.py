@@ -79,10 +79,17 @@ def case_high_context_warns(_, pwsh):
 
 
 def case_low_pct_but_low_headroom(_, pwsh):
-    """A 1M window at 97% still has less headroom than a 200k window at 70%.
-    A fixed percentage threshold alone would stay quiet here."""
-    return check(p(model={"display_name": "Opus"}, context_window=ctx(97, 1000000)),
-                 pwsh, "1M window nearly full", must_contain=["!"])
+    """A 100k window at 65% has 35k left — below the 40k headroom floor — while
+    the 70% rule alone would stay quiet. (The old case, a 1M window at 97%, was
+    already caught by the 70% rule, so deleting the headroom clause passed.)"""
+    return check(p(model={"display_name": "Opus"}, context_window=ctx(65, 100000)),
+                 pwsh, "small window, low headroom", must_contain=["!65% ctx"])
+
+
+def case_fraction_truncates_on_both_shells(_, pwsh):
+    """69.6% is not yet 70%: the .ps1 rounded with [int] and warned alone."""
+    return check(p(model={"display_name": "Opus"}, context_window=ctx(69.6)),
+                 pwsh, "69.6% of a 200k window", must_contain=["69% ctx"], must_not_contain=["!"])
 
 
 def case_large_window_early_no_warn(_, pwsh):
@@ -131,7 +138,8 @@ def case_unexpected_types(_, pwsh):
 CASES = [
     ("model and context render", case_model_and_context),
     ("high context warns", case_high_context_warns),
-    ("large window low headroom warns", case_low_pct_but_low_headroom),
+    ("low headroom warns below 70%", case_low_pct_but_low_headroom),
+    ("a fraction truncates the same on both shells", case_fraction_truncates_on_both_shells),
     ("large window early does not warn", case_large_window_early_no_warn),
     ("null percentage prints no percentage", case_null_percentage),
     ("missing context_window degrades", case_missing_context_window),

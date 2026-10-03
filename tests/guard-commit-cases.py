@@ -228,6 +228,32 @@ def main():
             if got != ASK:
                 failures += 1
                 print(f"  FAIL subdirectory add of one twin: want ask got {got}")
+            # Committing a DIFFERENT repo than the session's: the branch and the
+            # opt-outs belong to the repo committed to. The hook once read the
+            # opt-out from the session project and ignored `cd` before commit.
+            session = make_repo()
+            try:
+                set_state(session, local={"allowPushToMain": True, "allowCommitTrailers": True})
+                set_state(repo, branch="main")
+                for command, want, why in (
+                        (f"cd {repo} && git commit -m 'feat: x'", ASK, "cd into a repo on main"),
+                        (f"git -C {repo} commit -m 'feat: x'", ASK,
+                         "the session's opt-out does not cover another repo"),
+                        (f"git -C {repo} commit -m 'feat: x' -m 'Co-Authored-By: a'", DENY,
+                         "nor does its trailer opt-out")):
+                    got = decide(session, command, pwsh)
+                    total += 1
+                    if got != want:
+                        failures += 1
+                        print(f"  FAIL want {want} got {got} | {command!r}  ({why})")
+                set_state(repo, branch="main", local={"allowPushToMain": True})
+                got = decide(session, f"git -C {repo} commit -m 'feat: x'", pwsh)
+                total += 1
+                if got != ALLOW:
+                    failures += 1
+                    print(f"  FAIL the target repo's own opt-out must apply: got {got}")
+            finally:
+                shutil.rmtree(session, ignore_errors=True)
             # Malformed payloads never crash.
             for bad in ({"tool_input": "git commit -s"}, {"tool_input": None}, {}):
                 code, out, _ = pyhook.run("guard-commit", bad, cwd=repo, pwsh=pwsh)

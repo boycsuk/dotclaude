@@ -49,7 +49,9 @@ run() {
   # code's: reporting it as a lint failure makes Claude "fix" errors that do
   # not exist — the cry-wolf failure DESIGN.md §26 warns about. Skip silently.
   [[ "$rc" -eq 124 ]] && return 0
-  ERRORS+="$desc failed:\n$out\n\n"
+  # Literal newlines, printed with %s below: %b expanded backslashes in the
+  # linter output, and a \c in a Windows path cut off the rest of the report.
+  ERRORS+="$desc failed:"$'\n'"$out"$'\n\n'
   return 1
 }
 
@@ -103,7 +105,7 @@ case "$EXT" in
 esac
 
 if [[ -n "$ERRORS" ]]; then
-  printf "Verification failed after editing %s:\n%b" "$FILE" "$ERRORS" >&2
+  printf 'Verification failed after editing %s:\n%s' "$FILE" "$ERRORS" >&2
   exit 2
 fi
 exit 0

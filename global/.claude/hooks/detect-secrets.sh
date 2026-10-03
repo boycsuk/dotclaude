@@ -18,11 +18,13 @@
 INPUT=$(cat)
 # file_path covers Edit/Write; notebook_path is NotebookEdit's spelling.
 PATH_EDITED=$(printf '%s' "$INPUT" | python3 -c "import sys, json; ti=json.load(sys.stdin).get('tool_input', {}); print(ti.get('file_path') or ti.get('notebook_path') or '')" 2>/dev/null || echo "")
+# One assignment per line: a placeholder dropped below must not take a real
+# value on the same line with it (`API_KEY=sk_live_... DEFAULT_PW=changeme`).
 NEW_CONTENT=$(printf '%s' "$INPUT" | python3 -c "
-import sys, json
+import sys, json, re
 ti = json.load(sys.stdin).get('tool_input', {})
-print(ti.get('new_string') or ti.get('content') or ti.get('new_source')
-      or '\n'.join(e.get('new_string', '') for e in ti.get('edits', [])))" 2>/dev/null || echo "")
+text = ti.get('new_string') or ti.get('content') or ti.get('new_source') or ''
+print(re.sub(r'[,;]|[ \t]+(?=[A-Za-z_][\w.-]*[ \t]*=)', '\n', text))" 2>/dev/null || echo "")
 
 # Files exempt from the PATH rule (their content is still scanned below):
 #   - placeholders: *.example, *.sample, *.template, *.dist — including the
@@ -95,8 +97,11 @@ fi
 # Unmistakable prefixes, unattached to any label (gitleaks-style): PEM blocks,
 # AWS AKIA ids, GitHub PATs, Slack and GitLab tokens. Case-SENSITIVE — the
 # prefixes are defined that way and folding would invite false positives.
+# Scanned on the UNFILTERED content: a placeholder elsewhere on the line is no
+# reason to ignore a token no placeholder ever looks like. AWS's documented
+# example key (AKIA…EXAMPLE) is the one exception.
 PREFIXES='BEGIN[A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|xox[baprs]-[A-Za-z0-9-]{10,}|glpat-[A-Za-z0-9_-]{20}'
-if printf '%s' "$SCANNABLE" | grep -qE "$PREFIXES" 2>/dev/null; then
+if printf '%s' "$NEW_CONTENT" | sed -E 's/AKIA[0-9A-Z]{9}EXAMPLE//g' | grep -qE "$PREFIXES" 2>/dev/null; then
   echo "WARNING: the edit appears to contain a literal secret. Use environment variables instead." >&2
   exit 2
 fi

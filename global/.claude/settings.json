@@ -97,11 +97,11 @@
         ]
       },
       {
-        "matcher": "Edit|Write",
+        "matcher": "Edit|Write|NotebookEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME\"/.claude/hooks/guard-central-config.sh",
+            "command": "python3 \"$HOME\"/.claude/hooks/guard-central-config.py",
             "timeout": 5
           },
           {

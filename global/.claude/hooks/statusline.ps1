@@ -25,7 +25,7 @@ if ($model) { $parts += [string]$model }
 # nothing rather than a misleading 0%.
 $ctx = $data.context_window
 if ($null -ne $ctx -and $ctx.used_percentage -is [ValueType]) {
-    $pct = [int]$ctx.used_percentage
+    $pct = [int][math]::Floor($ctx.used_percentage)
     # A 1M-context session sits at single digits for most of a long run, so the
     # threshold is on remaining headroom, not a fixed percentage.
     $size = 0

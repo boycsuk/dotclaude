@@ -26,14 +26,16 @@ printed:
 """
 
 import argparse
+import atexit
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pyhook  # noqa: E402
-import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOOKS = os.path.join(REPO, "global/.claude/hooks")
@@ -47,9 +49,10 @@ def run(runner, hook, payload, cwd, env_extra=None):
     cmd = (pyhook.ps1_hook(PWSH, script) if runner == "ps1"
            else ["bash", script])
     env = dict(os.environ, CLAUDE_PROJECT_DIR=cwd)
-    # Each case gets its own HOME so the 5-minute debounce marker of one case
-    # cannot silence the next one.
+    # An empty HOME per case: nothing in the developer's ~/.claude can leak
+    # into a verdict.
     env["HOME"] = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, env["HOME"], True)
     if env_extra:
         env.update(env_extra)
     proc = subprocess.run(cmd, input=json.dumps(payload), capture_output=True,

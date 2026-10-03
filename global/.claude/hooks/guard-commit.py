@@ -196,9 +196,12 @@ def judge(segment_args, opts, docs, cwd, payload, earlier_adds):
     base = (opts.get("-C") or [cwd])[-1]
     base = base if os.path.isabs(base) else os.path.join(cwd, base)
     message = "\n".join(messages + [read_message_file(f, docs, base) for f in files])
+    # The opt-outs belong to the repository being committed to, not to the
+    # session's project — the bug 016b17b fixed for pushes.
+    root = (git(opts, cwd, "rev-parse", "--show-toplevel") or "").strip()
 
     denials = []
-    if not hookio.local_opt_out(payload, "allowCommitTrailers"):
+    if not hookio.local_opt_out(payload, "allowCommitTrailers", root=root or None):
         attribution_trailer = any(t.split(":", 1)[0].split("=", 1)[0].strip().lower() in ATTRIBUTION_KEYS
                                   for t in trailers)
         if TRAILER_LINE.search(message) or flags & {"-s", "--signoff"} or attribution_trailer:
@@ -217,9 +220,8 @@ def judge(segment_args, opts, docs, cwd, payload, earlier_adds):
     if "--amend" in flags:
         asks.append("--amend rewrites the previous commit (prefer a new commit)")
     branch = (git(opts, cwd, "symbolic-ref", "--quiet", "--short", "HEAD") or "").strip()
-    if branch in ("main", "master") and not hookio.local_opt_out(payload, "allowPushToMain"):
+    if branch in ("main", "master") and not hookio.local_opt_out(payload, "allowPushToMain", root=root or None):
         asks.append(f"this commits directly on {branch} (work on a feature/fix branch)")
-    root = (git(opts, cwd, "rev-parse", "--show-toplevel") or "").strip()
     paths = changed_paths(opts, cwd, flags, earlier_adds) if root else set()
     if paths and os.path.exists(os.path.join(root, "CHANGELOG.md")) and "CHANGELOG.md" not in paths:
         asks.append("the repo keeps a CHANGELOG.md but this commit does not update it")
@@ -243,6 +245,11 @@ def main():
     cwd = payload.get("cwd") or hookio.project_dir(payload)
     earlier_adds, verdicts = [], []
     for seg in segments:
+        words = shellwords.unwrap(seg)
+        if words and words[0] in ("cd", "pushd"):
+            target = next((w for w in words[1:] if w != "--"), "~")
+            cwd = os.path.normpath(os.path.join(cwd, os.path.expanduser(target)))
+            continue
         inv = shellwords.git_invocation(seg)
         if not inv:
             continue

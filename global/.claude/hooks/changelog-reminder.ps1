@@ -29,25 +29,32 @@ function Invoke-Git {
     param([string[]]$GitArgs, [int]$TimeoutMs = 2000)
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = "git"
-    # -C first so the call never depends on the session's location.
-    foreach ($a in (@("-C", $root) + $GitArgs)) { [void]$psi.ArgumentList.Add($a) }
+    # -C first so the call never depends on the session's location. A quoted
+    # Arguments string, not ArgumentList: ArgumentList does not exist on .NET
+    # Framework, so under Windows PowerShell 5.1 git ran with no arguments.
+    $psi.Arguments = (@("-C", $root) + $GitArgs | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join " "
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false
     try { $p = [System.Diagnostics.Process]::Start($psi) } catch { return $null }
-    $stdout = $p.StandardOutput.ReadToEnd()
+    # Read asynchronously: a blocking ReadToEnd waits for git to exit, so the
+    # timeout below could never fire, and an unread stderr can deadlock it.
+    $outTask = $p.StandardOutput.ReadToEndAsync()
+    $null = $p.StandardError.ReadToEndAsync()
     if (-not $p.WaitForExit($TimeoutMs)) {
         try { $p.Kill() } catch { }
         return $null
     }
     if ($p.ExitCode -ne 0) { return $null }
-    return $stdout
+    return $outTask.Result
 }
 
-if ($null -eq (Invoke-Git @("rev-parse", "--git-dir"))) { exit 0 }
+$top = Invoke-Git @("rev-parse", "--show-toplevel")
+if ($null -eq $top) { exit 0 }
 
-# A repo with no CHANGELOG.md has not opted into keeping one.
-if (-not (Test-Path -LiteralPath (Join-Path $root "CHANGELOG.md") -PathType Leaf)) { exit 0 }
+# A repo with no CHANGELOG.md has not opted into keeping one. Looked up at the
+# repo root: a session in a subdirectory stayed silent.
+if (-not (Test-Path -LiteralPath (Join-Path $top.Trim() "CHANGELOG.md") -PathType Leaf)) { exit 0 }
 
 $status = Invoke-Git @("status", "--porcelain")
 if ([string]::IsNullOrWhiteSpace($status)) { exit 0 }

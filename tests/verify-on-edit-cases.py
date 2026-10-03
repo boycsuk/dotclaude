@@ -83,6 +83,33 @@ def build_fixture(kind):
         with open(os.path.join(root, "pyproject.toml"), "w") as fh:
             fh.write("[tool.ruff]\n")
         # no ruff/mypy stubs on PATH
+    elif kind == "py-ruff-fails":
+        # A Windows path in linter output: printf %b once read `\c` as "stop
+        # output here" and dropped everything after it.
+        with open(os.path.join(root, "pyproject.toml"), "w") as fh:
+            fh.write("[tool.ruff]\n")
+        write_stub(bindir, "ruff", 'printf \'%s\\n\' \'error in "C:\\code\\x.py"\' TAIL-MARKER; exit 1')
+    elif kind == "py-mypy-fails":
+        with open(os.path.join(root, "pyproject.toml"), "w") as fh:
+            fh.write("[tool.mypy]\n")
+        write_stub(bindir, "mypy", 'echo "error: Incompatible types"; exit 1')
+    elif kind == "js-typecheck-fails":
+        with open(os.path.join(root, "package.json"), "w") as fh:
+            fh.write('{"scripts": {"typecheck": "x"}}')
+        write_stub(bindir, "npm", 'echo "TS2322"; exit 1')
+    elif kind == "js-pnpm-project":
+        # The lockfile picks the runner: pnpm fails, npm would pass.
+        with open(os.path.join(root, "package.json"), "w") as fh:
+            fh.write('{"scripts": {"lint": "x"}}')
+        open(os.path.join(root, "pnpm-lock.yaml"), "w").close()
+        write_stub(bindir, "npm", "exit 0")
+        write_stub(bindir, "pnpm", 'echo "1 problem"; exit 1')
+    elif kind == "rs-clippy-fails":
+        open(os.path.join(root, "Cargo.toml"), "w").close()
+        write_stub(bindir, "cargo", 'echo "warning: unused"; exit 1')
+    elif kind == "go-vet-fails":
+        open(os.path.join(root, "go.mod"), "w").close()
+        write_stub(bindir, "go", 'echo "vet: unreachable code"; exit 1')
     elif kind == "empty":
         pass
     return root, bindir
@@ -123,6 +150,14 @@ CASES = [
     ("sibling dir sharing a prefix", "js-lint-fails", "SIBLING", QUIET,
      "root /x must not match /x-other — the .ps1 once did"),
     ("unknown extension", "empty", "notes.txt", QUIET, "no stack, no checks"),
+    ("ruff failure surfaces", "py-ruff-fails", "src/app.py", FAIL, "the Python lint branch"),
+    ("mypy failure surfaces", "py-mypy-fails", "src/app.py", FAIL, "the Python type branch"),
+    ("typecheck script failure surfaces", "js-typecheck-fails", "src/app.ts", FAIL,
+     "the typecheck script, not only lint"),
+    ("the lockfile's runner is used", "js-pnpm-project", "src/app.ts", FAIL,
+     "pnpm-lock.yaml selects pnpm; npm would have passed"),
+    ("clippy failure surfaces", "rs-clippy-fails", "src/main.rs", FAIL, "the Rust branch"),
+    ("go vet failure surfaces", "go-vet-fails", "main.go", FAIL, "the Go branch"),
 ]
 
 
@@ -143,7 +178,7 @@ def syspath():
     return _SYSPATH
 
 
-def invoke(runner, root, bindir, file_path):
+def invoke(runner, root, bindir, file_path, stderr=None):
     env = dict(os.environ,
                CLAUDE_PROJECT_DIR=root,
                PATH=bindir + os.pathsep + syspath(),
@@ -152,6 +187,8 @@ def invoke(runner, root, bindir, file_path):
     proc = subprocess.run(runner, input=json.dumps(payload),
                           capture_output=True, text=True, timeout=60,
                           cwd=root, env=env)
+    if stderr is not None:
+        stderr.append(proc.stderr)
     return FAIL if proc.returncode == 2 else QUIET
 
 
@@ -193,7 +230,18 @@ def main():
             detail = ", ".join(f"{n}={g}" for n, g in results.items())
             print(f"  FAIL want {want} got {detail} | {name}   ({why})")
 
-    print(f"\n{len(CASES)} cases checked")
+    # The whole linter report must reach Claude, backslashes and all.
+    root, bindir = build_fixture("py-ruff-fails")
+    target = os.path.join(root, "app.py")
+    open(target, "w").close()
+    for rname, runner in runners:
+        err = []
+        invoke(runner, root, bindir, target, err)
+        if "TAIL-MARKER" not in err[0]:
+            failures += 1
+            print(f"  FAIL ({rname}) linter output was cut at a backslash: {err[0][-200:]!r}")
+
+    print(f"\n{len(CASES) + 1} cases checked")
     if failures:
         print(f"{failures} FAILED")
         return 1

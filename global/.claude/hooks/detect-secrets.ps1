@@ -27,9 +27,7 @@ $pathEdited = if ($data.tool_input.file_path) { $data.tool_input.file_path } els
 $newContent = if ($data.tool_input.new_string) { $data.tool_input.new_string }
               elseif ($data.tool_input.content) { $data.tool_input.content }
               elseif ($data.tool_input.new_source) { $data.tool_input.new_source }
-              elseif ($data.tool_input.edits) {
-                  (@($data.tool_input.edits) | ForEach-Object { $_.new_string }) -join "`n"
-              } else { $null }
+              else { $null }
 
 # Normalize separators so the path checks work with both / and \.
 # PowerShell's -match is case-insensitive by default, which matches the .sh
@@ -55,9 +53,13 @@ $dropRe = '[:=]\s*["'']?(process\.env|os\.environ|getenv|ENV\[)' +
           '|[:=]\s*\$\{?[A-Z_]+\}?\s*$' +
           '|[:=]\s*["'']?[^"'' ]*(your[-_]|changeme|change[-_]me|replace|example|placeholder|dummy|xxxx)' +
           '|[:=]\s*["'']?<[^>]+>'
-$scannable = ""
+# One assignment per unit, as in the .sh: a placeholder dropped here must not
+# take a real value on the same line with it. Units are matched one at a time,
+# so `\s*` never reaches across a newline (it did, so Windows alone warned on
+# a YAML `password:` followed by an unrelated value on the next line).
+$units = @()
 if ($newContent) {
-    $scannable = ($newContent -split "`n" | Where-Object { $_ -notmatch $dropRe }) -join "`n"
+    $units = @($newContent -split '\r?\n|[,;]|[ \t]+(?=[A-Za-z_][\w.-]*[ \t]*=)' | Where-Object { $_ -notmatch $dropRe })
 }
 
 # Labelled shape: value chars cover base64/JWT/hex tokens (+ / . -) as well as
@@ -65,7 +67,8 @@ if ($newContent) {
 # Compound labels (SECRET_KEY, AWS_SECRET_ACCESS_KEY, ENCRYPTION_KEY) are
 # listed explicitly — a bare `\w*key` would false-positive.
 $labels = 'api[_-]?key|secret[_-]?access[_-]?key|secret[_-]?key|access[_-]?key|encryption[_-]?key|signing[_-]?key|secret|token|password|passwd|bearer|private[_-]?key'
-if ($scannable -and $scannable -match ('(?i)["'']?(' + $labels + ')["'']?\s*[:=]\s*["'']?[A-Za-z0-9_/+.-]{20,}["'']?')) {
+$labelled = '(?i)["'']?(' + $labels + ')["'']?\s*[:=]\s*["'']?[A-Za-z0-9_/+.-]{20,}["'']?'
+if (@($units | Where-Object { $_ -match $labelled }).Count -gt 0) {
     [Console]::Error.WriteLine("WARNING: the edit appears to contain a literal secret. Use environment variables instead.")
     exit 2
 }
@@ -73,8 +76,9 @@ if ($scannable -and $scannable -match ('(?i)["'']?(' + $labels + ')["'']?\s*[:=]
 # Unmistakable prefixes, unattached to any label (gitleaks-style): PEM blocks,
 # AWS AKIA ids, GitHub PATs, Slack and GitLab tokens. Case-SENSITIVE (-cmatch)
 # — the prefixes are defined that way and folding would invite false positives.
+# Scanned on the UNFILTERED content, minus AWS's documented example key.
 $prefixes = 'BEGIN[A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|xox[baprs]-[A-Za-z0-9-]{10,}|glpat-[A-Za-z0-9_-]{20}'
-if ($scannable -and $scannable -cmatch $prefixes) {
+if ($newContent -and (($newContent -creplace 'AKIA[0-9A-Z]{9}EXAMPLE', '') -cmatch $prefixes)) {
     [Console]::Error.WriteLine("WARNING: the edit appears to contain a literal secret. Use environment variables instead.")
     exit 2
 }

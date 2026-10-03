@@ -48,11 +48,12 @@ ROOT="${CWD:-$(pwd)}"
 [ -d "$ROOT" ] || exit 0
 cd "$ROOT" 2>/dev/null || exit 0
 
-git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+TOP=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 
 # A repo with no CHANGELOG.md has not opted into keeping one. Saying so every
-# turn would be the cry-wolf failure DESIGN.md §26 warns about.
-[ -f CHANGELOG.md ] || exit 0
+# turn would be the cry-wolf failure DESIGN.md §26 warns about. Looked up at
+# the repo root: a session in a subdirectory stayed silent.
+[ -f "$TOP/CHANGELOG.md" ] || exit 0
 
 # 2s bound: an unbounded git on a huge or locked repo would otherwise sit in the
 # turn-end path. Same reasoning as guard-push-main's branch lookup.

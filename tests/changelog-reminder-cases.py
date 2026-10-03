@@ -55,9 +55,9 @@ def make_repo(tmp, files, changelog=True, commit_first=True):
     return tmp
 
 
-def run_hook(repo, pwsh=None, stop_hook_active=False):
+def run_hook(repo, pwsh=None, stop_hook_active=False, session_cwd=None):
     payload = json.dumps({
-        "cwd": repo,
+        "cwd": session_cwd or repo,
         "hook_event_name": "Stop",
         "stop_hook_active": stop_hook_active,
         "session_id": "test",
@@ -112,6 +112,14 @@ def case_code_without_changelog(tmp, pwsh):
     repo = make_repo(tmp, {"app.py": "x = 1\n"})
     return expect_message(repo, pwsh, "code changed, CHANGELOG untouched",
                           must_mention="app.py")
+
+
+def case_session_in_subdirectory(tmp, pwsh):
+    # The session's cwd is a subdirectory while the process starts at the
+    # root: the CHANGELOG lookup used the cwd and stayed silent.
+    repo = make_repo(tmp, {"src/app.py": "x = 1\n"})
+    return expect_message(repo, pwsh, "session in src/, code changed",
+                          must_mention="src", session_cwd=os.path.join(repo, "src"))
 
 
 def case_changelog_updated(tmp, pwsh):
@@ -190,6 +198,7 @@ CASES = [
     ("untracked code file warns", case_untracked_code),
     ("lockfile-only change stays silent", case_lockfile_only),
     ("payload without cwd exits cleanly", case_missing_cwd),
+    ("a session in a subdirectory still warns", case_session_in_subdirectory),
     ("garbage stdin exits cleanly", case_garbage_input),
 ]
 

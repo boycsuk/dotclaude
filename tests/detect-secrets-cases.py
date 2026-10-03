@@ -116,11 +116,21 @@ CASES = [
     ("/p/src/gh.py", f'gh = "{GHP}"\n', WARN,
      "GitHub PAT assigned to a variable not named token"),
 
-    # --- MultiEdit payload: edits[].new_string must be scanned too ----------
-    ("/p/src/main.py", {"edits": [{"new_string": f'api_key = "{KEY}"\n'}]}, WARN,
-     "MultiEdit carries content in edits[], not new_string/content"),
-    ("/p/src/main.py", {"edits": [{"new_string": "def f():\n    return 1\n"}]}, QUIET,
-     "benign MultiEdit stays quiet"),
+    # --- Edit's own field: new_string ---------------------------------------
+    ("/p/src/main.py", {"old_string": "x", "new_string": f'password = "{KEY}"\n'}, WARN,
+     "Edit sends new_string, never content"),
+
+    # --- a placeholder elsewhere on the line grants no immunity (2026-10-03) -
+    ("/p/config.json", f'{{"api_key": "{KEY}", "docs": "https://example.com"}}\n', WARN,
+     "the JSON line also holds an example URL"),
+    ("/p/run.sh", f"API_KEY={KEY} DEFAULT_PW=changeme\n", WARN,
+     "two assignments, the second a placeholder"),
+    ("/p/aws.py", f'AWS = "{AKIA}"  # see: replace_me\n', WARN,
+     "a prefixed token next to a placeholder word"),
+    ("/p/aws.py", 'key = "AKIA' + 'IOSFODNN7EXAMPLE"\n', QUIET,
+     "AWS's documented example key"),
+    ("/p/config.yml", f"password:\n  {KEY}\n", QUIET,
+     "a value on the next line is not this label's — the .ps1 once read across lines"),
 
     # --- the env-reference drop must apply to the VALUE position only -------
     ("/p/src/main.py", f'api_key = "{KEY}"  # was process.env before\n', WARN,
@@ -144,8 +154,8 @@ CASES = [
 
 
 def invoke(runner, file_path, content):
-    # A dict content is a raw tool_input fragment (e.g. MultiEdit's edits[],
-    # or NotebookEdit's notebook_path+new_source — that one deliberately gets
+    # A dict content is a raw tool_input fragment (Edit's old/new_string, or
+    # NotebookEdit's notebook_path+new_source — that one deliberately gets
     # NO file_path so the fallback is what is being tested); a string is the
     # plain Write/Edit `content` field.
     if isinstance(content, dict):
