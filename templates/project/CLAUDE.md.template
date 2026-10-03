@@ -39,7 +39,7 @@
 ## HOW — Conventions
 Detailed conventions live in `docs/conventions.md`, the repo-versioned copy present in every clone. Developers using Claude Code also load them from their personal `~/.claude/rules/` — not checked into this repo, so reconcile by hand if the two diverge (those with a `paths:` field load only for matching files; the rest load every session):
 - Code quality → `~/.claude/rules/code-quality.md` (loads for source files via `paths:`)
-- Security → `~/.claude/rules/security.md`
+- Security → `~/.claude/rules/security.md` (loads for source files via `paths:`)
 - Workflow → `~/.claude/rules/workflow.md`
 - AI collaboration → `~/.claude/rules/ai-collaboration.md`
 
@@ -54,11 +54,10 @@ Detailed conventions live in `docs/conventions.md`, the repo-versioned copy pres
 ## Don't
 <!-- Project-specific anti-patterns with explicit reason.
 Starter examples (review and adjust for this project):
-- DO NOT add dependencies without explicit confirmation — every new dep is audited.
 - DO NOT use `any` / `unwrap()` / `!.` in production code — they break the error flow.
 - DO NOT mix refactor with feature in the same commit — it complicates rollback.
-- DO NOT use `git commit --amend` without explicit user request — always create a new commit.
-- DO NOT auto-sign commits with `Co-Authored-By` unless explicitly requested.
+(New dependencies, `--amend` and commit trailers need no entry here: the central
+guard-dependencies and guard-commit hooks enforce them in every project.)
 -->
 
 ## Workflow

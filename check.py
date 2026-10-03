@@ -144,7 +144,14 @@ def _():
     rules = (settings["permissions"]["allow"] + settings["permissions"]["ask"]
              + settings["permissions"]["deny"])
     for rule in rules:
-        m = re.match(r"^Bash\((.*?):?\*?\)$", rule)
+        # Claude Code reads a `*` placed before the `:*` prefix suffix
+        # literally, so `Bash(mkfs.*:*)` matched only commands containing a
+        # literal `mkfs.*` — mkfs.ext4 ran unblocked (DESIGN.md §34).
+        if re.search(r"\*.*:\*\)$", rule):
+            fail("install.ps1 derives from settings.json",
+                 f"{rule} mixes a `*` wildcard with the `:*` prefix suffix — Claude Code "
+                 f"matches that `*` literally; write it as a pure wildcard rule")
+        m = re.match(r"^Bash\((.*?)(?::\*)?\)$", rule)
         if not m or rule == "Bash":
             continue
         verb = m.group(1)
@@ -232,7 +239,9 @@ def _():
                          ("guard-destructive", "tests/guard-destructive-cases.py"),
                          ("detect-secrets", "tests/detect-secrets-cases.py"),
                          ("guard-central-config", "tests/guard-central-config-cases.py"),
-                         ("verify-on-edit", "tests/verify-on-edit-cases.py")):
+                         ("verify-on-edit", "tests/verify-on-edit-cases.py"),
+                         ("guard-commit", "tests/guard-commit-cases.py"),
+                         ("guard-dependencies", "tests/guard-dependencies-cases.py")):
         if not os.path.exists(os.path.join(REPO, matrix)):
             fail("safety hooks have case matrices",
                  f"{hook} has no case matrix at {matrix}")
@@ -348,6 +357,12 @@ def _():
                      f"{name}.{ext} does not emit additionalContext — an advisory "
                      f"written to stderr with exit 0 never reaches the model")
 
+    wired = {os.path.basename(h["command"].rstrip('"'))
+             for groups in settings.get("hooks", {}).values() for g in groups for h in g.get("hooks", [])}
+    for name in py_hooks():
+        if f"{name}.py" not in wired:
+            fail("hook wiring", f"{name}.py ships but no event in settings.json runs it")
+
     # Python hooks declare their kind instead of being listed here by hand, so
     # a new hook cannot dodge this check by never being added to a tuple.
     for name in py_hooks():
@@ -362,6 +377,9 @@ def _():
             fail("hook wiring",
                  f"{name}.py is advisory but never calls hookio.context() — its "
                  f"text would not reach the model")
+        if kind == "guard" and "hookio.deny(" not in body and "hookio.ask(" not in body:
+            fail("hook wiring",
+                 f"{name}.py is a guard but never calls hookio.deny() or hookio.ask()")
         if kind == "rewrite" and "hookio.update_input(" not in body:
             fail("hook wiring",
                  f"{name}.py is a rewrite hook but never calls hookio.update_input()")
@@ -452,6 +470,12 @@ def _():
     # a live hook from every project on its next deploy.
     manifest = json.loads(read("templates/project/obsolete.json"))
     shipped_hooks = [f"hooks/{n}" for n in os.listdir(os.path.join(REPO, "global/.claude/hooks"))]
+    # Every command the central settings wire, in the POSIX form and in the
+    # PowerShell forms install.ps1 writes — a match hitting any of them (say
+    # "claude", "python3 " or "$HOME") would prune live hooks everywhere.
+    settings = json.loads(read("global/.claude/settings.json"))
+    live = [h["command"] for groups in settings["hooks"].values() for g in groups for h in g["hooks"]]
+    live += [c.replace("/", "\\") for c in live]
     for entry in manifest.get("hooks", []):
         match = entry.get("match", "")
         if not match or not entry.get("reason"):
@@ -462,11 +486,38 @@ def _():
                 fail("obsolete manifest",
                      f"match {match!r} hits {hook}, which dotclaude still ships — "
                      f"every project would lose it on the next deploy")
+        for command in live:
+            if match in command:
+                fail("obsolete manifest",
+                     f"match {match!r} also matches the live central hook command {command!r}")
     for entry in manifest.get("mcpServers", []):
         name = entry.get("name", "")
         if os.path.exists(os.path.join(REPO, "templates/project/mcp", f"{name}.json")):
             fail("obsolete manifest",
                  f"MCP server {name!r} is listed as obsolete but mcp/{name}.json still ships")
+
+
+# --- 12b. Every opt-out a hook honours is documented ---------------------------
+@check("opt-outs documented")
+def _():
+    # An opt-out nobody can discover is a guard nobody can relax on purpose,
+    # so users disable the whole hook instead.
+    example = read("templates/project/.claude/settings.local.json.example")
+    keys = set()
+    for name in py_hooks():
+        body = read(f"global/.claude/hooks/{name}.py")
+        found = re.findall(r'local_opt_out\(\w+, "(\w+)"\)', body)
+        # A call this pattern cannot read (single quotes, a constant) would
+        # otherwise drop out of the check silently.
+        if body.count("local_opt_out(") != len(found):
+            fail("opt-outs documented",
+                 f"{name}.py calls local_opt_out() in a form this check cannot read — "
+                 f"pass the key as a double-quoted literal")
+        keys |= set(found)
+    for key in sorted(keys):
+        if f'"{key}"' not in example:
+            fail("opt-outs documented",
+                 f"a hook honours {key!r} but settings.local.json.example never explains it")
 
 
 # --- 13. The LSP plugin catalog is complete and well-formed -------------------

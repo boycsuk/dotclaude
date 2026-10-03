@@ -30,18 +30,23 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
 }
 # Resolve an interpreter that actually RUNS, and wire the .py hooks to its full
 # path. Get-Command alone is not enough: the Microsoft Store "python3" alias
-# exists on a clean Windows install and only opens the Store.
+# exists on a clean Windows install and only opens the Store. Every PATH match
+# is tried, and the py launcher last (the python.org installer's default when
+# python.exe is not on PATH). The path is baked into the hook commands, so after
+# moving or upgrading Python, re-run this installer.
 $PythonExe = $null
-foreach ($candidate in @("python3", "python")) {
-    $cmd = Get-Command $candidate -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $cmd) { continue }
-    try {
-        & $cmd.Source --version *> $null
-        if ($LASTEXITCODE -eq 0) { $PythonExe = $cmd.Source; break }
-    } catch { }
+$PythonArgs = ""
+foreach ($candidate in @(@("python3", ""), @("python", ""), @("py", "-3"))) {
+    foreach ($cmd in @(Get-Command $candidate[0] -CommandType Application -All -ErrorAction SilentlyContinue)) {
+        try {
+            if ($candidate[1]) { & $cmd.Source $candidate[1] --version *> $null } else { & $cmd.Source --version *> $null }
+            if ($LASTEXITCODE -eq 0) { $PythonExe = $cmd.Source; $PythonArgs = $candidate[1]; break }
+        } catch { }
+    }
+    if ($PythonExe) { break }
 }
 if (-not $PythonExe) {
-    [Console]::Error.WriteLine("ERROR: no working Python found (tried python3, python) — the .py hooks run on it. Install Python and re-run.")
+    [Console]::Error.WriteLine("ERROR: no working Python found (tried python3, python, py -3) — the .py hooks run on it. Install Python and re-run.")
     exit 1
 }
 
@@ -117,7 +122,8 @@ function New-Hook($name, $t, $isPython) {
     # source JSON; the guard below keeps Windows from reintroducing one.
     if ($isPython) {
         $script = Join-Path (Join-Path $Target "hooks") "$name.py"
-        $command = "& `"$PythonExe`" `"$script`""
+        $launcherArgs = if ($PythonArgs) { " $PythonArgs" } else { "" }
+        $command = "& `"$PythonExe`"$launcherArgs `"$script`""
     } else {
         $command = "& `"$Target\hooks\$name.ps1`""
     }
@@ -162,7 +168,7 @@ $verbMap = @{
     "eval"            = "Invoke-Expression *"
     "git push"        = "git push *"
     "git rebase"      = "git rebase *"
-    "git commit *--amend" = "git commit *--amend*"
+    "git commit *--amend*" = "git commit *--amend*"
     "git filter-branch"  = "git filter-branch *"
     "npm install"     = "npm install *"
     "pnpm install"    = "pnpm install *"
@@ -179,12 +185,12 @@ $unmapped = @()
 function Convert-Rule($rule) {
     # Non-Bash rules (Read(...), bare tool names) pass through untouched.
     if ($rule -eq "Bash") { return "PowerShell" }
-    # Non-greedy with the suffix absorbed into the pattern — byte-for-byte the
-    # regex check.py uses. The greedy form plus two -replace calls disagreed on
-    # `Bash(mkfs.*:*)`: check.py derived `mkfs.*` (mapped) while this side
-    # derived `mkfs.` (unmapped), so the deny silently vanished on Windows
-    # while check.py reported a clean pass.
-    if ($rule -notmatch '^Bash\((.*?):?\*?\)$') { return $rule }
+    # Byte-for-byte the regex check.py uses, and it strips ONLY a literal `:*`
+    # suffix. A pattern that also ate a lone trailing `*` turned the wildcard
+    # rule `Bash(mkfs.*)` into the verb `mkfs.` (unmapped), and the older
+    # `Bash(mkfs.*:*)` spelling it replaced matched nothing at all on Unix:
+    # Claude Code reads `*` before `:*` literally (DESIGN.md §34).
+    if ($rule -notmatch '^Bash\((.*?)(?::\*)?\)$') { return $rule }
     $verb = $Matches[1]
     if ($verbMap.ContainsKey($verb)) {
         if ($null -eq $verbMap[$verb]) { return $null }   # deliberately dropped
@@ -279,6 +285,9 @@ if (Test-Path $settingsPath) {
     }
 }
 foreach ($k in $central.Keys) { $existing[$k] = $central[$k] }
+# Lockstep with install.sh: default the output style on, never override a
+# style the user chose (DESIGN.md §36).
+if (-not $existing.Contains("outputStyle")) { $existing["outputStyle"] = "dotclaude" }
 # BOM-less on purpose: PS 5.1's Set-Content -Encoding UTF8 writes a BOM, which
 # strict JSON parsers reject — settings.json is read by more than PowerShell.
 [System.IO.File]::WriteAllText($settingsPath, ($existing | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))

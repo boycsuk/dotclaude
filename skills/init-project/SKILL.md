@@ -285,6 +285,6 @@ Tell the user literally:
 3. **Commit the per-project files** (`.claude/settings*.json`, `CLAUDE.md`, `docs/`) so the project carries its own context.
 4. **Use `/compound`** when I make a systematic mistake — it codifies the fix (central artifacts update every project via `git pull && ./install.sh`).
 5. **Use `/resume-context`** at the start of each new session on this project.
-6. **(Optional) Enable the `dotclaude` output style** via `/config` → Output style → `dotclaude` to apply the tone/language conventions at the system-prompt level. Per-machine choice; the same conventions already apply as an always-on rule without it.
+6. **The `dotclaude` output style is on by default** (`install.sh` sets it unless another style was chosen). To switch it per machine: `/config` → Output style.
 
 `/init-project` only deploys the per-project base; the reusable core is central. Add project-specific skills, agents, rules over time in the project's own `.claude/` (they ADD to the central ones). See `~/.claude/templates/project/README.md`.

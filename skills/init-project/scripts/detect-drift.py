@@ -16,6 +16,7 @@ user" rather than "silently assume fine".
 
 import json
 import os
+import shutil
 import sys
 
 
@@ -39,7 +40,8 @@ def check_obsolete():
     manifest = load_json(os.path.join(template, "obsolete.json"))
     if not isinstance(manifest, dict):
         return "UNKNOWN", "UNKNOWN", "UNKNOWN"
-    matches = [h.get("match", "") for h in manifest.get("hooks", []) if h.get("match")]
+    matches = [h["match"] for h in manifest.get("hooks", [])
+               if h.get("match") and not (h.get("unless_on_path") and shutil.which(h["unless_on_path"]))]
     hooks = 0
     for name in ("settings.json", "settings.local.json"):
         settings = load_json(os.path.join(".claude", name)) or {}

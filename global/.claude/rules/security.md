@@ -53,7 +53,7 @@ Use ecosystem tools to detect known vulnerabilities:
 - `govulncheck` (Go)
 
 ### Minimize dependencies
-Every dependency is attack surface. Do not add packages for trivial things that can be solved with a few lines of code.
+Every dependency is attack surface. Do not add packages for trivial things that can be solved with a few lines of code. The `guard-dependencies` hook asks the user before any command or manifest edit that adds one.
 
 ### Pin versions
 Use lockfiles and exact versions to avoid unexpected updates that introduce vulnerabilities or break the build.

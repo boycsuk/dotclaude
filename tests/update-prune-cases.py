@@ -60,8 +60,15 @@ def read_json(path):
         return json.load(fh)
 
 
+def clean_path():
+    """PATH without any serena-hooks binary, so 'is Serena still installed?'
+    depends on the case, not on the machine running the matrix."""
+    return os.pathsep.join(d for d in os.environ["PATH"].split(os.pathsep)
+                           if not os.path.exists(os.path.join(d, "serena-hooks")))
+
+
 def run_init(project, pwsh):
-    env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR)
+    env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=clean_path())
     cmd = [pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]
     return subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True)
 
@@ -73,15 +80,18 @@ def all_commands(settings):
 
 def case_prunes_sh_form_keeps_user_hook(project, pwsh):
     path = os.path.join(project, ".claude/settings.json")
-    write(path, {"permissions": {"allow": ["mcp__x__*"]}, "hooks": LEGACY_SH})
+    write(path, {"_comment": "stub — keep", "permissions": {"allow": ["mcp__x__*"]}, "hooks": LEGACY_SH})
     if run_init(project, pwsh).returncode != 0:
         return "init exited non-zero"
+    with open(path, encoding="utf-8") as fh:
+        if "stub — keep" not in fh.read():
+            return "non-ASCII text was escaped or lost in the rewrite"
     data = read_json(path)
     if all_commands(data) != [USER_HOOK["command"]]:
         return f"expected only the user hook to survive, got {all_commands(data)}"
     if set(data["hooks"]) != {"PreToolUse"}:
         return f"emptied events were not dropped: {sorted(data['hooks'])}"
-    if data.get("permissions") != {"allow": ["mcp__x__*"]}:
+    if data.get("permissions") != {"allow": ["mcp__x__*"]} or data.get("_comment") != "stub — keep":
         return "unrelated keys were changed"
     return None
 
@@ -163,14 +173,60 @@ def case_servers_and_files_only_reported(project, pwsh):
         return f"init removed MCP servers on its own: {servers}"
     if not os.path.isdir(os.path.join(project, "graphify-out")):
         return "init deleted a user directory"
-    out = subprocess.run([sys.executable, PRUNE, MANIFEST, project],
-                         capture_output=True, text=True).stdout
+    out = subprocess.run([sys.executable, PRUNE, MANIFEST, project], capture_output=True,
+                         text=True, env=dict(os.environ, PATH=clean_path())).stdout
     if "OBSOLETE_MCP=serena,graphify" not in out or "OBSOLETE_FILES=graphify-out" not in out:
         return f"report lines missing or wrong: {out!r}"
     return None
 
 
+def case_store_stub_python_is_skipped(project, pwsh):
+    """Windows ships a "python3" alias that only opens the Microsoft Store and
+    exits non-zero. init.ps1 took the first PATH match, ran the stub, and the
+    prune silently did nothing. Only init.ps1 resolves interpreters this way."""
+    if not pwsh:
+        return None
+    stub_dir = os.path.join(project, "stub-bin")
+    os.makedirs(stub_dir)
+    stub = os.path.join(stub_dir, "python3")
+    write(stub, "#!/bin/sh\necho 'Python was not found; run without arguments to install from the Microsoft Store'\nexit 9\n")
+    os.chmod(stub, 0o755)
+    path = os.path.join(project, ".claude/settings.json")
+    write(path, {"hooks": LEGACY_SH})
+    env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=stub_dir + os.pathsep + clean_path())
+    proc = subprocess.run([pwsh, "-NoProfile", "-File", PS1], cwd=project, env=env,
+                          capture_output=True, text=True)
+    if proc.returncode != 0:
+        return f"init exited {proc.returncode}"
+    if all_commands(read_json(path)) != [USER_HOOK["command"]]:
+        return "the Store stub was used: obsolete hooks were not pruned"
+    return None
+
+
+def case_serena_kept_while_installed(project, pwsh):
+    """A user who kept Serena installed keeps its working hooks; only the
+    dotclaude scripts that no longer exist are pruned."""
+    stub_dir = os.path.join(project, "stub-bin")
+    os.makedirs(stub_dir)
+    write(os.path.join(stub_dir, "serena-hooks"), "#!/bin/sh\nexit 0\n")
+    os.chmod(os.path.join(stub_dir, "serena-hooks"), 0o755)
+    path = os.path.join(project, ".claude/settings.json")
+    write(path, {"hooks": LEGACY_SH})
+    env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=stub_dir + os.pathsep + clean_path())
+    cmd = [pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]
+    if subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True).returncode != 0:
+        return "init exited non-zero"
+    commands = all_commands(read_json(path))
+    if any("prefer-" in c for c in commands):
+        return f"dotclaude's dead hooks survived: {commands}"
+    if sum("serena-hooks" in c for c in commands) != 2:
+        return f"Serena's own hooks were pruned although serena-hooks is installed: {commands}"
+    return None
+
+
 CASES = [
+    ("Serena's hooks are kept while serena-hooks is installed", case_serena_kept_while_installed),
+    ("a Microsoft Store python3 stub does not silence the prune", case_store_stub_python_is_skipped),
     ("sh-form obsolete hooks pruned, user hook kept", case_prunes_sh_form_keeps_user_hook),
     ("PowerShell-form obsolete hooks pruned", case_prunes_powershell_form),
     ("settings.local.json pruned, opt-outs kept", case_prunes_settings_local),

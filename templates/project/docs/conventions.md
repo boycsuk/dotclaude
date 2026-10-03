@@ -97,8 +97,8 @@
   locks.
 - **Don't trust the client.** All security validation happens server-side;
   frontend checks are UX only.
-- **Pin and audit dependencies.** Lockfiles + exact versions; run the
-  ecosystem audit (`npm audit`, `pip-audit`, `cargo audit`, `govulncheck`).
+- **Minimize, pin and audit dependencies.** Confirm every new dependency with
+  the maintainer; lockfiles + exact versions; run the ecosystem audit (`npm audit`, `pip-audit`, `cargo audit`, `govulncheck`).
 - **Uploaded files:** validate by magic bytes, not extension; no execute bit on
   upload dirs.
 
@@ -110,7 +110,8 @@
   discipline by hand.)
 - **Atomic commits:** one logical change each; the message covers what and why.
   Never `--amend` without explicit confirmation. **Never add a
-  `Co-Authored-By` / `Signed-off-by` trailer** unless explicitly requested.
+  `Co-Authored-By` / `Signed-off-by` trailer** unless the project requires
+  one (e.g. DCO sign-off). Commit messages in English, no emojis.
 - **Work in small chunks** — one function/bug/feature at a time.
 - **A task is done** only when it compiles, passes tests (if any), and the
   change is recorded in `CHANGELOG.md` (Keep a Changelog 1.1.0 + SemVer).

@@ -127,7 +127,21 @@ def check_context_local_disable_wins(tmp, pwsh):
     return None if out is None else f"a plugin disabled in settings.local.json was still announced: {out}"
 
 
+def check_graph_added_with_claude_mcp_add(tmp, pwsh):
+    """A server added with `claude mcp add` (local scope) lives in ~/.claude.json, not .mcp.json."""
+    proj = project(tmp)
+    state = os.path.join(os.environ["HOME"], ".claude.json")
+    with open(state, "w") as fh:
+        json.dump({"projects": {proj: {"mcpServers": {"codebase-memory-mcp": {"command": "x"}}}}}, fh)
+    try:
+        code, out, _ = pyhook.run("code-intel-context", {"hook_event_name": "SessionStart"}, cwd=proj, pwsh=pwsh)
+    finally:
+        os.remove(state)
+    return None if "trace_path" in context(out) else f"local-scope server not detected: {out}"
+
+
 CASES = [
+    ("graph server added with claude mcp add is detected", check_graph_added_with_claude_mcp_add),
     ("Explore prompt gains graph guidance, other keys intact", check_rewrite_with_graph),
     ("LSP-only project: LSP guidance, no graph tools", check_rewrite_lsp_only),
     ("no tools: silent", check_silent_without_tools),

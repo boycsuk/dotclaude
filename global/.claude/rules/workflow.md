@@ -13,8 +13,7 @@ One branch per feature/fix (`feature/<name>`, `fix/<name>`); merge to `main` onl
 ## Atomic, descriptive commits
 - One logical change per commit.
 - Message covers both what and why.
-- Never use `--amend` without explicit user confirmation — create a new commit instead.
-- No AI signature trailer: Claude's `Co-Authored-By` byline is disabled deterministically via `attribution` in the central `~/.claude/settings.json` (installed by dotclaude). Do not add `Co-Authored-By` or `Signed-off-by` by hand either, unless explicitly requested.
+- Prefer a new commit over `--amend`. English, plain-text messages; no attribution trailers. The `guard-commit` hook enforces this (denies trailers, emoji and Spanish messages; asks before `--amend`, commits on main and commits without the CHANGELOG entry), and `attribution` in the central settings disables Claude's own byline. A project that requires `Signed-off-by` opts out with `"allowCommitTrailers": true` in `.claude/settings.local.json`.
 
 ## Work in small chunks
 One function, one bug, one feature at a time. Avoid large monolithic requests.

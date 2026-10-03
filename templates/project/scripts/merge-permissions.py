@@ -26,13 +26,14 @@ def main():
     project = sys.argv[2] if len(sys.argv) == 3 else "."
     path = os.path.join(project, ".claude", "settings.json")
     try:
-        with open(sys.argv[1], encoding="utf-8") as fh:
+        with open(sys.argv[1], encoding="utf-8-sig") as fh:
             wanted = json.load(fh)
     except (OSError, ValueError) as exc:
         print(f"  ! permission template unreadable ({exc}); nothing merged", file=sys.stderr)
         return 0
     try:
-        with open(path, encoding="utf-8") as fh:
+        # utf-8-sig: settings saved by Notepad or PowerShell 5.1 start with a BOM.
+        with open(path, encoding="utf-8-sig") as fh:
             settings = json.load(fh)
     except FileNotFoundError:
         settings = {}
@@ -41,10 +42,22 @@ def main():
               f"{sorted(r for k in LISTS for r in wanted.get(k, []))}", file=sys.stderr)
         return 0
 
+    rules_wanted = sorted(r for k in LISTS for r in wanted.get(k, []))
+    if not isinstance(settings, dict) or not isinstance(settings.get("permissions", {}), dict):
+        print(f"  ! {path} has an unexpected shape; add these permissions by hand: {rules_wanted}",
+              file=sys.stderr)
+        return 0
     permissions = settings.setdefault("permissions", {})
     added = []
     for key in LISTS:
-        current = permissions.setdefault(key, []) if wanted.get(key) else permissions.get(key)
+        if not wanted.get(key):
+            continue
+        current = permissions.get(key)
+        if current is None:
+            current = permissions[key] = []
+        if not isinstance(current, list):
+            print(f"  ! {path} permissions.{key} is not a list; add by hand: {wanted[key]}", file=sys.stderr)
+            continue
         for rule in wanted.get(key, []):
             if rule not in current:
                 current.append(rule)
@@ -55,7 +68,7 @@ def main():
     os.makedirs(os.path.dirname(path), exist_ok=True)
     try:
         with open(path, "w", encoding="utf-8") as fh:
-            json.dump(settings, fh, indent=2)
+            json.dump(settings, fh, indent=2, ensure_ascii=False)
             fh.write("\n")
     except OSError as exc:
         print(f"  ! could not write {path} ({exc}); add by hand: {added}", file=sys.stderr)

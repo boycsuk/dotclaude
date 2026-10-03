@@ -19,14 +19,23 @@ Never fatal: an unreadable file is reported and skipped, exit code is 0.
 
 import json
 import os
+import shutil
 import sys
 
 SETTINGS_FILES = ("settings.json", "settings.local.json")
 
 
 def load(path):
-    with open(path, encoding="utf-8") as fh:
+    # utf-8-sig: settings saved by Notepad or PowerShell 5.1 start with a BOM.
+    with open(path, encoding="utf-8-sig") as fh:
         return json.load(fh)
+
+
+def active_hook_matches(manifest):
+    """Hook matches to prune now; one whose `unless_on_path` binary still exists is kept,
+    because that hook still runs (the user kept the tool installed on purpose)."""
+    return [h["match"] for h in manifest.get("hooks", [])
+            if h.get("match") and not (h.get("unless_on_path") and shutil.which(h["unless_on_path"]))]
 
 
 def prune_hooks(settings, matches):
@@ -76,7 +85,7 @@ def prune_settings_file(path, matches):
         return
     try:
         with open(path, "w", encoding="utf-8") as fh:
-            json.dump(settings, fh, indent=2)
+            json.dump(settings, fh, indent=2, ensure_ascii=False)
             fh.write("\n")
     except OSError as exc:
         print(f"  ! could not write {path} ({exc}); remove these hooks by hand: {removed}", file=sys.stderr)
@@ -104,7 +113,7 @@ def main():
         print(f"  ! obsolete manifest unreadable ({exc}); nothing pruned", file=sys.stderr)
         return 0
 
-    matches = [h["match"] for h in manifest.get("hooks", []) if h.get("match")]
+    matches = active_hook_matches(manifest)
     for name in SETTINGS_FILES:
         prune_settings_file(os.path.join(project, ".claude", name), matches)
 
