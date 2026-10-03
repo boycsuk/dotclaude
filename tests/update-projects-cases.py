@@ -85,12 +85,13 @@ def snapshot(root):
 def env_for(tmp):
     bindir = os.path.join(tmp, "bin")
     os.makedirs(bindir, exist_ok=True)
-    npx = os.path.join(bindir, "npx")
-    write(npx, "#!/bin/sh\nexit 0\n")
-    os.chmod(npx, 0o755)
-    clean = os.pathsep.join(d for d in os.environ["PATH"].split(os.pathsep)
-                            if not os.path.exists(os.path.join(d, "serena-hooks")))
-    return dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=bindir + os.pathsep + clean)
+    # serena-hooks on PATH on purpose: the plan once said "pruned" for
+    # Serena's hooks while the deploy kept them because the binary existed.
+    for tool in ("npx", "serena-hooks"):
+        path = os.path.join(bindir, tool)
+        write(path, "#!/bin/sh\nexit 0\n")
+        os.chmod(path, 0o755)
+    return dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=bindir + os.pathsep + os.environ["PATH"])
 
 
 def run(tmp, root, args, pwsh):
@@ -125,6 +126,8 @@ def check(tmp, pwsh):
         problems.append("the root itself (a deployed folder) was not listed")
     if "--update --ui" not in listed:
         problems.append("project a: --ui not derived from its playwright server")
+    if "obsolete hooks:   2 (pruned)" not in listed:
+        problems.append("plan does not count project a's two obsolete hooks")
     if "serena, graphify" not in listed or ".serena" not in listed:
         problems.append("plan does not show the obsolete servers and directory")
     if snapshot(root) != before:

@@ -555,6 +555,8 @@ Two things made it worse than a one-line bug:
 
 **Rejected:** keeping no-op stub hooks for a release (leaves dead files and entries forever, and hides the problem instead of fixing it); pruning inside `install.sh` (the installer does not know where the user's projects are).
 
+**Revised 2026-10-03 (audit): no exception for users who kept Serena.** The `serena-hooks` entry carried `unless_on_path`, so the hooks stayed wherever the binary was still installed. Three scripts decided "obsolete" by hand and only the deploy honoured the exception: `--recursive` planned "obsolete hooks: N (pruned)" for hooks it then kept, and counted Serena's own hooks as proof a project was dotclaude's. dotclaude no longer uses Serena at all, so the exception went, and `update-projects.py` and `detect-drift.py` now import `hook_matches` / `count_obsolete_hooks` from `prune-obsolete.py` — one definition, three callers. `--serena` stopped warning and is an unknown flag (exit 9); the retired exit codes 3 and 4 are no longer documented anywhere, since the installer replaces the skill and the template together and nothing can emit them.
+
 ### 34. Code intelligence: official LSP plugins + optional codebase-memory-mcp, steered by hooks (2026-10-03)
 
 **Three layers, each answering a different question.** The official Claude Code LSP plugin answers questions about *one symbol* (definition, references, hover type, call hierarchy) and pushes diagnostics after every edit. codebase-memory-mcp (DeusData) answers *structural* questions — callers and call paths, the impact of the current diff, architecture, dead code. Grep/Read stay for literal text, config and non-code files.

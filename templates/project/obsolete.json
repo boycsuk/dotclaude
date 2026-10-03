@@ -1,11 +1,11 @@
 {
-  "_comment": "Artifacts dotclaude once deployed into projects and no longer ships. scripts/prune-obsolete.py (run by init.sh/init.ps1 on every deploy) removes the matching hook entries from the project's .claude/settings*.json; gitHooks blocks (the tool's own start/end markers) are cut out of .git/hooks and an emptied hook is deleted; mcpServers and files are only REPORTED, because deleting a server or a directory the user may still rely on is their call. 'match' is a substring of the hook command; each hook has a / and a \\ entry so both the POSIX form and the PowerShell & \"<abs>\\name.ps1\" form are caught. An entry with 'unless_on_path' is pruned only when that binary is gone: a user who keeps Serena installed keeps its hooks working. check.py fails if an entry names a hook or MCP fragment dotclaude still ships, or matches a live central hook command.",
+  "_comment": "Artifacts dotclaude once deployed into projects and no longer ships. scripts/prune-obsolete.py (run by init.sh/init.ps1 on every deploy) removes the matching hook entries from the project's .claude/settings*.json; gitHooks blocks (the tool's own start/end markers) are cut out of .git/hooks and an emptied hook is deleted; mcpServers and files are only REPORTED, because deleting a server or a directory the user may still rely on is their call. 'match' is a substring of the hook command; each hook has a / and a \\ entry so both the POSIX form and the PowerShell & \"<abs>\\name.ps1\" form are caught. check.py fails if an entry names a hook or MCP fragment dotclaude still ships, or matches a live central hook command.",
   "hooks": [
     {"match": "hooks/prefer-graphify.", "reason": "Graphify was removed from dotclaude"},
     {"match": "hooks\\prefer-graphify.", "reason": "Graphify was removed from dotclaude"},
     {"match": "hooks/prefer-serena-bash.", "reason": "Serena was removed from dotclaude"},
     {"match": "hooks\\prefer-serena-bash.", "reason": "Serena was removed from dotclaude"},
-    {"match": "serena-hooks ", "unless_on_path": "serena-hooks", "reason": "Serena was removed from dotclaude"}
+    {"match": "serena-hooks ", "reason": "Serena was removed from dotclaude"}
   ],
   "gitHooks": [
     {"file": "post-commit", "start": "# graphify-hook-start", "end": "# graphify-hook-end", "reason": "installed by `graphify hook install` (old init --serena); fails on every commit once Graphify is uninstalled"},

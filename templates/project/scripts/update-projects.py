@@ -22,37 +22,36 @@ user would run by hand:
 """
 
 import argparse
-import json
+import importlib.util
 import os
 import platform
 import subprocess
 import sys
+
+sys.dont_write_bytecode = True
 
 STUB_MARKER = "Per-project settings ONLY"
 SKIP_DIRS = {".git", "node_modules", "vendor", ".venv", "venv", "__pycache__", "dist",
              "build", "target", ".next", ".cache", ".tox", "site-packages", "Pods"}
 SERVER_FLAGS = {"playwright": "--ui", "codebase-memory-mcp": "--codebase-memory", "xcode": "--xcode"}
 
+# The deploy prunes with prune-obsolete.py; planning with the same functions is
+# what keeps "obsolete hooks: N (pruned)" true.
+_spec = importlib.util.spec_from_file_location(
+    "prune_obsolete", os.path.join(os.path.dirname(os.path.abspath(__file__)), "prune-obsolete.py"))
+prune = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(prune)
+
 
 def load(path):
     try:
-        with open(path, encoding="utf-8-sig") as fh:
-            return json.load(fh)
+        return prune.load(path)
     except (OSError, ValueError):
         return None
 
 
 def obsolete_hook_count(project, matches):
-    count = 0
-    for name in ("settings.json", "settings.local.json"):
-        settings = load(os.path.join(project, ".claude", name))
-        hooks = settings.get("hooks") if isinstance(settings, dict) else None
-        for groups in (hooks or {}).values() if isinstance(hooks, dict) else []:
-            for group in groups if isinstance(groups, list) else []:
-                for hook in group.get("hooks", []) if isinstance(group, dict) else []:
-                    if isinstance(hook, dict) and any(m in str(hook.get("command", "")) for m in matches):
-                        count += 1
-    return count
+    return prune.count_obsolete_hooks(project, matches) or 0
 
 
 def is_project(path, matches):
@@ -105,7 +104,7 @@ def plan_for(project, manifest):
     obsolete_servers = [s["name"] for s in manifest.get("mcpServers", []) if s.get("name") in servers]
     obsolete_dirs = [f["path"] for f in manifest.get("files", [])
                      if os.path.exists(os.path.join(project, f.get("path", "")))]
-    matches = [h["match"] for h in manifest.get("hooks", []) if h.get("match")]
+    matches = prune.hook_matches(manifest)
     return {"project": project, "flags": flags, "notes": notes,
             "hooks": obsolete_hook_count(project, matches),
             "servers": obsolete_servers, "dirs": obsolete_dirs}
@@ -151,7 +150,7 @@ def main():
         return 2
     manifest = load(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                  "obsolete.json")) or {}
-    matches = [h["match"] for h in manifest.get("hooks", []) if h.get("match")]
+    matches = prune.hook_matches(manifest)
     root = os.path.abspath(args.root)
     plans = [plan_for(p, manifest) for p in find_projects(root, matches, args.depth)]
     print_plan(plans, root)

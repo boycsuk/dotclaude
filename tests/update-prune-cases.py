@@ -203,9 +203,10 @@ def case_store_stub_python_is_skipped(project, pwsh):
     return None
 
 
-def case_serena_kept_while_installed(project, pwsh):
-    """A user who kept Serena installed keeps its working hooks; only the
-    dotclaude scripts that no longer exist are pruned."""
+def case_serena_pruned_while_installed(project, pwsh):
+    """Serena's hooks are pruned even where serena-hooks is still installed:
+    dotclaude dropped Serena, and keeping its hooks made the recursive plan
+    and the deploy disagree about what "obsolete" means."""
     stub_dir = os.path.join(project, "stub-bin")
     os.makedirs(stub_dir)
     write(os.path.join(stub_dir, "serena-hooks"), "#!/bin/sh\nexit 0\n")
@@ -219,8 +220,8 @@ def case_serena_kept_while_installed(project, pwsh):
     commands = all_commands(read_json(path))
     if any("prefer-" in c for c in commands):
         return f"dotclaude's dead hooks survived: {commands}"
-    if sum("serena-hooks" in c for c in commands) != 2:
-        return f"Serena's own hooks were pruned although serena-hooks is installed: {commands}"
+    if any("serena-hooks" in c for c in commands):
+        return f"Serena's hooks survived because serena-hooks is on PATH: {commands}"
     return None
 
 
@@ -253,7 +254,7 @@ def case_graphify_git_hooks(project, pwsh):
 
 CASES = [
     ("graphify git hooks: block removed, user lines kept", case_graphify_git_hooks),
-    ("Serena's hooks are kept while serena-hooks is installed", case_serena_kept_while_installed),
+    ("Serena's hooks are pruned even with serena-hooks installed", case_serena_pruned_while_installed),
     ("a Microsoft Store python3 stub does not silence the prune", case_store_stub_python_is_skipped),
     ("sh-form obsolete hooks pruned, user hook kept", case_prunes_sh_form_keeps_user_hook),
     ("PowerShell-form obsolete hooks pruned", case_prunes_powershell_form),

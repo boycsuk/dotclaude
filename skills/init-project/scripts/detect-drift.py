@@ -10,67 +10,94 @@ which are subject to it). Run from the project root:
 
 Prints one `KEY=VALUE` line per check so the skill can read the result
 without parsing prose. Never raises on a missing/corrupt file — a file that
-cannot be read is reported as UNKNOWN, which the skill treats as "ask the
-user" rather than "silently assume fine".
+exists but cannot be read is reported as UNKNOWN, which the skill treats as
+"ask the user" rather than "silently assume fine".
+
+Obsolete-hook detection is imported from the template's prune-obsolete.py,
+the script the deploy itself prunes with, so the two cannot disagree.
 """
 
-import json
+import importlib.util
 import os
-import shutil
 import sys
 
+sys.dont_write_bytecode = True
 
-def load_json(path):
+UNKNOWN = "UNKNOWN"
+
+
+def template_dir():
+    return os.environ.get("TEMPLATE_DIR") or os.path.join(
+        os.path.expanduser("~"), ".claude", "templates", "project")
+
+
+def load_prune():
+    path = os.path.join(template_dir(), "scripts", "prune-obsolete.py")
     try:
-        with open(path) as fh:
-            return json.load(fh)
-    except Exception:
+        spec = importlib.util.spec_from_file_location("prune_obsolete", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except (OSError, ImportError, SyntaxError):
         return None
 
 
-def check_obsolete():
+def read_json(prune, path):
+    """(data, ok): ok is False only when the file exists and cannot be read."""
+    try:
+        return prune.load(path), True
+    except FileNotFoundError:
+        return None, True
+    except (OSError, ValueError):
+        return None, False
+
+
+def check_obsolete(prune):
     """Leftovers of artifacts dotclaude stopped shipping (templates/project/obsolete.json).
 
     Hook entries are normally already pruned by init.sh/init.ps1; a non-empty
     OBSOLETE_HOOKS means the deploy has not been re-run since. Servers and
     files are never removed automatically — the skill asks first.
     """
-    template = os.environ.get("TEMPLATE_DIR") or os.path.join(
-        os.path.expanduser("~"), ".claude", "templates", "project")
-    manifest = load_json(os.path.join(template, "obsolete.json"))
+    manifest, _ = read_json(prune, os.path.join(template_dir(), "obsolete.json"))
     if not isinstance(manifest, dict):
-        return "UNKNOWN", "UNKNOWN", "UNKNOWN"
-    matches = [h["match"] for h in manifest.get("hooks", [])
-               if h.get("match") and not (h.get("unless_on_path") and shutil.which(h["unless_on_path"]))]
-    hooks = 0
-    for name in ("settings.json", "settings.local.json"):
-        settings = load_json(os.path.join(".claude", name)) or {}
-        for groups in (settings.get("hooks") or {}).values():
-            for group in groups:
-                for hook in group.get("hooks", []):
-                    if any(m in str(hook.get("command", "")) for m in matches):
-                        hooks += 1
-    servers = (load_json(".mcp.json") or {}).get("mcpServers", {})
-    mcp = [s["name"] for s in manifest.get("mcpServers", []) if s.get("name") in servers]
-    files = [f["path"] for f in manifest.get("files", []) if os.path.exists(f.get("path", ""))]
-    return str(hooks), ",".join(mcp), ",".join(files)
+        return UNKNOWN, UNKNOWN, UNKNOWN
+    hooks = prune.count_obsolete_hooks(".", prune.hook_matches(manifest))
+    mcp_data, mcp_ok = read_json(prune, ".mcp.json")
+    servers = mcp_data.get("mcpServers") if isinstance(mcp_data, dict) else None
+    if not mcp_ok:
+        mcp = UNKNOWN
+    else:
+        servers = servers if isinstance(servers, dict) else {}
+        mcp = ",".join(s["name"] for s in manifest.get("mcpServers", [])
+                       if isinstance(s, dict) and s.get("name") in servers)
+    files = ",".join(f["path"] for f in manifest.get("files", [])
+                     if isinstance(f, dict) and os.path.exists(f.get("path", "")))
+    return (UNKNOWN if hooks is None else str(hooks)), mcp, files
 
 
-def check_allow_push_main():
+def check_allow_push_main(prune):
     """§8 verification: did the "todo en main" choice actually land?"""
-    local = load_json(os.path.join(".claude", "settings.local.json"))
+    local, ok = read_json(prune, os.path.join(".claude", "settings.local.json"))
+    if not ok or (local is not None and not isinstance(local, dict)):
+        return UNKNOWN
     if local is None:
         return "ABSENT"
     return "TRUE" if local.get("allowPushToMain") is True else "FALSE"
 
 
 def main():
-    obsolete_hooks, obsolete_mcp, obsolete_files = check_obsolete()
+    prune = load_prune()
+    if prune is None:
+        obsolete_hooks = obsolete_mcp = obsolete_files = allow_push = UNKNOWN
+    else:
+        obsolete_hooks, obsolete_mcp, obsolete_files = check_obsolete(prune)
+        allow_push = check_allow_push_main(prune)
     for key, value in (
         ("OBSOLETE_HOOKS", obsolete_hooks),
         ("OBSOLETE_MCP", obsolete_mcp),
         ("OBSOLETE_FILES", obsolete_files),
-        ("ALLOW_PUSH_MAIN", check_allow_push_main()),
+        ("ALLOW_PUSH_MAIN", allow_push),
     ):
         print(f"{key}={value}")
     return 0

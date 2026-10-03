@@ -145,8 +145,6 @@ Tell the user to run the command, then come back to this session and confirm whe
 
 If the script fails:
 - Exit 1: template missing — `cd ~/projects/dotclaude && ./install.sh` to refresh.
-- Exit 3: retired. `.mcp.json` is composed per-server now, so there is no whole-file conflict to abort on. A project still running an older `init.sh` can emit it — tell that user to re-run `./install.sh` from the dotclaude clone.
-- Exit 4: retired (was: `serena` missing). Serena was removed; an older `init.sh` can still emit it — tell the user to re-run `./install.sh` from the dotclaude clone.
 - Exit 5: `--xcode` on a non-macOS host. Drop the flag — Apple's mcpbridge ships with Xcode.
 - Exit 6: `xcrun mcpbridge` unavailable. Needs Xcode 26.3+; check `xcode-select -p` points at it, then enable MCP in Xcode > Settings > Intelligence.
 - Exit 7: `npx` missing (`--ui` needs it to launch the playwright server). Install Node.js — it ships npx — and re-run.

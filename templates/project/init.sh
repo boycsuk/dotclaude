@@ -71,11 +71,6 @@
 # Exit codes:
 #   0  success
 #   1  template missing
-#   3  RETIRED (was: --serena and ./.mcp.json conflict). .mcp.json is composed
-#      per-server now, so there is no whole-file conflict to abort on. Do not
-#      reuse this number: a project on an older init.sh still emits it.
-#   4  RETIRED (was: --serena requested but 'serena' not in PATH). Serena and
-#      Graphify were removed; --serena now only warns. Do not reuse.
 #   5  --xcode requested on a non-macOS host
 #   6  --xcode requested but `xcrun mcpbridge` is unavailable (needs Xcode 26.3+)
 #   7  --ui requested but 'npx' is not in PATH
@@ -103,8 +98,6 @@ PROXY=""
 DEPLOY_SCRIPT=false
 for arg in "$@"; do
   case "$arg" in
-    # A command printed by an older /init-project may still carry it.
-    --serena)         echo "WARN: --serena was removed (Serena and Graphify are no longer shipped); ignoring it." >&2 ;;
     --xcode)          INSTALL_XCODE=true ;;
     --ui)             INSTALL_UI=true ;;
     --lsp=*)          LSP_PLUGINS+=("${arg#--lsp=}") ;;
@@ -137,11 +130,7 @@ fi
 # The file is COMPOSED, never copied: each flag owns its own server keys and must
 # leave every other key alone — including servers the template knows nothing
 # about (a hand-added playwright, a third-party server). Merging by key is also
-# what makes re-runs idempotent and the flags order-independent.
-#
-# It replaced a `cp` + whole-file `cmp` for --serena, which aborted (exit 3) as
-# soon as ./.mcp.json differed from the template by even one key — so --xcode and
-# --serena could not coexist, and a user's own server was silently dropped. See
+# what makes re-runs idempotent and the flags order-independent. See
 # tests/mcp-merge-cases.py for the cases that pin this.
 #
 # Usage: merge_mcp_servers <fragment.json> [...]  — JSON via python3, never jq

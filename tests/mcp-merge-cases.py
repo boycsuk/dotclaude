@@ -148,9 +148,8 @@ CASES = [
          [["--codebase-memory", "--ui"], ["--xcode"], ["--update", "--codebase-memory"]],
          {"codebase-memory-mcp", "playwright", "xcode"},
          extra=lambda tmp: readonly_permissions(tmp)),
-    # A command printed by an older /init-project may still carry --serena:
-    # it must warn and deploy normally, not abort or compose anything.
-    case("removed --serena is ignored", [["--serena"]], None),
+    # --serena is gone entirely: like any unknown flag it deploys nothing.
+    case("removed --serena is an unknown flag", [["--serena"]], None, expect_last_code=9),
 ]
 
 # The prerequisite probes each abort with a documented exit code the skill

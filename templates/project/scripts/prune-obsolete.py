@@ -18,12 +18,16 @@ they are removed from .mcp.json together with their `mcp__<name>` permission
 rules. Obsolete directories are only ever reported (`OBSOLETE_FILES=`): they
 may hold committed content, such as .serena/memories.
 Never fatal: an unreadable file is reported and skipped, exit code is 0.
+
+It is also the one implementation of "which hooks are obsolete":
+update-projects.py and the skill's detect-drift.py import `hook_matches` and
+`count_obsolete_hooks` from here. Three hand-written copies had drifted, and
+the recursive updater planned "pruned" for hooks the deploy then kept.
 """
 
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 
@@ -36,11 +40,37 @@ def load(path):
         return json.load(fh)
 
 
-def active_hook_matches(manifest):
-    """Hook matches to prune now; one whose `unless_on_path` binary still exists is kept,
-    because that hook still runs (the user kept the tool installed on purpose)."""
-    return [h["match"] for h in manifest.get("hooks", [])
-            if h.get("match") and not (h.get("unless_on_path") and shutil.which(h["unless_on_path"]))]
+def hook_matches(manifest):
+    """The substrings that mark a hook command as obsolete."""
+    return [h["match"] for h in manifest.get("hooks", []) if isinstance(h, dict) and h.get("match")]
+
+
+def _commands(settings):
+    hooks = settings.get("hooks") if isinstance(settings, dict) else None
+    for groups in hooks.values() if isinstance(hooks, dict) else []:
+        for group in groups if isinstance(groups, list) else []:
+            for entry in group.get("hooks", []) if isinstance(group, dict) else []:
+                if isinstance(entry, dict):
+                    yield str(entry.get("command", ""))
+
+
+def count_obsolete_hooks(project, matches):
+    """Obsolete hook entries wired in a project's settings files.
+
+    Returns None when a settings file exists but cannot be read, so a caller
+    can say "unknown" instead of reporting a clean project.
+    """
+    count = 0
+    for name in SETTINGS_FILES:
+        path = os.path.join(project, ".claude", name)
+        try:
+            settings = load(path)
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError):
+            return None
+        count += sum(1 for c in _commands(settings) if any(m in c for m in matches))
+    return count
 
 
 def prune_hooks(settings, matches):
@@ -232,7 +262,7 @@ def main():
         print(f"  ! obsolete manifest unreadable ({exc}); nothing pruned", file=sys.stderr)
         return 0
 
-    matches = active_hook_matches(manifest)
+    matches = hook_matches(manifest)
     prune_git_hooks(project, manifest.get("gitHooks", []))
     for name in SETTINGS_FILES:
         prune_settings_file(os.path.join(project, ".claude", name), matches)

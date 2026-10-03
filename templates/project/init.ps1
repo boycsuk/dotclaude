@@ -15,7 +15,7 @@
 #
 # --update, --db (no-op now: db-inspector is central), and the scaffold flags
 # (--fullstack, --runtime=, --compose, --proxy=, --deploy-script) behave as in
-# init.sh. --serena was removed and only warns.
+# init.sh.
 #
 # --xcode is recognised for lockstep with init.sh but can never succeed here:
 # Apple's mcpbridge ships with Xcode, so the flag exits 5 on any Windows host.
@@ -53,9 +53,7 @@ $Compose       = $false
 $Proxy         = ""
 $DeployScript  = $false
 foreach ($arg in $args) {
-    # A command printed by an older /init-project may still carry it.
-    if     ($arg -eq "--serena")        { [Console]::Error.WriteLine("WARN: --serena was removed (Serena and Graphify are no longer shipped); ignoring it.") }
-    elseif ($arg -eq "--xcode")         { $InstallXcode  = $true }
+    if     ($arg -eq "--xcode")         { $InstallXcode  = $true }
     elseif ($arg -eq "--ui")            { $InstallUi     = $true }
     elseif ($arg -like "--lsp=*")       { $LspPlugins   += $arg.Substring(6) }
     elseif ($arg -eq "--codebase-memory") { $InstallCodebaseMemory = $true }
