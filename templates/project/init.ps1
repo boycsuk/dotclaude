@@ -46,6 +46,7 @@ $RecursiveDir  = "."
 $RecursiveArgs = @()
 $RemoveObsoleteMcp = $false
 $Positional    = $null
+$Unknown       = @()
 $Fullstack     = $false
 $Runtime       = ""
 $Compose       = $false
@@ -68,12 +69,19 @@ foreach ($arg in $args) {
     elseif ($arg -eq "--deploy-script") { $DeployScript  = $true }
     elseif ($arg -like "--runtime=*")   { $Runtime       = $arg.Substring(10) }
     elseif ($arg -like "--proxy=*")     { $Proxy         = $arg.Substring(8) }
-    elseif ($arg -like "-*")            { Write-Warning "ignoring unknown flag $arg" }
+    elseif ($arg -like "-*")            { $Unknown += $arg }
     else                                { $Positional = $arg }
 }
 if ($Positional) {
     if ($Recursive) { $RecursiveDir = $Positional }
-    else { Write-Warning "ignoring argument $Positional (a directory is only taken with --recursive)" }
+    else { $Unknown += "$Positional (a directory is only taken with --recursive)" }
+}
+# Exit 9 before anything is written: older versions only warned and deployed
+# anyway, which seeded the template into a folder of projects (see init.sh).
+if ($Unknown.Count -gt 0) {
+    foreach ($u in $Unknown) { [Console]::Error.WriteLine("ERROR: unknown argument: $u") }
+    [Console]::Error.WriteLine("       Nothing was deployed. Run 'git pull; ./install.ps1' in dotclaude if the flag is new.")
+    exit 9
 }
 
 # Lockstep sibling of merge_mcp_servers in init.sh: ./.mcp.json is COMPOSED from

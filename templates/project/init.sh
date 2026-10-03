@@ -80,6 +80,10 @@
 #   6  --xcode requested but `xcrun mcpbridge` is unavailable (needs Xcode 26.3+)
 #   7  --ui requested but 'npx' is not in PATH
 #   8  --codebase-memory requested but 'codebase-memory-mcp' is not in PATH
+#   9  unknown flag, or a directory argument without --recursive: nothing was
+#      deployed. (Older versions only warned and deployed anyway — which is how
+#      an `init.sh --update --recursive .` run by a version without
+#      --recursive seeded the template into a folder of projects.)
 
 set -euo pipefail
 
@@ -90,6 +94,7 @@ LSP_PLUGINS=()
 RECURSIVE=false
 RECURSIVE_DIR="."
 RECURSIVE_ARGS=()
+UNKNOWN=()
 REMOVE_OBSOLETE_MCP=false
 FULLSTACK=false
 RUNTIME=""
@@ -114,13 +119,18 @@ for arg in "$@"; do
     --compose)        COMPOSE=true ;;
     --proxy=*)        PROXY="${arg#--proxy=}" ;;
     --deploy-script)  DEPLOY_SCRIPT=true ;;
-    -*)               echo "WARN: ignoring unknown flag $arg" >&2 ;;
+    -*)               UNKNOWN+=("$arg") ;;
     *)                POSITIONAL="$arg" ;;
   esac
 done
 if [ -n "${POSITIONAL:-}" ]; then
   if [ "$RECURSIVE" = "true" ]; then RECURSIVE_DIR="$POSITIONAL"
-  else echo "WARN: ignoring argument $POSITIONAL (a directory is only taken with --recursive)" >&2; fi
+  else UNKNOWN+=("$POSITIONAL (a directory is only taken with --recursive)"); fi
+fi
+if [ ${#UNKNOWN[@]} -gt 0 ]; then
+  for u in "${UNKNOWN[@]}"; do echo "ERROR: unknown argument: $u" >&2; done
+  echo "       Nothing was deployed. Run 'git pull && ./install.sh' in dotclaude if the flag is new." >&2
+  exit 9
 fi
 
 # Helper: compose ./.mcp.json from per-server fragments in templates/project/mcp/.

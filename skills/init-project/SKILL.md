@@ -151,6 +151,7 @@ If the script fails:
 - Exit 6: `xcrun mcpbridge` unavailable. Needs Xcode 26.3+; check `xcode-select -p` points at it, then enable MCP in Xcode > Settings > Intelligence.
 - Exit 7: `npx` missing (`--ui` needs it to launch the playwright server). Install Node.js — it ships npx — and re-run.
 - Exit 8: `codebase-memory-mcp` missing. Show the install options the script printed (binary only — never its `install` subcommand) and re-run.
+- Exit 9: unknown flag, or a directory given without `--recursive`. Nothing was deployed; check the command (or update the install if the flag is new).
 
 ### Pointer to `create-X` for app code
 

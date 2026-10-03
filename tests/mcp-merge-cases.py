@@ -162,6 +162,8 @@ PROBES = [
      dict(omit={"npx"}, scrub_path=True), 7),
     ("missing codebase-memory-mcp aborts: exit 8", ["--codebase-memory"],
      dict(omit={"codebase-memory-mcp"}, scrub_path=True), 8),
+    ("unknown flag aborts before deploying: exit 9", ["--update", "--recursve"], {}, 9),
+    ("directory without --recursive aborts: exit 9", ["--update", "."], {}, 9),
 ]
 
 
@@ -258,6 +260,8 @@ def main():
             try:
                 code = run(tmp, pargs, pwsh, **kw)
                 problem = None if code == want else f"exit {code}, want {want}"
+                if problem is None and want == 9 and os.listdir(tmp) != ["bin"]:
+                    problem = f"exit 9 must deploy nothing, found {sorted(os.listdir(tmp))}"
             finally:
                 shutil.rmtree(tmp, ignore_errors=True)
             report(label, name, problem)

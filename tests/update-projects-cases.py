@@ -105,6 +105,9 @@ def load(path):
 def check(tmp, pwsh):
     root = os.path.join(tmp, "root")
     a, b = build_tree(root)
+    # The folder of projects itself got a deploy by mistake (an init.sh too old
+    # to know --recursive did exactly that): its projects must still be found.
+    write(os.path.join(root, ".claude/settings.json"), stub_with())
     problems = []
 
     before = snapshot(root)
@@ -116,6 +119,8 @@ def check(tmp, pwsh):
                       ("plain", False), ("proj", False), ("templates/project", False)):
         if (f"\n  {rel}\n" in listed or f"\n  a/{rel}\n" in listed or f"/{rel}\n" in listed) != want:
             problems.append(f"--dry-run {'missed' if want else 'listed'} {rel!r}")
+    if "\n  .\n" not in listed:
+        problems.append("the root itself (a deployed folder) was not listed")
     if "--update --ui" not in listed:
         problems.append("project a: --ui not derived from its playwright server")
     if "serena, graphify" not in listed or ".serena" not in listed:
@@ -128,7 +133,7 @@ def check(tmp, pwsh):
         problems.append("without a terminal and without --yes it must change nothing and exit non-zero")
 
     proc = run(tmp, root, ["--update", "--recursive", root, "--yes"], pwsh)
-    if proc.returncode != 0 or "2 updated, 0 failed" not in proc.stdout:
+    if proc.returncode != 0 or "3 updated, 0 failed" not in proc.stdout:
         problems.append(f"--yes run: exit {proc.returncode}, out {proc.stdout[-400:]!r} err {proc.stderr[-300:]!r}")
     settings_a = load(os.path.join(a, ".claude/settings.json"))
     if "hooks" in settings_a:
