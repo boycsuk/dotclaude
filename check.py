@@ -28,7 +28,7 @@ def fail(check, detail):
 
 
 def read(path):
-    with open(os.path.join(REPO, path)) as fh:
+    with open(os.path.join(REPO, path), encoding="utf-8") as fh:
         return fh.read()
 
 
@@ -336,7 +336,7 @@ def _():
     # — every central skill — was invisible to this check.
     for path in walk_files(("skills", "global/.claude/skills"), ".md"):
         rel = os.path.relpath(path, REPO)
-        for i, line in enumerate(open(path), 1):
+        for i, line in enumerate(open(path, encoding="utf-8"), 1):
             if pattern.search(line):
                 fail("skills avoid inline interpreters",
                      f"{rel}:{i} uses an inline interpreter; guard-destructive "
@@ -710,7 +710,7 @@ def _():
                      f"match {match!r} also matches the live central hook command {command!r}")
     granted = set()
     for frag in glob.glob(os.path.join(REPO, "templates/project/permissions/*.json")):
-        with open(frag) as fh:
+        with open(frag, encoding="utf-8") as fh:
             granted |= set(json.load(fh).get("allow", []))
     for entry in manifest.get("permissions", []):
         if not entry.get("rule") or not entry.get("reason"):
@@ -825,6 +825,15 @@ def _():
     import shutil
     import subprocess
 
+    # On Windows `bash` on PATH is usually System32's WSL launcher, which
+    # fails on every Windows path; Git Bash sits next to git. No Git Bash
+    # means no bash to run the .sh files either, so skip like pwsh below.
+    bash = "bash"
+    if os.name == "nt":
+        git = shutil.which("git")
+        candidate = os.path.join(os.path.dirname(os.path.dirname(git)), "bin", "bash.exe") if git else ""
+        bash = candidate if os.path.isfile(candidate) else None
+
     roots = ["global/.claude/hooks", "templates/project", "tests"]
     scripts = sorted(walk_files(roots, ".sh")) + [
         os.path.join(REPO, n) for n in ("install.sh",)
@@ -837,8 +846,10 @@ def _():
                      f"{rel}:{i} opens a heredoc inside $( ) — bash 4.1 and older "
                      f"(macOS /bin/bash) cannot parse that; write the heredoc in a "
                      f"function at top level and substitute the function")
+        if not bash:
+            continue
         try:
-            proc = subprocess.run(["bash", "-n", path], capture_output=True,
+            proc = subprocess.run([bash, "-n", path], capture_output=True,
                                   text=True, timeout=10)
         except (OSError, subprocess.SubprocessError) as exc:
             fail("script syntax", f"could not parse-check {rel}: {exc}")

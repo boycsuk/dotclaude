@@ -10,6 +10,7 @@ Exists so CI runs the same set on every OS without a shell-specific loop.
 import argparse
 import glob
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -21,6 +22,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pwsh", help="PowerShell executable to pass to the matrices that take one")
     args = ap.parse_args()
+    if args.pwsh:
+        # Several matrices run the deployers with a scrubbed PATH, where a bare
+        # `pwsh` no longer resolves on POSIX: pass them an absolute path.
+        resolved = shutil.which(args.pwsh)
+        if not resolved:
+            print(f"run-matrices: {args.pwsh} not found on PATH")
+            return 2
+        args.pwsh = resolved
 
     failed = []
     for path in sorted(glob.glob(os.path.join(HERE, "*-cases.py"))):
