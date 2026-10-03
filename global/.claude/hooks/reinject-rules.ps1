@@ -6,7 +6,8 @@
 #
 # Keep the digest SHORT and limited to rules whose only enforcement is
 # prose. Deterministic guarantees (guard-destructive, guard-push-main,
-# detect-secrets, guard-central-config) fire regardless and need no
+# detect-secrets, guard-central-config, guard-commit, guard-dependencies)
+# fire regardless and need no
 # restating here.
 #
 # SYNC OBLIGATION: this digest distills rules/workflow.md and
@@ -15,8 +16,6 @@
 
 @'
 POST-COMPACTION REMINDER — non-negotiable conventions still in force:
-- Never `git commit --amend` or rewrite history without explicit user confirmation.
-- No AI signature trailers: never add `Co-Authored-By` / `Signed-off-by` by hand.
 - One branch per feature/fix; atomic commits covering what AND why.
 - A task is done only when verified (/verify) and logged in CHANGELOG.md (/commit handles it).
 - Use AskUserQuestion for any decision point instead of asking in prose; batch several pending decisions into one call.

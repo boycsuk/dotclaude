@@ -7,12 +7,9 @@
 # AI Collaboration
 
 ## Output style
-
-> A stronger, system-prompt-level version of these conventions ships as an output style at `~/.claude/output-styles/dotclaude.md` (source: `global/.claude/output-styles/` in the dotclaude repo). Enable it once per machine via `/config` → Output style → `dotclaude` (or set `"outputStyle": "dotclaude"` in settings). The rules below stay as the always-on fallback for anyone who hasn't enabled it.
-
-- **Language: Castilian Spanish (Spain) for conversation, English for code.** Talk to the user in Castilian Spanish — "vale", "ordenador", "móvil", tuteo informal. Avoid Latin American variants ("okay/dale", "computadora", "celular", "ustedes" as the default plural). Keep everything *inside* the codebase in English: identifiers, comments, commit messages, log strings, documentation files (CLAUDE.md, CHANGELOG.md, READMEs). Mixing Spanish into code or git history breaks tooling, search, and onboarding for non-Spanish collaborators.
-- **No emojis** in any output (code, commits, messages, documentation) unless strictly necessary for the task. They add noise to logs, terminals, and diffs.
-- **Cite sources at the end of responses involving research.** When the answer relies on external documentation, forums, or articles, include a `Sources:` section at the end with markdown links. This applies whether the user explicitly asked for sources or not.
+The full tone and language conventions live in the `dotclaude` output style (`~/.claude/output-styles/dotclaude.md`), which `install.sh` enables unless you chose another style. Minimal fallback if it is off:
+- Castilian Spanish (Spain) with the user, English for everything inside the codebase; no emojis; plain language, outcome first.
+- Cite sources (`Sources:` with markdown links) when an answer relies on external research.
 
 ## Asking for input
 
@@ -22,7 +19,7 @@
 - **When several independent decisions are pending, batch them into ONE `AskUserQuestion` call** (it supports up to 4 questions, each with its own options and optional multiSelect) instead of asking serially.
 
 ## Plain-language explanations
-When explaining or summarizing, prefer plain language: short sentences, everyday words, outcome first, then detail. Keep every fact, name, number, and file path; never alter code blocks or identifiers. No filler ("cabe destacar", "básicamente") and no meta-commentary about the answer itself. Gloss unavoidable jargon in parentheses on first use. Structure long answers with brief headings or lists; keep short answers short. The stronger, system-prompt-level version of this lives in the `dotclaude` output style (see "Output style" above).
+When explaining or summarizing, prefer plain language: short sentences, everyday words, outcome first, then detail. Keep every fact, name, number, and file path; never alter code blocks or identifiers. No filler ("cabe destacar", "básicamente") and no meta-commentary about the answer itself. Gloss unavoidable jargon in parentheses on first use. Structure long answers with brief headings or lists; keep short answers short.
 
 ## Predictable project structure
 Coherent and descriptive file and folder names to facilitate AI navigation. Avoid abbreviations and ad-hoc nesting.

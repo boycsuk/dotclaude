@@ -204,7 +204,27 @@ def case_python_hook_installed_and_runs(home, pwsh):
     return None
 
 
+def case_output_style_defaults_on(home, pwsh):
+    if run_install(home, pwsh) != 0:
+        return "installer exited non-zero"
+    with open(claude(home, "settings.json")) as fh:
+        if json.load(fh).get("outputStyle") != "dotclaude":
+            return "a fresh install did not enable the dotclaude output style"
+    with open(claude(home, "settings.json")) as fh:
+        settings = json.load(fh)
+    settings["outputStyle"] = "Explanatory"
+    with open(claude(home, "settings.json"), "w") as fh:
+        json.dump(settings, fh)
+    if run_install(home, pwsh) != 0:
+        return "re-install exited non-zero"
+    with open(claude(home, "settings.json")) as fh:
+        if json.load(fh).get("outputStyle") != "Explanatory":
+            return "a re-install overrode the output style the user chose"
+    return None
+
+
 CASES = [
+    ("output style defaults on, a user choice is kept", case_output_style_defaults_on),
     ("a .py hook is installed, manifested and runs as wired", case_python_hook_installed_and_runs),
     ("fresh install: settings, hooks, manifest", case_fresh_install),
     ("personal settings keys survive the merge", case_user_keys_survive),

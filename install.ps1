@@ -279,6 +279,9 @@ if (Test-Path $settingsPath) {
     }
 }
 foreach ($k in $central.Keys) { $existing[$k] = $central[$k] }
+# Lockstep with install.sh: default the output style on, never override a
+# style the user chose (DESIGN.md §36).
+if (-not $existing.Contains("outputStyle")) { $existing["outputStyle"] = "dotclaude" }
 # BOM-less on purpose: PS 5.1's Set-Content -Encoding UTF8 writes a BOM, which
 # strict JSON parsers reject — settings.json is read by more than PowerShell.
 [System.IO.File]::WriteAllText($settingsPath, ($existing | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))

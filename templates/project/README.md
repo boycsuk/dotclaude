@@ -33,7 +33,7 @@ for all projects at once with `git pull && ./install.sh`:
 - **agents/** — researcher, code-reviewer, debugger, db-inspector.
 - **skills/** — verify, commit, changes, plan-feature, compound, resume-context, update-docs, audit, readme, implement-ui (design reference → tokens in `docs/ui.md` → section-by-section build with a screenshot-vs-reference loop; pairs with the playwright MCP deployed by `init.sh --ui`).
 - **rules/** — code-quality, security, workflow, ai-collaboration.
-- **output-styles/** — dotclaude (opt-in tone/language, enable via `outputStyle`).
+- **output-styles/** — dotclaude (tone/language conventions; `install.sh` sets `outputStyle` to it unless you chose another style).
 - **settings.json** — base permissions + hooks + attribution (merged into your `~/.claude/settings.json`).
 
 A project can only ADD to these (its own `.claude/rules/x.md`, an extra agent); it cannot edit or disable the central ones.

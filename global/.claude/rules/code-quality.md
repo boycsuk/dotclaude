@@ -53,7 +53,7 @@ Doc comments are the deliberate exception to "never the what" — they are the A
 - Follow the docstring style the project already uses (Google vs NumPy vs reST) — see "Match existing conventions".
 
 ## Do not delegate to the LLM what a linter does
-Style (formatting, import order, naming) is enforced by the `verify-on-edit` hook running the project's linter. Do not waste the context window correcting it by hand.
+Lint and type errors surface on their own: the `verify-on-edit` hook runs the project's linter/type checker after each edit (TS/JS when the project defines `lint`/`typecheck` scripts, Python, Rust, Go), and an enabled LSP plugin reports diagnostics. Formatting belongs to the project's formatter. Do not spend the context window fixing style by hand.
 
 ## Tests with explicit intent
 Do not just say "write tests". Specify the cases and expected behaviors before the AI writes the tests. Otherwise it produces tests for the happy path only.

@@ -22,11 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `check.py` check 12b: every opt-out a `.py` hook honours must be documented in `settings.local.json.example`.
 
 ### Changed
+- Both installers set `"outputStyle": "dotclaude"` when the key is absent (never overriding a user's choice); `rules/ai-collaboration.md` keeps only a short fallback of the conventions the style carries (DESIGN.md §36).
+- Prose now points at the hooks that enforce it: `workflow.md` (commits), `security.md` (dependencies), the CLAUDE.md template's `Don't` starters, and the `reinject-rules` digest drops the lines `guard-commit` enforces. The trailer policy is now one rule everywhere: denied unless the project sets `allowCommitTrailers` (DESIGN.md §35).
+- `CLAUDE.md` constraint #2: new hooks are single-file Python; the `.sh`/`.ps1` lockstep applies to the remaining pairs.
 - The Explore agent is no longer described as running on Haiku: since Claude Code v2.1.198 it inherits the session model (`rules/ai-collaboration.md`, template README).
 
 ### Removed
 - Serena and Graphify: the `--serena` flag (now accepted and ignored with a warning; exit 4 retired), `mcp/serena.json`, `mcp/graphify.json`, `serena-hooks.json` and the project hooks-merge machinery in both init scripts, the `prefer-serena-bash` and `prefer-graphify` hooks, their guidance in rules, the CLAUDE.md template (`{{SERENA_BLOCK}}`), the researcher agent, `/plan-feature`, the init-project skill and READMEs. Existing projects lose the dead hook entries on their next deploy through `obsolete.json`; `/init-project --update` offers to remove the `serena`/`graphify` servers and `.serena/` / `graphify-out/` (DESIGN.md §32).
 - `check.py` no longer reads a code-extension list from a hook (check 6 compares the two path-scoped rules only).
+
+### Fixed
+- Stale claims: `code-quality.md` said `verify-on-edit` enforces formatting and naming (it runs lint/typecheck for TS/JS, Python, Rust, Go); the CLAUDE.md template did not say `security.md` is path-scoped; `CLAUDE.md` said check.py has twelve checks; DESIGN.md §17 still described an `if:` gate that was removed; the researcher agent said subagents never see the project's tools.
 
 ### Security
 - The central deny rule `Bash(mkfs.*:*)` blocked nothing on any platform: Claude Code reads a `*` placed before the `:*` suffix literally, so `mkfs.ext4` ran unblocked. It is now `Bash(mkfs.*)`; check.py and install.ps1 strip only a literal `:*` when deriving verbs, and check.py rejects rules that mix the two syntaxes (DESIGN.md §34).
