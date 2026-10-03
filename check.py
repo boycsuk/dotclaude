@@ -352,18 +352,25 @@ def _():
     # a new hook cannot dodge this check by never being added to a tuple.
     for name in py_hooks():
         body = read(f"global/.claude/hooks/{name}.py")
-        m = re.search(r"^# hook-kind: (guard|advisory)\s*$", body, re.M)
+        m = re.search(r"^# hook-kind: (guard|advisory|rewrite)\s*$", body, re.M)
         if not m:
             fail("hook wiring",
-                 f"{name}.py has no `# hook-kind: guard|advisory` header line")
-        elif m.group(1) == "advisory" and "hookio.context(" not in body:
+                 f"{name}.py has no `# hook-kind: guard|advisory|rewrite` header line")
+            continue
+        kind = m.group(1)
+        if kind == "advisory" and "hookio.context(" not in body:
             fail("hook wiring",
                  f"{name}.py is advisory but never calls hookio.context() — its "
                  f"text would not reach the model")
-        elif m.group(1) == "guard" and not os.path.exists(
+        if kind == "rewrite" and "hookio.update_input(" not in body:
+            fail("hook wiring",
+                 f"{name}.py is a rewrite hook but never calls hookio.update_input()")
+        # A guard decides, a rewrite alters what a tool receives: both are
+        # pinned by a matrix, since neither failure shows up in normal use.
+        if kind in ("guard", "rewrite") and not os.path.exists(
                 os.path.join(REPO, "tests", f"{name}-cases.py")):
             fail("hook wiring",
-                 f"{name}.py is a guard with no tests/{name}-cases.py matrix — "
+                 f"{name}.py is a {kind} hook with no tests/{name}-cases.py matrix — "
                  f"every guard hook shipped defects reading did not reveal")
 
 

@@ -162,7 +162,44 @@ def lsp_entry_without_binary(repo):
         json.dump(catalog, fh, indent=2)
 
 
+def _replace(repo, rel, old, new):
+    path = os.path.join(repo, rel)
+    with open(path) as fh:
+        text = fh.read()
+    assert old in text, f"{old!r} not in {rel}"
+    with open(path, "w") as fh:
+        fh.write(text.replace(old, new))
+
+
+def drop_py_hook_kind(repo):
+    """A .py hook without its kind marker escapes the advisory/guard checks."""
+    _replace(repo, "global/.claude/hooks/code-intel-context.py", "# hook-kind: advisory\n", "")
+
+
+def rewrite_hook_without_matrix(repo):
+    """A hook that alters tool input must keep its case matrix."""
+    os.remove(os.path.join(repo, "tests/explore-graph-prompt-cases.py"))
+
+
+def wire_py_hook_without_interpreter(repo):
+    """install.ps1 only rewrites the `python3 <hook>.py` form; a bare path
+    would reach Windows unexecutable."""
+    _replace(repo, "global/.claude/settings.json",
+             'python3 \\"$HOME\\"/.claude/hooks/code-intel-context.py',
+             '\\"$HOME\\"/.claude/hooks/code-intel-context.py')
+
+
+def py_hook_gains_shell_twin(repo):
+    """One hook, one implementation: a .py with a .sh twin is drift waiting."""
+    with open(os.path.join(repo, "global/.claude/hooks/code-intel-context.sh"), "w") as fh:
+        fh.write("#!/bin/sh\nexit 0\n")
+
+
 REGRESSIONS = {
+    "drop-py-hook-kind": drop_py_hook_kind,
+    "rewrite-hook-without-matrix": rewrite_hook_without_matrix,
+    "wire-py-hook-without-interpreter": wire_py_hook_without_interpreter,
+    "py-hook-gains-shell-twin": py_hook_gains_shell_twin,
     "obsolete-hits-shipped-hook": obsolete_hits_shipped_hook,
     "lsp-entry-without-binary": lsp_entry_without_binary,
     "drop-hook-matrix": drop_hook_matrix,

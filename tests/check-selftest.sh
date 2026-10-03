@@ -120,6 +120,22 @@ python3 "$SRC/tests/inject.py" "$WORK/repo" obsolete-hits-shipped-hook
 expect_fail "obsolete.json names a hook dotclaude still ships"
 
 setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" drop-py-hook-kind
+expect_fail "a Python hook loses its hook-kind marker"
+
+setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" rewrite-hook-without-matrix
+expect_fail "an input-rewriting hook loses its case matrix"
+
+setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" wire-py-hook-without-interpreter
+expect_fail "a Python hook is wired without python3"
+
+setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" py-hook-gains-shell-twin
+expect_fail "a Python hook gains a .sh twin"
+
+setup
 python3 "$SRC/tests/inject.py" "$WORK/repo" lsp-entry-without-binary
 expect_fail "an LSP catalog entry loses its binary"
 

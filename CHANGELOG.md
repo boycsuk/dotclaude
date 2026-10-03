@@ -15,8 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `check.py` check 12: `obsolete.json` may not name a hook or MCP fragment dotclaude still ships.
 - Both installers print a notice when a re-install removes a hook file, pointing at `/init-project --update` to prune it from projects.
 - `--lsp=<plugin>` for `init.sh`/`init.ps1` (repeatable): installs an official Claude Code LSP plugin at project scope via `claude plugin install --scope project`, warning — never failing — when the language-server binary, the `claude` CLI or the plugin name is missing. `templates/project/lsp-plugins.json` maps the 13 official plugins to their binaries and install hints; `/init-project` passes the flag for the detected language and offers it on `--update`. Covered by `tests/lsp-plugin-cases.py`; `check.py` check 13 validates the catalog.
-
 - `--codebase-memory` for `init.sh`/`init.ps1`: merges the `codebase-memory-mcp` server (persistent code graph) into `.mcp.json` and its 13 read-only tools into the project `permissions.allow` by exact name (index-writing and deleting tools stay on ask), through the shared `scripts/merge-permissions.py`. Exit 8 when the binary is missing, with binary-only install options; dotclaude never runs the upstream `install` subcommand. Covered in `tests/mcp-merge-cases.py`.
+- Central hooks `code-intel-context.py` (SessionStart and SubagentStart for code-reading agents) and `explore-graph-prompt.py` (PreToolUse on `Agent`, appends to Explore's prompt via `updatedInput`, no permission decision): they tell the model which code-intelligence tools the project has — the LSP plugin, the codebase-memory graph — and when to use each, instead of CLAUDE.md prose or a custom Explore agent. Silent in projects with neither. Covered by `tests/explore-graph-prompt-cases.py`; `check.py` gains the `rewrite` hook kind (must call `hookio.update_input` and have a matrix).
+
 ### Changed
 - The Explore agent is no longer described as running on Haiku: since Claude Code v2.1.198 it inherits the session model (`rules/ai-collaboration.md`, template README).
 
