@@ -26,6 +26,9 @@
 # ./.mcp.json for the visual verification loop the central /implement-ui skill
 # drives. Exit 7 if 'npx' is not in PATH.
 #
+# --update --recursive [dir] updates every dotclaude project under dir, and
+# --remove-obsolete-mcp removes obsolete MCP servers (see init.sh).
+#
 # --codebase-memory merges the 'codebase-memory-mcp' server and its read-only
 # tool permissions (see init.sh). Exit 8 if the binary is not in PATH.
 #
@@ -38,6 +41,11 @@ $InstallXcode  = $false
 $InstallUi     = $false
 $LspPlugins    = @()
 $InstallCodebaseMemory = $false
+$Recursive     = $false
+$RecursiveDir  = "."
+$RecursiveArgs = @()
+$RemoveObsoleteMcp = $false
+$Positional    = $null
 $Fullstack     = $false
 $Runtime       = ""
 $Compose       = $false
@@ -51,13 +59,21 @@ foreach ($arg in $args) {
     elseif ($arg -like "--lsp=*")       { $LspPlugins   += $arg.Substring(6) }
     elseif ($arg -eq "--codebase-memory") { $InstallCodebaseMemory = $true }
     elseif ($arg -eq "--update")        { }  # informational: seeding always skips existing files
+    elseif ($arg -eq "--recursive")     { $Recursive = $true }
+    elseif ($arg -eq "--yes" -or $arg -eq "--dry-run") { $RecursiveArgs += $arg }
+    elseif ($arg -eq "--remove-obsolete-mcp") { $RemoveObsoleteMcp = $true }
     elseif ($arg -eq "--db")            { }  # accepted, no-op (db-inspector is central now)
     elseif ($arg -eq "--fullstack")     { $Fullstack     = $true }
     elseif ($arg -eq "--compose")       { $Compose       = $true }
     elseif ($arg -eq "--deploy-script") { $DeployScript  = $true }
     elseif ($arg -like "--runtime=*")   { $Runtime       = $arg.Substring(10) }
     elseif ($arg -like "--proxy=*")     { $Proxy         = $arg.Substring(8) }
-    else                                { Write-Warning "ignoring unknown flag $arg" }
+    elseif ($arg -like "-*")            { Write-Warning "ignoring unknown flag $arg" }
+    else                                { $Positional = $arg }
+}
+if ($Positional) {
+    if ($Recursive) { $RecursiveDir = $Positional }
+    else { Write-Warning "ignoring argument $Positional (a directory is only taken with --recursive)" }
 }
 
 # Lockstep sibling of merge_mcp_servers in init.sh: ./.mcp.json is COMPOSED from
@@ -134,8 +150,7 @@ function Write-Utf8NoBom([string]$Path, [string]$Text) {
 # clean Windows install, exits non-zero and would make the step a silent no-op.
 # Never fatal — every failure is a WARN naming what did not happen.
 $script:PythonCmd = $null
-function Invoke-TemplatePython {
-    param([string]$What, [string[]]$ScriptArgs, [switch]$DiscardStdout)
+function Resolve-TemplatePython {
     if (-not $script:PythonCmd) {
         foreach ($candidate in @(@("python3"), @("python"), @("py", "-3"))) {
             foreach ($cmd in @(Get-Command $candidate[0] -CommandType Application -All -ErrorAction SilentlyContinue)) {
@@ -148,7 +163,14 @@ function Invoke-TemplatePython {
             if ($script:PythonCmd) { break }
         }
     }
-    if (-not $script:PythonCmd) {
+    # The comma keeps a one-element array an array; PowerShell would unwrap it
+    # into a bare string and [0] would then be its first character.
+    return ,$script:PythonCmd
+}
+
+function Invoke-TemplatePython {
+    param([string]$What, [string[]]$ScriptArgs, [switch]$DiscardStdout)
+    if (-not (Resolve-TemplatePython)) {
         [Console]::Error.WriteLine("WARN: no working Python (tried python3, python, py -3); $What skipped. Deploy continues.")
         return
     }
@@ -188,6 +210,21 @@ if (-not (Test-Path $TemplateDir)) {
     exit 1
 }
 
+# --- Recursive mode: hand over to the shared walker (scripts/update-projects.py),
+# which runs this same script once per project with that project's own flags.
+if ($Recursive) {
+    $py = Resolve-TemplatePython
+    if (-not $py) {
+        [Console]::Error.WriteLine("ERROR: --recursive needs a working Python (tried python3, python, py -3).")
+        exit 1
+    }
+    $pwshExe = (Get-Process -Id $PID).Path
+    $walkerArgs = @($py | Select-Object -Skip 1) + @((Join-Path $TemplateDir "scripts/update-projects.py"),
+        $RecursiveDir, "--init", $PSCommandPath, "--pwsh", $pwshExe) + $RecursiveArgs
+    & $py[0] @walkerArgs
+    exit $LASTEXITCODE
+}
+
 # --- Per-project .claude/ : only the project-specific files ------------------
 if (-not (Test-Path $DstRoot)) { New-Item -ItemType Directory -Path $DstRoot -Force | Out-Null }
 
@@ -210,8 +247,9 @@ if (Test-Path $localExample) {
 # pruning rules exist once. stdout carries KEY= lines for detect-drift.py only.
 $obsolete = Join-Path $TemplateDir "obsolete.json"
 if (Test-Path $obsolete) {
-    Invoke-TemplatePython -What "obsolete-artifact check" -DiscardStdout `
-        -ScriptArgs @((Join-Path $TemplateDir "scripts/prune-obsolete.py"), $obsolete, (Get-Location).Path)
+    $pruneArgs = @((Join-Path $TemplateDir "scripts/prune-obsolete.py"), $obsolete, (Get-Location).Path)
+    if ($RemoveObsoleteMcp) { $pruneArgs += "--remove-mcp" }
+    Invoke-TemplatePython -What "obsolete-artifact check" -DiscardStdout -ScriptArgs $pruneArgs
 }
 
 # --- CLAUDE.md, CHANGELOG.md : user-owned, seed when absent ------------------

@@ -107,6 +107,14 @@ The plugin is only the wiring: the language-server binary (`pyright-langserver`,
 
 Install the binary only (`npm install -g codebase-memory-mcp`, `pip install --user codebase-memory-mcp`, or a checksum-verified release archive). Do not run its own `install` subcommand: it rewrites hooks in `~/.claude/settings.json`, adds agents and a skill, and edits your shell rc. Recommended for large or multi-service codebases only — its authors' benchmark scores it below plain file exploration on answer quality; it wins on tokens.
 
+## Updating every project at once (`--update --recursive`)
+
+```bash
+bash ~/.claude/templates/project/init.sh --update --recursive ~/projects   # --dry-run to only look, --yes to skip the question
+```
+
+Finds every project dotclaude deployed under the folder (by the settings stub, `settings.local.json.example`, or obsolete hook entries; dependency folders, nested projects and template copies are skipped), derives each one's flags from its `.mcp.json` (`--ui`, `--codebase-memory`, and `--xcode` on macOS), shows the plan and asks once. It then runs `init --update` in each, pruning obsolete hooks and removing obsolete MCP servers with their permissions; obsolete directories such as `.serena/` are only listed, because they may hold committed files. `init.ps1` takes the same flags.
+
 ## Retired artifacts are pruned on every deploy
 
 dotclaude sometimes stops shipping a piece a project was deployed with — Serena and Graphify (once deployed by `--serena`) were the first. `templates/project/obsolete.json` lists them, and every `init.sh` / `init.ps1` run removes their dead hook entries from `.claude/settings.json` and `settings.local.json` (the scripts behind them are gone from `~/.claude/hooks/`). Obsolete `.mcp.json` servers and directories (`.serena/`, `graphify-out/`) are only reported: `/init-project --update` asks before removing them.

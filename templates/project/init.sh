@@ -49,6 +49,13 @@
 #              refreshed if untouched, drift-reported if edited. (There is no
 #              hooks/agents/skills/rules drift here anymore — those are central;
 #              update them with `git pull && ./install.sh` in the dotclaude repo.)
+#   --update --recursive [dir]  Update EVERY dotclaude project under dir
+#              (default: .), each with the flags its .mcp.json implies, after
+#              showing the plan and asking (--yes skips the question,
+#              --dry-run only shows it). Obsolete MCP servers are removed.
+#              Implemented once in scripts/update-projects.py for both OSes.
+#   --remove-obsolete-mcp  Also remove the obsolete.json MCP servers (and their
+#              mcp__<name> permission rules) instead of only reporting them.
 #   --db       Accepted for compatibility. The db-inspector agent is now central
 #              (always available), so this no longer adds/removes an agent; the
 #              skill may add psql/sqlite3 permissions to the project settings stub.
@@ -80,6 +87,10 @@ INSTALL_XCODE=false
 INSTALL_UI=false
 INSTALL_CODEBASE_MEMORY=false
 LSP_PLUGINS=()
+RECURSIVE=false
+RECURSIVE_DIR="."
+RECURSIVE_ARGS=()
+REMOVE_OBSOLETE_MCP=false
 FULLSTACK=false
 RUNTIME=""
 COMPOSE=false
@@ -94,15 +105,23 @@ for arg in "$@"; do
     --lsp=*)          LSP_PLUGINS+=("${arg#--lsp=}") ;;
     --codebase-memory) INSTALL_CODEBASE_MEMORY=true ;;
     --update)         : ;;  # informational: seeding always skips existing files
+    --recursive)      RECURSIVE=true ;;
+    --yes|--dry-run)  RECURSIVE_ARGS+=("$arg") ;;
+    --remove-obsolete-mcp) REMOVE_OBSOLETE_MCP=true ;;
     --db)             : ;;  # accepted, no-op (db-inspector is central now)
     --fullstack)      FULLSTACK=true ;;
     --runtime=*)      RUNTIME="${arg#--runtime=}" ;;
     --compose)        COMPOSE=true ;;
     --proxy=*)        PROXY="${arg#--proxy=}" ;;
     --deploy-script)  DEPLOY_SCRIPT=true ;;
-    *)                echo "WARN: ignoring unknown flag $arg" >&2 ;;
+    -*)               echo "WARN: ignoring unknown flag $arg" >&2 ;;
+    *)                POSITIONAL="$arg" ;;
   esac
 done
+if [ -n "${POSITIONAL:-}" ]; then
+  if [ "$RECURSIVE" = "true" ]; then RECURSIVE_DIR="$POSITIONAL"
+  else echo "WARN: ignoring argument $POSITIONAL (a directory is only taken with --recursive)" >&2; fi
+fi
 
 # Helper: compose ./.mcp.json from per-server fragments in templates/project/mcp/.
 # The file is COMPOSED, never copied: each flag owns its own server keys and must
@@ -195,6 +214,14 @@ if [ ! -d "$TEMPLATE_DIR" ]; then
   exit 1
 fi
 
+# --- Recursive mode: hand over to the shared walker, which calls this script --
+# once per project found (with --update and that project's own flags).
+if [ "$RECURSIVE" = "true" ]; then
+  self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+  exec python3 "$TEMPLATE_DIR/scripts/update-projects.py" "$RECURSIVE_DIR" --init "$self" \
+    ${RECURSIVE_ARGS[@]+"${RECURSIVE_ARGS[@]}"}
+fi
+
 # --- Per-project .claude/ : only the project-specific files ------------------
 mkdir -p "$DST_CLAUDE"
 
@@ -218,7 +245,9 @@ fi
 # its script. One Python implementation serves init.sh and init.ps1 alike. The
 # KEY= lines on stdout are for detect-drift.py; the human report is on stderr.
 if [ -f "$TEMPLATE_DIR/obsolete.json" ]; then
-  python3 "$TEMPLATE_DIR/scripts/prune-obsolete.py" "$TEMPLATE_DIR/obsolete.json" . >/dev/null \
+  prune_args=()
+  [ "$REMOVE_OBSOLETE_MCP" = "true" ] && prune_args+=(--remove-mcp)
+  python3 "$TEMPLATE_DIR/scripts/prune-obsolete.py" "$TEMPLATE_DIR/obsolete.json" . ${prune_args[@]+"${prune_args[@]}"} >/dev/null \
     || echo "WARN: obsolete-artifact check did not complete; deploy continues." >&2
 fi
 
