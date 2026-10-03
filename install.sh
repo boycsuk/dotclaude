@@ -12,8 +12,10 @@
 # Re-running is safe: it refreshes the central artifacts it owns by removing
 # only the files it shipped last time (see the manifest below), so your own
 # skills/agents/rules in those directories survive. It never clobbers your
-# personal ~/.claude/CLAUDE.md, and it MERGES the base settings into
-# ~/.claude/settings.json without dropping your own keys (theme, etc.).
+# personal ~/.claude/CLAUDE.md. In ~/.claude/settings.json it keeps every key
+# you own (theme, env, ...), seeds defaults only when absent, and REPLACES the
+# keys dotclaude owns (permissions, hooks, attribution) — saving a backup first
+# whenever your file had entries of its own there.
 
 set -euo pipefail
 
@@ -22,7 +24,9 @@ TARGET="${HOME}/.claude"
 
 echo "==> Installing dotclaude into $TARGET"
 
-if ! command -v python3 >/dev/null 2>&1; then
+# `--version`, not `command -v`: macOS ships a python3 stub that exists but only
+# offers to install the Command Line Tools.
+if ! python3 --version >/dev/null 2>&1; then
   # python3 is required: the .py hooks are Python, the .sh hooks parse Claude
   # Code's JSON input with it (DESIGN.md §5), and the settings merge below uses
   # it. Without it the central guard hooks fail silently.
@@ -41,15 +45,27 @@ fi
 # installed (working) hooks still in place.
 for hook in "$SCRIPT_DIR"/global/.claude/hooks/*.sh; do
   [ -f "$hook" ] || continue
-  if ! bash -n "$hook" 2>/tmp/dotclaude-parse.$$; then
+  if ! parse_err=$(bash -n "$hook" 2>&1); then
     echo "  ! $(basename "$hook") does not parse — aborting before anything is copied." >&2
-    sed 's/^/    /' /tmp/dotclaude-parse.$$ >&2
-    rm -f /tmp/dotclaude-parse.$$
+    printf '%s\n' "$parse_err" | sed 's/^/    /' >&2
     echo "    Your currently installed hooks are untouched. Fix the source and re-run." >&2
     exit 1
   fi
-  rm -f /tmp/dotclaude-parse.$$
 done
+# Same for the Python hooks: one that fails to compile exits 1, a non-blocking
+# error, so the guard would be silently off rather than a wall — just as bad.
+python3 - "$SCRIPT_DIR"/global/.claude/hooks/*.py "$SCRIPT_DIR"/global/.claude/hooks/_lib/*.py <<'PY' || exit 1
+import sys
+for path in sys.argv[1:]:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            compile(fh.read(), path, "exec")
+    except SyntaxError as exc:
+        sys.stderr.write("  ! %s does not compile (line %s: %s) — aborting before anything is copied.\n"
+                         "    Your currently installed hooks are untouched. Fix the source and re-run.\n"
+                         % (path.rsplit("/", 1)[-1], exc.lineno, exc.msg))
+        sys.exit(1)
+PY
 
 mkdir -p "$TARGET/templates" "$TARGET/skills"
 
@@ -61,33 +77,56 @@ mkdir -p "$TARGET/templates" "$TARGET/skills"
 # current set and rewrite the manifest. Files the user added are untouched;
 # files this repo stops shipping are still cleaned up.
 MANIFEST="$TARGET/.dotclaude-manifest"
+EMPTIED="$(mktemp)"
+trap 'rm -f "$EMPTIED"' EXIT
 if [ -f "$MANIFEST" ]; then
   while IFS= read -r rel; do
     case "$rel" in ""|*..*) continue ;; esac
     rm -f "${TARGET:?}/$rel"
+    dirname "$rel" >> "$EMPTIED"
   done < "$MANIFEST"
 fi
 
+# Every file this install writes. Unix uses the .sh hooks, so the Windows .ps1
+# siblings in hooks/ are never copied (a .ps1 anywhere else IS written and
+# tracked). Copying them and deleting `hooks/*.ps1` afterwards also deleted
+# the user's own .ps1 hooks.
 : > "$MANIFEST.tmp"
+for dir in hooks agents skills rules output-styles; do
+  [ -d "$SCRIPT_DIR/global/.claude/$dir" ] || continue
+  # POSIX find only: -printf is GNU-specific and BSD find (macOS) errors on it,
+  # aborting the install mid-run under set -e — after the manifest cleanup.
+  (cd "$SCRIPT_DIR/global/.claude/$dir" && find . -type f ! -path '*/__pycache__/*' \
+    | sed "s|^\./|$dir/|") >> "$MANIFEST.tmp"
+done
+grep -v '^hooks/.*\.ps1$' "$MANIFEST.tmp" > "$MANIFEST.new" || true
+rm -f "$MANIFEST.tmp"
+
+# A file of the user's that happens to share a shipped name would be
+# overwritten and then adopted into the manifest — deleted for good the day
+# the repo stops shipping it. Keep a copy and say so.
+while IFS= read -r rel; do
+  [ -e "$TARGET/$rel" ] || continue
+  if [ ! -f "$MANIFEST" ] || ! grep -qxF "$rel" "$MANIFEST"; then
+    cp -p "$TARGET/$rel" "$TARGET/$rel.user-backup"
+    echo "  ! ~/.claude/$rel was yours, not dotclaude's; saved as $rel.user-backup before replacing it"
+  fi
+done < "$MANIFEST.new"
+
 for dir in hooks agents skills rules output-styles; do
   src="$SCRIPT_DIR/global/.claude/$dir"
   [ -d "$src" ] || continue
   mkdir -p "$TARGET/$dir"
   # A dev checkout that ran the Python hooks or tests holds __pycache__ dirs;
   # shipping them would leave unmanaged files in a repo-owned tree.
-  (cd "$src" && tar -cf - --exclude=__pycache__ .) | (cd "$TARGET/$dir" && tar -xf -)
-  # POSIX find only: -printf is GNU-specific and BSD find (macOS) errors on it,
-  # aborting the install mid-run under set -e — after the manifest cleanup.
-  (cd "$src" && find . -type f ! -path '*/__pycache__/*' | sed "s|^\./|$dir/|") >> "$MANIFEST.tmp"
+  if [ "$dir" = hooks ]; then
+    (cd "$src" && tar -cf - --exclude=__pycache__ --exclude='*.ps1' .) | (cd "$TARGET/$dir" && tar -xf -)
+  else
+    (cd "$src" && tar -cf - --exclude=__pycache__ .) | (cd "$TARGET/$dir" && tar -xf -)
+  fi
 done
-# Unix uses the .sh hooks; drop the Windows .ps1 siblings (and keep them out of
-# the manifest, so a later install does not try to remove files never written).
-# Only hooks/ is filtered: a .ps1 anywhere else IS written, so it must stay in
-# the manifest or it becomes an unmanaged orphan when the repo stops shipping it.
-rm -f "$TARGET/hooks/"*.ps1
 [ -f "$MANIFEST" ] && cp "$MANIFEST" "$MANIFEST.old"
-grep -v '^hooks/.*\.ps1$' "$MANIFEST.tmp" > "$MANIFEST" || true
-rm -f "$MANIFEST.tmp"
+mv "$MANIFEST.new" "$MANIFEST"
 # A hook this repo stopped shipping is still wired in every project deployed
 # with it; its entry now points at a deleted script. Say how to clean that up.
 if [ -f "$MANIFEST.old" ]; then
@@ -101,9 +140,14 @@ fi
 chmod +x "$TARGET/hooks/"*.sh 2>/dev/null || true
 # Removing a skill's files leaves its directory behind, and an empty
 # ~/.claude/skills/<name>/ still shows up in the skill listing as a phantom.
-# Prune empty dirs in the trees we own (never the roots themselves).
-for dir in skills agents rules output-styles hooks; do
-  [ -d "$TARGET/$dir" ] && find "$TARGET/$dir" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+# Prune only the directories that removing our own files emptied — an empty
+# directory the user made (a skill in progress) is theirs — and never climb
+# above the top-level tree (skills/, agents/, ...).
+sort -ru "$EMPTIED" | while IFS= read -r d; do
+  while [ "${d#*/}" != "$d" ]; do
+    rmdir "$TARGET/$d" 2>/dev/null || break
+    d="$(dirname "$d")"
+  done
 done
 echo "  - central hooks/agents/skills/rules/output-styles installed (.sh + .py hooks)"
 
@@ -146,6 +190,19 @@ if os.path.exists(dst_path):
         dst = {}
 OWNED = ("permissions", "hooks", "attribution")
 SEEDED = ("outputStyle", "fileCheckpointingEnabled", "statusLine")
+replaced = [k for k in OWNED if k in dst and k in src and dst[k] != src[k]]
+if replaced:
+    # The owned keys are the deterministic guarantee, so they are replaced —
+    # but a deny rule or a hook the user added there must never vanish
+    # without a trace. Keep the whole previous file next to it.
+    import shutil, time
+    backup = "%s.bak-%s" % (dst_path, time.strftime("%Y%m%d-%H%M%S"))
+    shutil.copy2(dst_path, backup)
+    sys.stderr.write(
+        "  ! %s was replaced in ~/.claude/settings.json (dotclaude owns it); your previous\n"
+        "    file is saved at %s — move personal rules or hooks to a project's\n"
+        "    .claude/settings.json or settings.local.json, which merge on top.\n"
+        % (", ".join(replaced), backup))
 for key in OWNED:
     if key in src:
         dst[key] = src[key]
@@ -158,7 +215,8 @@ with open(dst_path, "w") as f:
     json.dump(dst, f, indent=2)
     f.write("\n")
 note = " seeded %s;" % ", ".join(seeded) if seeded else ""
-print("  - ~/.claude/settings.json merged (base permissions + hooks;%s your other keys kept)" % note)
+print("  - ~/.claude/settings.json merged (permissions, hooks, attribution set to dotclaude's;%s "
+      "your other keys kept)" % note)
 PY
 
 # --- Per-project template and the /init-project skill ------------------------

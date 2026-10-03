@@ -139,7 +139,7 @@ The goal of this repo: turn that guide into a concrete, portable, reusable setup
 
 **Why:** consistency with the "everything project-level" philosophy. Trade-off: working in a directory without `/init-project` deployed means more permission prompts. That is intentional friction — pushes me to use the template instead of working in unconfigured directories.
 
-> **Reversed by §23 (2026-05-30).** The centralization makes `~/.claude/settings.json` the home of the base permissions + hooks (merged non-destructively with the user's own keys), exactly the opposite of "minimized". The friction this decision accepted (unconfigured dirs prompt more) is now the *feature*: the central config makes every directory configured. See §23.
+> **Reversed by §23 (2026-05-30).** The centralization makes `~/.claude/settings.json` the home of the base permissions + hooks (merged with the user's own keys: theirs are kept, the owned `permissions`/`hooks`/`attribution` are replaced, with a backup since 2026-10-03 when the user had entries there), exactly the opposite of "minimized". The friction this decision accepted (unconfigured dirs prompt more) is now the *feature*: the central config makes every directory configured. See §23.
 
 ### 12. Match existing conventions with an escape clause
 

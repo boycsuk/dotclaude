@@ -19,18 +19,18 @@ Then open Claude Code in any project and run `/init-project`. It detects the sta
 ## Requirements
 
 - Claude Code
-- Linux / macOS / WSL: bash and `python3` (the hooks parse their JSON input with it)
-- Windows: PowerShell
+- Linux / macOS / WSL: bash and `python3` (most hooks are Python; the rest parse their JSON input with it)
+- Windows: PowerShell 5.1+ and Python 3 (the installer stops if it finds no working interpreter)
 
 ## What gets installed
 
 `install.sh` copies the central config into `~/.claude/`:
 
-- **Hooks** — deterministic guarantees that run on every tool call: block destructive commands and remote-code-execution patterns (`guard-destructive`), block force pushes and direct pushes to main (`guard-push-main`), catch secrets before they land in a commit (`detect-secrets`), lint and typecheck files as they are edited (`verify-on-edit`), deny commit trailers, emoji and non-English commit messages and ask before `--amend` (`guard-commit`), ask before any new dependency (`guard-dependencies`), tell the model which code-intelligence tools a project has (`code-intel-context`, `explore-graph-prompt`), keep mirrored docs in sync, protect the installed config from in-project edits, re-inject project rules lost to context compaction, and flag a turn that changed code without a CHANGELOG entry (`changelog-reminder`).
+- **Hooks** — deterministic guarantees that run on every tool call: block destructive commands and remote-code-execution patterns (`guard-destructive`), block force pushes and direct pushes to main (`guard-push-main`), catch secrets before they land in a commit (`detect-secrets`), lint and typecheck files as they are edited (`verify-on-edit`), deny commit trailers, emoji and non-English commit messages and ask before `--amend` (`guard-commit`), ask before any new dependency (`guard-dependencies`), tell the model which code-intelligence tools a project has (`code-intel-context`, `explore-graph-prompt`), keep mirrored docs in sync, protect the installed config from in-project edits, re-inject a digest of the central rules after context compaction, and flag a turn that changed code without a CHANGELOG entry (`changelog-reminder`).
 - **Agents** — `researcher` (architectural deep-dives), `code-reviewer` (skeptical post-change review), `debugger` (root-cause diagnosis), `db-inspector` (read-only SQL inspection).
 - **Skills** — workflow commands available in every project: `/verify`, `/commit`, `/audit`, `/changes`, `/plan-feature`, `/resume-context`, `/update-docs`, `/compound`, `/implement-ui`, `/readme`.
-- **Rules** — coding conventions loaded into every session (workflow, code quality, security, AI collaboration).
-- **Base settings** — permissions and hook wiring, merged into your existing `~/.claude/settings.json` without touching your personal keys (theme, model, and so on).
+- **Rules** — coding conventions: workflow and AI collaboration load in every session, code quality and security when a matching source file is read.
+- **Base settings** — merged into your existing `~/.claude/settings.json`. Your personal keys (theme, model, env and so on) are kept, and defaults such as the output style are only added when absent. `permissions`, `hooks` and `attribution` belong to dotclaude and are replaced on every install; if yours held entries of their own, the previous file is saved as `settings.json.bak-<timestamp>` first. Put personal rules and hooks in a project's `.claude/settings.json` or `settings.local.json`, which merge on top.
 
 Re-running the installer is safe and idempotent: it owns only the files it shipped, never your own skills, agents, or global CLAUDE.md.
 

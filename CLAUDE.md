@@ -89,7 +89,7 @@ Same rule for `install.sh` ↔ `install.ps1` and `templates/project/init.sh` ↔
 
 `install.sh` refreshes the central artifacts it owns in `~/.claude/{hooks,agents,skills,rules,output-styles}` by removing only the files it shipped **last time** (tracked in `~/.claude/.dotclaude-manifest`) and then copying the current set — files the user added to those directories are left alone, and files this repo stops shipping are still cleaned up. Do **not** "simplify" this back to an `rm -rf` per directory: that was the previous form and it silently deleted the user's own skills/agents/rules on every re-install (DESIGN.md §29). `templates/project/` and `skills/init-project/` *are* replaced wholesale — nothing user-owned lives there. The base `settings.json` is **merged** into `~/.claude/settings.json` preserving the user's own keys. It does **not** touch `~/.claude/CLAUDE.md` at all — the repo's `CLAUDE.md` is this repo's maintenance guide, not user global preferences, so it is never copied out. The user can `git pull && ./install.sh` repeatedly without losing global preferences.
 
-If you change install behaviour, preserve this: the installer owns the central artifacts, merges settings non-destructively, and leaves everything else in `~/.claude/` (CLAUDE.md, projects/, credentials) untouched.
+If you change install behaviour, preserve this: the installer owns the central artifacts, keeps the user's own settings keys (replacing only the owned `permissions`/`hooks`/`attribution`, with a backup when the user had entries there), and leaves everything else in `~/.claude/` (CLAUDE.md, projects/, credentials) untouched.
 
 ### 4. The template is a starting point, not a finished product
 

@@ -9,9 +9,10 @@
 #
 # Re-running is safe: it refreshes the central artifacts it owns by removing only
 # the files it shipped last time (per the manifest), so your own skills/agents/
-# rules in those directories survive. It never clobbers your personal CLAUDE.md,
-# and MERGES the base settings into $HOME\.claude\settings.json without dropping
-# your own keys.
+# rules in those directories survive. It never clobbers your personal CLAUDE.md.
+# In $HOME\.claude\settings.json it keeps every key you own, seeds defaults only
+# when absent, and REPLACES the keys dotclaude owns (permissions, hooks,
+# attribution) — saving a backup first whenever your file had entries there.
 #
 # This is the lockstep sibling of install.sh. On Windows the .ps1 hooks run
 # under PowerShell, so the central settings.json points at the .ps1 files with
@@ -74,71 +75,9 @@ if (Test-Path $hookDir) {
     }
 }
 
-New-Item -ItemType Directory -Force -Path (Join-Path $Target "templates") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $Target "skills") | Out-Null
-
-# --- Central artifacts: hooks, agents, skills, rules, output-styles ----------
-# Owned by this repo — but the DIRECTORIES are shared with the user, who may
-# keep their own skills/agents/rules there. Removing each directory outright
-# (the previous form) silently deleted all of them on every re-install. So:
-# remove only the files this repo shipped LAST time (from the manifest), then
-# copy the current set and rewrite it. See install.sh for the same logic.
-$manifestPath = Join-Path $Target ".dotclaude-manifest"
-if (Test-Path $manifestPath) {
-    foreach ($rel in (Get-Content $manifestPath)) {
-        if ([string]::IsNullOrWhiteSpace($rel) -or $rel -like "*..*") { continue }
-        $victim = Join-Path $Target ($rel -replace '/', '\')
-        if (Test-Path $victim) { Remove-Item -Force $victim -ErrorAction SilentlyContinue }
-    }
-}
-
-$manifest = @()
-foreach ($dir in @("hooks", "agents", "skills", "rules", "output-styles")) {
-    $src = Join-Path $ScriptDir "global\.claude\$dir"
-    if (-not (Test-Path $src)) { continue }
-    $dst = Join-Path $Target $dir
-    New-Item -ItemType Directory -Force -Path $dst | Out-Null
-    # File by file, skipping __pycache__: a dev checkout that ran the Python
-    # hooks or tests holds bytecode that must not land in a repo-owned tree.
-    $files = Get-ChildItem -Path $src -Recurse -File |
-        Where-Object { $_.FullName -notmatch '[\\/]__pycache__[\\/]' }
-    foreach ($f in $files) {
-        $rel = $f.FullName.Substring($src.Length).TrimStart('\', '/') -replace '\\', '/'
-        $destFile = Join-Path $dst ($rel -replace '/', [System.IO.Path]::DirectorySeparatorChar)
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destFile) | Out-Null
-        Copy-Item -Force $f.FullName $destFile
-        # Windows keeps the .ps1 hooks; the .sh siblings are dropped below and
-        # must stay out of the manifest so a later run does not chase them.
-        # Only hooks/ is filtered: a .sh anywhere else IS written, so it must
-        # stay tracked or it becomes an unmanaged orphan later.
-        if (-not ($dir -eq "hooks" -and $rel -like "*.sh")) { $manifest += "$dir/$rel" }
-    }
-}
-# Windows uses the .ps1 hooks; drop the .sh siblings.
-Get-ChildItem -Path (Join-Path $Target "hooks") -Filter "*.sh" -File -ErrorAction SilentlyContinue | Remove-Item -Force
-# Removing a skill's files leaves its directory behind, and an empty
-# skills\<name>\ still shows up in the skill listing as a phantom. Prune empty
-# dirs in the trees we own (never the roots themselves).
-foreach ($dir in @("skills", "agents", "rules", "output-styles", "hooks")) {
-    $root = Join-Path $Target $dir
-    if (-not (Test-Path $root)) { continue }
-    Get-ChildItem -Path $root -Recurse -Directory -ErrorAction SilentlyContinue |
-        Sort-Object -Property FullName -Descending |
-        Where-Object { -not (Get-ChildItem -Path $_.FullName -Force -ErrorAction SilentlyContinue) } |
-        Remove-Item -Force -ErrorAction SilentlyContinue
-}
-$oldManifest = if (Test-Path $manifestPath) { @(Get-Content $manifestPath) } else { @() }
-$manifest | Set-Content -Path $manifestPath -Encoding UTF8
-# A hook this repo stopped shipping is still wired in every project deployed
-# with it; its entry now points at a deleted script. Say how to clean that up.
-$retired = @($oldManifest | Where-Object { $_ -match '^hooks/[^/]+$' -and $manifest -notcontains $_ })
-if ($retired.Count -gt 0) {
-    Write-Host "  ! retired hooks removed: $(($retired | ForEach-Object { $_ -replace '^hooks/', '' }) -join ' ')"
-    Write-Host "    Projects that wired them: run /init-project --update (or init.ps1) to prune the entries."
-}
-Write-Host "  - central hooks/agents/skills/rules/output-styles installed (.ps1 + .py hooks)"
-
-# --- Central settings.json: build the PowerShell form and MERGE into user's --
+# --- Central settings.json: derive the PowerShell form BEFORE copying anything --
+# Its hard failures (an `if` gate, an unmapped rule) must abort while the
+# previously installed hooks and settings still match each other.
 function New-Hook($name, $t, $isPython) {
     # No `if` parameter on purpose: hook entries carry no `if` gates (a
     # prefix-anchored pattern reopens the wrapped-form bypasses the hooks'
@@ -305,6 +244,92 @@ if ($unmapped.Count -gt 0) {
     exit 1
 }
 
+# The .py hooks: one that fails to compile exits 1, a non-blocking error, so the
+# guard would be silently off. Compiled in memory: no __pycache__ is written.
+$pyHooks = @(Get-ChildItem -Path $hookDir -Recurse -Filter "*.py" -File | ForEach-Object { $_.FullName })
+if ($pyHooks.Count -gt 0) {
+    $probe = "import sys`nfor p in sys.argv[1:]:`n    compile(open(p, encoding='utf-8').read(), p, 'exec')"
+    $pyArgs = @()
+    if ($PythonArgs) { $pyArgs += $PythonArgs }
+    & $PythonExe @pyArgs -c $probe @pyHooks
+    if ($LASTEXITCODE -ne 0) {
+        [Console]::Error.WriteLine("  ! a Python hook does not compile (above) — aborting before anything is copied.")
+        [Console]::Error.WriteLine("    Your currently installed hooks are untouched. Fix the source and re-run.")
+        exit 1
+    }
+}
+
+New-Item -ItemType Directory -Force -Path (Join-Path $Target "templates") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $Target "skills") | Out-Null
+
+# --- Central artifacts: hooks, agents, skills, rules, output-styles ----------
+# Owned by this repo — but the DIRECTORIES are shared with the user, who may
+# keep their own skills/agents/rules there. Removing each directory outright
+# (the previous form) silently deleted all of them on every re-install. So:
+# remove only the files this repo shipped LAST time (from the manifest), then
+# copy the current set and rewrite it. See install.sh for the same logic.
+$manifestPath = Join-Path $Target ".dotclaude-manifest"
+$oldManifest = if (Test-Path -LiteralPath $manifestPath) { @(Get-Content -LiteralPath $manifestPath) } else { @() }
+$emptied = @()
+foreach ($rel in $oldManifest) {
+    if ([string]::IsNullOrWhiteSpace($rel) -or $rel -like "*..*") { continue }
+    # -LiteralPath: a manifest line holding [ ] * ? must name one file, never a
+    # wildcard over the user's files.
+    $victim = Join-Path $Target ($rel -replace '/', '\')
+    if (Test-Path -LiteralPath $victim) { Remove-Item -LiteralPath $victim -Force -ErrorAction SilentlyContinue }
+    $emptied += (Split-Path -Parent $rel)
+}
+
+$manifest = @()
+foreach ($dir in @("hooks", "agents", "skills", "rules", "output-styles")) {
+    $src = Join-Path $ScriptDir "global\.claude\$dir"
+    if (-not (Test-Path $src)) { continue }
+    $dst = Join-Path $Target $dir
+    New-Item -ItemType Directory -Force -Path $dst | Out-Null
+    # File by file, skipping __pycache__: a dev checkout that ran the Python
+    # hooks or tests holds bytecode that must not land in a repo-owned tree.
+    $files = Get-ChildItem -Path $src -Recurse -File |
+        Where-Object { $_.FullName -notmatch '[\\/]__pycache__[\\/]' }
+    foreach ($f in $files) {
+        $rel = $f.FullName.Substring($src.Length).TrimStart('\', '/') -replace '\\', '/'
+        # Windows uses the .ps1 hooks, so the .sh siblings in hooks/ are never
+        # written (a .sh anywhere else IS, and stays tracked). Copying them and
+        # deleting hooks\*.sh afterwards also deleted the user's own Git Bash hooks.
+        if ($dir -eq "hooks" -and $rel -like "*.sh") { continue }
+        $destFile = Join-Path $dst ($rel -replace '/', [System.IO.Path]::DirectorySeparatorChar)
+        # A user file that shares a shipped name would be overwritten and then
+        # adopted into the manifest. Keep a copy and say so.
+        if ((Test-Path -LiteralPath $destFile) -and ($oldManifest -notcontains "$dir/$rel")) {
+            Copy-Item -LiteralPath $destFile -Destination "$destFile.user-backup" -Force
+            Write-Host "  ! ~/.claude/$dir/$rel was yours, not dotclaude's; saved as $rel.user-backup before replacing it"
+        }
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destFile) | Out-Null
+        Copy-Item -LiteralPath $f.FullName -Destination $destFile -Force
+        $manifest += "$dir/$rel"
+    }
+}
+# Removing a skill's files leaves its directory behind, and an empty
+# skills\<name>\ still shows up in the skill listing as a phantom. Prune only
+# the directories removing our own files emptied — an empty directory the user
+# made is theirs — and never climb above the top-level tree.
+foreach ($d in ($emptied | Sort-Object -Unique -Descending)) {
+    while ($d -and ($d -match '[\\/]')) {
+        $full = Join-Path $Target ($d -replace '/', '\')
+        if (-not (Test-Path -LiteralPath $full) -or (Get-ChildItem -LiteralPath $full -Force)) { break }
+        Remove-Item -LiteralPath $full -Force
+        $d = Split-Path -Parent $d
+    }
+}
+$manifest | Set-Content -Path $manifestPath -Encoding UTF8
+# A hook this repo stopped shipping is still wired in every project deployed
+# with it; its entry now points at a deleted script. Say how to clean that up.
+$retired = @($oldManifest | Where-Object { $_ -match '^hooks/[^/]+$' -and $manifest -notcontains $_ })
+if ($retired.Count -gt 0) {
+    Write-Host "  ! retired hooks removed: $(($retired | ForEach-Object { $_ -replace '^hooks/', '' }) -join ' ')"
+    Write-Host "    Projects that wired them: run /init-project --update (or init.ps1) to prune the entries."
+}
+Write-Host "  - central hooks/agents/skills/rules/output-styles installed (.ps1 + .py hooks)"
+
 # Mirrors OWNED/SEEDED in install.sh; check.py asserts the three sites agree.
 # OWNED is overwritten every install (it is the deterministic guarantee);
 # SEEDED is written only when the key is absent, so a /config choice survives
@@ -326,6 +351,7 @@ if ($srcSettings.PSObject.Properties.Name -contains "statusLine" -and $srcSettin
 
 $settingsPath = Join-Path $Target "settings.json"
 $existing = [ordered]@{}
+$raw = $null
 if (Test-Path $settingsPath) {
     try {
         $raw = Get-Content $settingsPath -Raw | ConvertFrom-Json
@@ -343,6 +369,24 @@ if (Test-Path $settingsPath) {
         Copy-Item $settingsPath $backup -Force
         [Console]::Error.WriteLine("  ! $settingsPath does not parse; your keys could not be preserved.")
         [Console]::Error.WriteLine("    A copy is saved at $backup — merge anything you need back by hand.")
+    }
+}
+# The owned keys are replaced — but a deny rule or hook the user added there
+# must never vanish without a trace. Compared as JSON, so key order is noise.
+if ($raw) {
+    $replaced = @()
+    foreach ($k in $owned) {
+        if ($null -eq $central[$k] -or -not ($raw.PSObject.Properties.Name -contains $k)) { continue }
+        $mine = $raw.$k | ConvertTo-Json -Depth 12 -Compress
+        $ours = $central[$k] | ConvertTo-Json -Depth 12 -Compress
+        if ($mine -ne $ours) { $replaced += $k }
+    }
+    if ($replaced.Count -gt 0) {
+        $backup = "$settingsPath.bak-" + (Get-Date -Format "yyyyMMdd-HHmmss")
+        Copy-Item -LiteralPath $settingsPath -Destination $backup -Force
+        [Console]::Error.WriteLine("  ! $($replaced -join ', ') was replaced in ~/.claude/settings.json (dotclaude owns it); your previous")
+        [Console]::Error.WriteLine("    file is saved at $backup — move personal rules or hooks to a project's")
+        [Console]::Error.WriteLine("    .claude/settings.json or settings.local.json, which merge on top.")
     }
 }
 # Skip null-valued central keys: install.sh copies an owned key only `if key in
@@ -371,7 +415,7 @@ foreach ($k in $seeded) {
 # strict JSON parsers reject — settings.json is read by more than PowerShell.
 [System.IO.File]::WriteAllText($settingsPath, ($existing | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))
 $seedNote = if ($seededNow.Count -gt 0) { " seeded $($seededNow -join ', ');" } else { "" }
-Write-Host "  - $settingsPath merged (PowerShell base permissions + hooks;$seedNote your other keys kept)"
+Write-Host "  - $settingsPath merged (permissions, hooks, attribution set to dotclaude's;$seedNote your other keys kept)"
 
 # --- Per-project template and the /init-project skill ------------------------
 $templateDest = Join-Path $Target "templates\project"

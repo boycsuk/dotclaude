@@ -338,6 +338,122 @@ def case_statusline_runs_under_any_shell(home, pwsh):
     return None
 
 
+def _read(path):
+    with open(path, "rb") as fh:
+        return fh.read()
+
+
+def case_reinstall_is_idempotent(home, pwsh):
+    # A re-install that changes nothing must write nothing: a merge that
+    # appended hook groups instead of replacing them doubled every guard on
+    # each run, and the matrices never ran the installer twice.
+    for _ in range(2):
+        if run_install(home, pwsh) != 0:
+            return "installer exited non-zero"
+    first = (_read(claude(home, "settings.json")), _read(claude(home, ".dotclaude-manifest")))
+    if run_install(home, pwsh) != 0:
+        return "third install exited non-zero"
+    second = (_read(claude(home, "settings.json")), _read(claude(home, ".dotclaude-manifest")))
+    if first != second:
+        return "a re-install changed settings.json or the manifest"
+    leftovers = glob.glob(claude(home, "settings.json.bak-*")) + glob.glob(
+        claude(home, "**", "*.user-backup"), recursive=True)
+    if leftovers:
+        return f"a plain re-install made backups of dotclaude's own output: {leftovers}"
+    return None
+
+
+def case_user_files_in_shared_trees_survive(home, pwsh):
+    # The trees are shared with the user. A glob delete of the other
+    # platform's hook siblings took the user's own hooks, and pruning every
+    # empty directory took a skill they had just started.
+    own = [claude(home, "hooks", "my-own.ps1"), claude(home, "hooks", "my-own.sh")]
+    for path in own:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as fh:
+            fh.write("# mine\n")
+    os.makedirs(claude(home, "skills", "my-wip"))
+    for _ in range(2):
+        if run_install(home, pwsh) != 0:
+            return "installer exited non-zero"
+    missing = [p for p in own + [claude(home, "skills", "my-wip")] if not os.path.exists(p)]
+    return f"the user's own files were deleted: {missing}" if missing else None
+
+
+def case_same_named_user_file_is_backed_up(home, pwsh):
+    mine = claude(home, "agents", "researcher.md")
+    os.makedirs(os.path.dirname(mine))
+    with open(mine, "w") as fh:
+        fh.write("my own researcher\n")
+    if run_install(home, pwsh) != 0:
+        return "installer exited non-zero"
+    backup = mine + ".user-backup"
+    if not os.path.exists(backup) or _read(backup) != b"my own researcher\n":
+        return "a user file sharing a shipped name was overwritten without a backup"
+    if "user-backup" not in LAST_OUTPUT[0]:
+        return "the backup was made silently"
+    return None
+
+
+def case_replaced_owned_keys_are_backed_up(home, pwsh):
+    os.makedirs(claude(home))
+    with open(claude(home, "settings.json"), "w") as fh:
+        json.dump({"theme": "dark", "permissions": {"deny": ["Read(~/.ssh/**)"]}}, fh)
+    if run_install(home, pwsh) != 0:
+        return "installer exited non-zero"
+    backups = glob.glob(claude(home, "settings.json.bak-*"))
+    if len(backups) != 1 or b"Read(~/.ssh/**)" not in _read(backups[0]):
+        return f"the user's own deny rule was replaced with no backup: {backups}"
+    if "was replaced" not in LAST_OUTPUT[0]:
+        return "the replacement was not reported"
+    with open(claude(home, "settings.json")) as fh:
+        if json.load(fh).get("theme") != "dark":
+            return "a personal key was lost"
+    return None
+
+
+def case_manifest_cannot_escape_claude_dir(home, pwsh):
+    if run_install(home, pwsh) != 0:
+        return "installer exited non-zero"
+    victim = os.path.join(home, "victim")
+    with open(victim, "w") as fh:
+        fh.write("keep\n")
+    with open(claude(home, ".dotclaude-manifest"), "a") as fh:
+        fh.write("../victim\nhooks/../../victim\n\n")
+    if run_install(home, pwsh) != 0:
+        return "re-install exited non-zero"
+    return None if os.path.exists(victim) else "a manifest line with .. deleted a file outside ~/.claude"
+
+
+def case_broken_hook_aborts_before_copying(home, pwsh):
+    # A hook that does not parse is a wall (every Bash call fails) and a .py
+    # one that does not compile is a guard silently off. Either must stop the
+    # install with the previous, working hooks still in place.
+    if run_install(home, pwsh) != 0:
+        return "first install exited non-zero"
+    before = {p: _read(p) for p in glob.glob(claude(home, "hooks", "**", "*"), recursive=True)
+              if os.path.isfile(p)}
+    for broken, text in (("guard-commit.py", "\ndef broken(:\n"),
+                         ("verify-on-edit.ps1" if pwsh else "verify-on-edit.sh",
+                          "\nif ($x) {\n" if pwsh else "\nif true; then\n")):
+        repo = tempfile.mkdtemp(prefix="install-repo-")
+        try:
+            for item in ("install.sh", "install.ps1", "global", "templates", "skills"):
+                src = os.path.join(REPO, item)
+                (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, os.path.join(repo, item))
+            with open(os.path.join(repo, "global/.claude/hooks", broken), "a") as fh:
+                fh.write(text)
+            if run_install(home, pwsh, repo) == 0:
+                return f"the installer accepted a broken {broken}"
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+        after = {p: _read(p) for p in glob.glob(claude(home, "hooks", "**", "*"), recursive=True)
+                 if os.path.isfile(p)}
+        if after != before:
+            return f"a broken {broken} still changed the installed hooks"
+    return None
+
+
 def case_output_style_defaults_on(home, pwsh):
     if run_install(home, pwsh) != 0:
         return "installer exited non-zero"
@@ -361,6 +477,12 @@ CASES = [
     ("output style defaults on, a user choice is kept", case_output_style_defaults_on),
     ("a .py hook is installed, manifested and runs as wired", case_python_hook_installed_and_runs),
     ("an installed guard blocks through its wired command", case_installed_guard_blocks),
+    ("a re-install is byte-for-byte idempotent", case_reinstall_is_idempotent),
+    ("the user's own hooks and empty dirs survive", case_user_files_in_shared_trees_survive),
+    ("a same-named user file is backed up, not lost", case_same_named_user_file_is_backed_up),
+    ("replaced owned keys are backed up and reported", case_replaced_owned_keys_are_backed_up),
+    ("the manifest cannot delete outside ~/.claude", case_manifest_cannot_escape_claude_dir),
+    ("a broken hook aborts before anything is copied", case_broken_hook_aborts_before_copying),
     ("shell guards and rules cover both Bash and PowerShell", case_shell_guards_cover_both_tools),
     ("the status line runs under any shell, a broken seed is repaired", case_statusline_runs_under_any_shell),
     ("fresh install: settings, hooks, manifest", case_fresh_install),
