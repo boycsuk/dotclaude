@@ -239,7 +239,9 @@ def _():
                          ("guard-destructive", "tests/guard-destructive-cases.py"),
                          ("detect-secrets", "tests/detect-secrets-cases.py"),
                          ("guard-central-config", "tests/guard-central-config-cases.py"),
-                         ("verify-on-edit", "tests/verify-on-edit-cases.py")):
+                         ("verify-on-edit", "tests/verify-on-edit-cases.py"),
+                         ("guard-commit", "tests/guard-commit-cases.py"),
+                         ("guard-dependencies", "tests/guard-dependencies-cases.py")):
         if not os.path.exists(os.path.join(REPO, matrix)):
             fail("safety hooks have case matrices",
                  f"{hook} has no case matrix at {matrix}")
@@ -474,6 +476,21 @@ def _():
         if os.path.exists(os.path.join(REPO, "templates/project/mcp", f"{name}.json")):
             fail("obsolete manifest",
                  f"MCP server {name!r} is listed as obsolete but mcp/{name}.json still ships")
+
+
+# --- 12b. Every opt-out a hook honours is documented ---------------------------
+@check("opt-outs documented")
+def _():
+    # An opt-out nobody can discover is a guard nobody can relax on purpose,
+    # so users disable the whole hook instead.
+    example = read("templates/project/.claude/settings.local.json.example")
+    keys = set()
+    for name in py_hooks():
+        keys |= set(re.findall(r'local_opt_out\(\w+, "(\w+)"\)', read(f"global/.claude/hooks/{name}.py")))
+    for key in sorted(keys):
+        if f'"{key}"' not in example:
+            fail("opt-outs documented",
+                 f"a hook honours {key!r} but settings.local.json.example never explains it")
 
 
 # --- 13. The LSP plugin catalog is complete and well-formed -------------------

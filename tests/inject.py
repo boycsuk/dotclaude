@@ -200,7 +200,14 @@ def mixed_wildcard_rule(repo):
     _replace(repo, "global/.claude/settings.json", '"Bash(mkfs.*)"', '"Bash(mkfs.*:*)"')
 
 
+def undocument_opt_out(repo):
+    """An opt-out missing from settings.local.json.example is undiscoverable."""
+    _replace(repo, "templates/project/.claude/settings.local.json.example",
+             '"allowCommitTrailers"', '"someOtherKey"')
+
+
 REGRESSIONS = {
+    "undocument-opt-out": undocument_opt_out,
     "mixed-wildcard-rule": mixed_wildcard_rule,
     "drop-py-hook-kind": drop_py_hook_kind,
     "rewrite-hook-without-matrix": rewrite_hook_without_matrix,

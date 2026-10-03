@@ -74,6 +74,16 @@
             "type": "command",
             "command": "\"$HOME\"/.claude/hooks/guard-push-main.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$HOME\"/.claude/hooks/guard-commit.py",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$HOME\"/.claude/hooks/guard-dependencies.py",
+            "timeout": 5
           }
         ]
       },
@@ -83,6 +93,11 @@
           {
             "type": "command",
             "command": "\"$HOME\"/.claude/hooks/guard-central-config.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$HOME\"/.claude/hooks/guard-dependencies.py",
             "timeout": 5
           }
         ]
