@@ -25,6 +25,9 @@ def main():
         return 0
     project = sys.argv[2] if len(sys.argv) == 3 else "."
     path = os.path.join(project, ".claude", "settings.json")
+    if os.path.islink(path) or os.path.islink(os.path.dirname(path)):
+        print(f"  ! {path} goes through a symlink; not writing through it", file=sys.stderr)
+        return 0
     try:
         with open(sys.argv[1], encoding="utf-8-sig") as fh:
             wanted = json.load(fh)

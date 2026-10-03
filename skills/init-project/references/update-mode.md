@@ -45,12 +45,15 @@ files that were missing and drift-reports `settings.local.json.example`:
 bash ~/.claude/templates/project/init.sh --update [--xcode] [--ui] [--codebase-memory] [--lsp=<plugin>]
 ```
 
+On native Windows (SKILL.md step 1), every `init.sh` command in this file is
+`powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\templates\project\init.ps1"`
+with the same flags.
+
 Include `--xcode` only if `.mcp.json` has an `xcode` entry
 (`grep -q '"xcode"' ./.mcp.json`), `--ui` only if it has a `playwright`
 entry, and `--codebase-memory` only if it has a `codebase-memory-mcp` entry. Re-passing any of them is safe:
 all merge idempotently. Omitting a flag on a re-deploy does **not** remove its
 server — `.mcp.json` is never rewritten except by the flag that owns the entry.
-(`--db` is accepted but a no-op now — the db-inspector agent is central.)
 
 **Many projects at once.** To refresh every dotclaude project under a folder
 (for example after a dotclaude change that retires an artifact), the user runs,
@@ -90,19 +93,22 @@ What `--update` does (implemented in `init.sh`):
 - `settings.json` (the per-project stub), `CLAUDE.md`, `CHANGELOG.md`, `docs/*`
   are seeded only if absent — never overwritten (user content).
 - `settings.local.json.example` is refreshed if untouched; if the user edited
-  it, it is kept and a `DRIFT:` line is emitted.
+  it, it is kept (§1c reports it).
 - Hook entries that point at hooks dotclaude no longer ships (listed in
   `templates/project/obsolete.json`) are pruned from `.claude/settings.json`
   and `settings.local.json` — every deploy does this, not only `--update`. It
   is the one case where a deploy edits an existing settings file, and it only
-  ever removes entries whose script is already gone. MCP servers and
-  directories in the manifest are reported, never removed (§1e).
+  ever removes entries whose script is already gone. MCP servers in the
+  manifest are removed only with `--remove-obsolete-mcp` (the user's choice in
+  §1e; `--recursive` always passes it); directories are never removed.
 - No hooks/agents/skills/rules drift here — those live in `~/.claude/` and are
   updated via `git pull && ./install.sh` in the dotclaude repo.
 
 After the user runs the command and confirms `deploy OK`, run §1c (Drift report),
 §1d (CLAUDE.md bullet reconciliation), and §1e (obsolete-artifact
-reconciliation), then skip to step 8 (verify).
+reconciliation). If `docs/conventions.md` still contains `{{WORKING_LANGUAGE}}`
+(the deploy just seeded it into a project that predates it), fill it as
+SKILL.md step 6 describes. Then skip to step 8 (verify).
 
 ### Path B: Reconfigure
 
@@ -126,9 +132,9 @@ This destroys local edits in `.claude/`. Before proceeding, ask the user explici
 
 ## 1c. Drift report (after Path A or Path B)
 
-After `init.sh --update` finishes, parse any `DRIFT:` lines it emitted to stderr. With the centralized model the per-project surface is tiny, so the only thing that can drift is `settings.local.json.example` (the user edited it and the template changed it). The hooks/agents/skills/rules no longer live in the project, so they never drift here — they are updated centrally via `git pull && ./install.sh` in the dotclaude repo.
+The deploy prints its `DRIFT:` lines in the user's terminal, which this session never sees, so read `SETTINGS_EXAMPLE_DRIFT` from `python3 ~/.claude/skills/init-project/scripts/detect-drift.py` instead (`YES` = edited and different from the template, `NO`, `ABSENT`, `UNKNOWN`). With the centralized model the per-project surface is tiny, so the only thing that can drift is `settings.local.json.example` (the user edited it and the template changed it). The hooks/agents/skills/rules no longer live in the project, so they never drift here — they are updated centrally via `git pull && ./install.sh` in the dotclaude repo.
 
-If there were no DRIFT lines, tell the user: *"All clean — no divergences in the per-project files."* Move on to §1d.
+If it is not `YES`, tell the user: *"All clean — no divergences in the per-project files."* Move on to §1d.
 
 If `settings.local.json.example` drifted, show the user the diff command so they can reconcile by hand:
 
@@ -205,10 +211,16 @@ directory, each description giving the `reason` from `obsolete.json`:
 
 - "These were deployed by an older dotclaude and are no longer maintained. Which do you want to remove?"
 
-For each selected **server**, use `Edit` on `./.mcp.json` to delete only that
-key under `mcpServers` (keep every other server), and remove its
-`mcp__<name>__*` entry from `.claude/settings.json` `permissions.allow` if
-present. Tell the user to reopen the session so the MCP change takes effect.
+For the selected **servers**, do not edit by hand: print the deploy command
+with `--remove-obsolete-mcp` for the user to run from their terminal
+(`bash ~/.claude/templates/project/init.sh --update --remove-obsolete-mcp`
+plus the project's usual flags). It removes the servers from `.mcp.json` and
+every reference to them — `allow`/`ask`/`deny` rules and the
+`enabledMcpjsonServers`/`disabledMcpjsonServers` entries in
+`settings.local.json` — which a hand edit kept missing. It removes every
+obsolete server, so if the user selected only some, tell them which others it
+will also drop and let them decide. Tell the user to reopen the session so the
+MCP change takes effect.
 If the user still has the binary installed, mention it can be uninstalled
 (e.g. `uv tool uninstall serena-agent`, `uv tool uninstall graphifyy`) — their
 call, never yours.

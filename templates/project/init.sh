@@ -75,10 +75,14 @@
 #   6  --xcode requested but `xcrun mcpbridge` is unavailable (needs Xcode 26.3+)
 #   7  --ui requested but 'npx' is not in PATH
 #   8  --codebase-memory requested but 'codebase-memory-mcp' is not in PATH
-#   9  unknown flag, or a directory argument without --recursive: nothing was
-#      deployed. (Older versions only warned and deployed anyway — which is how
+#   9  unknown flag, or a directory argument (or --yes / --dry-run / --depth)
+#      without --recursive: nothing was deployed. A `--dry-run` that deployed
+#      anyway is exactly what this prevents. (Older versions only warned and deployed anyway — which is how
 #      an `init.sh --update --recursive .` run by a version without
 #      --recursive seeded the template into a folder of projects.)
+#  10  --recursive: at least one project failed (each is listed)
+#  11  --recursive: cancelled, or no terminal to confirm and no --yes
+#  12  --recursive: python3 is missing (the walker runs on it)
 
 set -euo pipefail
 
@@ -104,7 +108,7 @@ for arg in "$@"; do
     --codebase-memory) INSTALL_CODEBASE_MEMORY=true ;;
     --update)         : ;;  # informational: seeding always skips existing files
     --recursive)      RECURSIVE=true ;;
-    --yes|--dry-run)  RECURSIVE_ARGS+=("$arg") ;;
+    --yes|--dry-run|--depth=*) RECURSIVE_ARGS+=("$arg") ;;
     --remove-obsolete-mcp) REMOVE_OBSOLETE_MCP=true ;;
     --db)             : ;;  # accepted, no-op (db-inspector is central now)
     --fullstack)      FULLSTACK=true ;;
@@ -119,6 +123,11 @@ done
 if [ -n "${POSITIONAL:-}" ]; then
   if [ "$RECURSIVE" = "true" ]; then RECURSIVE_DIR="$POSITIONAL"
   else UNKNOWN+=("$POSITIONAL (a directory is only taken with --recursive)"); fi
+fi
+if [ "$RECURSIVE" != "true" ]; then
+  for a in ${RECURSIVE_ARGS[@]+"${RECURSIVE_ARGS[@]}"}; do
+    UNKNOWN+=("$a (only meaningful with --recursive)")
+  done
 fi
 if [ ${#UNKNOWN[@]} -gt 0 ]; then
   for u in "${UNKNOWN[@]}"; do echo "ERROR: unknown argument: $u" >&2; done
@@ -136,6 +145,7 @@ fi
 # Usage: merge_mcp_servers <fragment.json> [...]  — JSON via python3, never jq
 # (DESIGN.md §5). Never fatal: a broken .mcp.json warns and the deploy continues.
 merge_mcp_servers() {
+  is_link ./.mcp.json && return 0
   # Fragments travel as argv, not a whitespace-split env var: a $HOME with a
   # space broke every fragment path and degraded silently to the WARN path.
   if python3 - "$@" <<'PY'
@@ -195,7 +205,7 @@ PY
 # exist. Re-runs and existing files are always preserved.
 seed_copy() {
   local src="$1" dst="$2"
-  if [ -e "$dst" ]; then
+  if [ -e "$dst" ] || [ -L "$dst" ]; then
     echo "  - skip: $dst (already exists)" >&2
     return 0
   fi
@@ -216,12 +226,28 @@ fi
 # --- Recursive mode: hand over to the shared walker, which calls this script --
 # once per project found (with --update and that project's own flags).
 if [ "$RECURSIVE" = "true" ]; then
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "ERROR: --recursive needs python3 (the walker runs on it)." >&2
+    exit 12
+  fi
   self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
   exec python3 "$TEMPLATE_DIR/scripts/update-projects.py" "$RECURSIVE_DIR" --init "$self" \
     ${RECURSIVE_ARGS[@]+"${RECURSIVE_ARGS[@]}"}
 fi
 
+# A symlink in the project is never written through: it can point anywhere
+# (another repo's .gitignore, ~/.claude.json), and --recursive deploys into
+# every project under a directory. Each such path is reported and skipped.
+is_link() {
+  if [ -L "$1" ]; then
+    echo "WARN: $1 is a symlink; not writing through it (it could point outside the project)." >&2
+    return 0
+  fi
+  return 1
+}
+
 # --- Per-project .claude/ : only the project-specific files ------------------
+if ! is_link "$DST_CLAUDE"; then
 mkdir -p "$DST_CLAUDE"
 
 # settings.json: a per-project stub (the base config is central). Seed only if
@@ -237,12 +263,14 @@ if [ -f "$SRC_CLAUDE/settings.local.json.example" ]; then
     echo "DRIFT: .claude/settings.local.json.example (template updated; your edits kept)" >&2
   fi
 fi
+fi
 
 # --- Obsolete artifacts: prune dead hook entries, report the rest ------------
 # The deploy merges only ever add; a hook dotclaude stopped shipping stays wired
 # in the project and errors on every matching tool call once install.sh removes
-# its script. One Python implementation serves init.sh and init.ps1 alike. The
-# KEY= lines on stdout are for detect-drift.py; the human report is on stderr.
+# its script. One Python implementation serves init.sh and init.ps1 alike. Its
+# human report is on stderr; the KEY= lines on stdout are for its tests only
+# (detect-drift.py imports the same detection instead of parsing them).
 if [ -f "$TEMPLATE_DIR/obsolete.json" ]; then
   prune_args=()
   [ "$REMOVE_OBSOLETE_MCP" = "true" ] && prune_args+=(--remove-mcp)
@@ -251,16 +279,16 @@ if [ -f "$TEMPLATE_DIR/obsolete.json" ]; then
 fi
 
 # --- CLAUDE.md, CHANGELOG.md : user-owned, seed when absent -------------------
-[ -f ./CLAUDE.md    ] || cp "$TEMPLATE_DIR/CLAUDE.md.template"    ./CLAUDE.md
-[ -f ./CHANGELOG.md ] || cp "$TEMPLATE_DIR/CHANGELOG.md.template" ./CHANGELOG.md
+[ -e ./CLAUDE.md ]    || is_link ./CLAUDE.md    || cp "$TEMPLATE_DIR/CLAUDE.md.template"    ./CLAUDE.md
+[ -e ./CHANGELOG.md ] || is_link ./CHANGELOG.md || cp "$TEMPLATE_DIR/CHANGELOG.md.template" ./CHANGELOG.md
 
 # --- docs/ : portable contract surface, seed each file when absent -----------
-if [ -d "$TEMPLATE_DIR/docs" ]; then
+if [ -d "$TEMPLATE_DIR/docs" ] && ! is_link ./docs; then
   mkdir -p ./docs
   for f in "$TEMPLATE_DIR"/docs/*.md; do
     [ -e "$f" ] || continue
     name="$(basename "$f")"
-    [ -f "./docs/$name" ] || cp "$f" "./docs/$name"
+    [ -e "./docs/$name" ] || is_link "./docs/$name" || cp "$f" "./docs/$name"
   done
 fi
 
@@ -271,14 +299,22 @@ fi
 # real git under LC_ALL=C: both the template's own `!.env.example` and a user's
 # `!keep.log` ended up ignored. Appending only the missing lines keeps every
 # negation behind its parent and preserves the user's comments and grouping.
-if [ -f ./.gitignore ]; then
-  if ! grep -qxF "# --- dotclaude template ---" ./.gitignore; then
-    printf '\n# --- dotclaude template ---\n' >> ./.gitignore
+if is_link ./.gitignore; then
+  :
+elif [ -f ./.gitignore ]; then
+  # Compare without CR (a CRLF file never matched, so every line was appended
+  # again) and end the user's last line before appending (a file without a
+  # final newline got `build.log.codebase-memory/`, breaking both patterns).
+  eol='\n'
+  grep -q $'\r' ./.gitignore && eol='\r\n'
+  [ -s ./.gitignore ] && [ -n "$(tail -c 1 ./.gitignore)" ] && printf "$eol" >> ./.gitignore
+  if ! tr -d '\r' < ./.gitignore | grep -qxF "# --- dotclaude template ---"; then
+    printf "${eol}# --- dotclaude template ---${eol}" >> ./.gitignore
   fi
   while IFS= read -r line || [ -n "$line" ]; do
     [ -z "$line" ] && continue
     # `--` so a template line starting with '-' is a pattern, not grep options.
-    grep -qxF -- "$line" ./.gitignore || printf '%s\n' "$line" >> ./.gitignore
+    tr -d '\r' < ./.gitignore | grep -qxF -- "$line" || printf "%s${eol}" "$line" >> ./.gitignore
   done < "$TEMPLATE_DIR/.gitignore.template"
 else
   cp "$TEMPLATE_DIR/.gitignore.template" ./.gitignore

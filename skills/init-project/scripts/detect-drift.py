@@ -86,18 +86,48 @@ def check_allow_push_main(prune):
     return "TRUE" if local.get("allowPushToMain") is True else "FALSE"
 
 
+def check_mcp_servers(prune):
+    """§8 verification: the servers actually in .mcp.json (a failed merge only WARNs)."""
+    data, ok = read_json(prune, ".mcp.json")
+    if not ok or (data is not None and not isinstance(data, dict)):
+        return UNKNOWN
+    servers = (data or {}).get("mcpServers")
+    return ",".join(sorted(servers)) if isinstance(servers, dict) else ""
+
+
+def check_example_drift():
+    """§1c: the deploy reports example drift on the user's terminal, which the skill never sees."""
+    mine = os.path.join(".claude", "settings.local.json.example")
+    ours = os.path.join(template_dir(), ".claude", "settings.local.json.example")
+    try:
+        with open(mine, "rb") as fh:
+            local = fh.read()
+    except FileNotFoundError:
+        return "ABSENT"
+    except OSError:
+        return UNKNOWN
+    try:
+        with open(ours, "rb") as fh:
+            return "NO" if fh.read() == local else "YES"
+    except OSError:
+        return UNKNOWN
+
+
 def main():
     prune = load_prune()
     if prune is None:
-        obsolete_hooks = obsolete_mcp = obsolete_files = allow_push = UNKNOWN
+        obsolete_hooks = obsolete_mcp = obsolete_files = allow_push = servers = UNKNOWN
     else:
         obsolete_hooks, obsolete_mcp, obsolete_files = check_obsolete(prune)
         allow_push = check_allow_push_main(prune)
+        servers = check_mcp_servers(prune)
     for key, value in (
         ("OBSOLETE_HOOKS", obsolete_hooks),
         ("OBSOLETE_MCP", obsolete_mcp),
         ("OBSOLETE_FILES", obsolete_files),
         ("ALLOW_PUSH_MAIN", allow_push),
+        ("MCP_SERVERS", servers),
+        ("SETTINGS_EXAMPLE_DRIFT", check_example_drift()),
     ):
         print(f"{key}={value}")
     return 0

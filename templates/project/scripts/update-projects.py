@@ -18,7 +18,8 @@ user would run by hand:
    obsolete directories (listed, never deleted) — and ask before touching
    anything, unless --yes. --dry-run stops after the plan.
 4. Run `init --update <flags> --remove-obsolete-mcp` in each project and
-   summarise. Exit 1 if any project failed.
+   summarise, echoing each project's WARN and DRIFT lines. Exit 10 if any
+   project failed, 11 if the run was cancelled or could not ask.
 """
 
 import argparse
@@ -34,6 +35,7 @@ STUB_MARKER = "Per-project settings ONLY"
 SKIP_DIRS = {".git", "node_modules", "vendor", ".venv", "venv", "__pycache__", "dist",
              "build", "target", ".next", ".cache", ".tox", "site-packages", "Pods"}
 SERVER_FLAGS = {"playwright": "--ui", "codebase-memory-mcp": "--codebase-memory", "xcode": "--xcode"}
+EXIT_FAILED, EXIT_CANCELLED = 10, 11       # documented in init.sh; 1 means "template missing"
 
 # The deploy prunes with prune-obsolete.py; planning with the same functions is
 # what keeps "obsolete hooks: N (pruned)" true.
@@ -160,11 +162,11 @@ def main():
     if not args.yes:
         if not sys.stdin.isatty():
             print("\nNot a terminal and no --yes: nothing changed.", file=sys.stderr)
-            return 1
+            return EXIT_CANCELLED
         answer = input(f"\nUpdate these {len(plans)} project(s)? [s/N] ").strip().lower()
         if answer not in ("s", "si", "sí", "y", "yes"):
             print("Cancelled: nothing changed.")
-            return 1
+            return EXIT_CANCELLED
 
     failed = []
     print()
@@ -173,6 +175,11 @@ def main():
         proc = run_init(args.init, args.pwsh, p["project"], p["flags"])
         ok = proc.returncode == 0
         print(f"  {'ok    ' if ok else 'FAILED'} {rel}" + ("" if ok else f" (exit {proc.returncode})"))
+        # A deploy that succeeded can still have warned (a broken .mcp.json, a
+        # missing language server) or drifted; those lines must not vanish.
+        for line in (proc.stderr or "").splitlines() if ok else []:
+            if line.startswith(("WARN:", "DRIFT:")):
+                print(f"           {line}")
         if not ok:
             failed.append(rel)
             tail = (proc.stderr or proc.stdout).strip().splitlines()[-5:]
@@ -184,7 +191,7 @@ def main():
         for rel, d in leftovers:
             print(f"  {os.path.join(rel, d)}")
     print(f"\n{len(plans) - len(failed)} updated, {len(failed)} failed.")
-    return 1 if failed else 0
+    return EXIT_FAILED if failed else 0
 
 
 if __name__ == "__main__":

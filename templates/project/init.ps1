@@ -59,7 +59,7 @@ foreach ($arg in $args) {
     elseif ($arg -eq "--codebase-memory") { $InstallCodebaseMemory = $true }
     elseif ($arg -eq "--update")        { }  # informational: seeding always skips existing files
     elseif ($arg -eq "--recursive")     { $Recursive = $true }
-    elseif ($arg -eq "--yes" -or $arg -eq "--dry-run") { $RecursiveArgs += $arg }
+    elseif ($arg -eq "--yes" -or $arg -eq "--dry-run" -or $arg -like "--depth=*") { $RecursiveArgs += $arg }
     elseif ($arg -eq "--remove-obsolete-mcp") { $RemoveObsoleteMcp = $true }
     elseif ($arg -eq "--db")            { }  # accepted, no-op (db-inspector is central now)
     elseif ($arg -eq "--fullstack")     { $Fullstack     = $true }
@@ -73,6 +73,9 @@ foreach ($arg in $args) {
 if ($Positional) {
     if ($Recursive) { $RecursiveDir = $Positional }
     else { $Unknown += "$Positional (a directory is only taken with --recursive)" }
+}
+if (-not $Recursive) {
+    foreach ($a in $RecursiveArgs) { $Unknown += "$a (only meaningful with --recursive)" }
 }
 # Exit 9 before anything is written: older versions only warned and deployed
 # anyway, which seeded the template into a folder of projects (see init.sh).
@@ -90,6 +93,7 @@ function Merge-McpServers {
     param([string[]]$Fragments)
 
     $dst = ".\.mcp.json"
+    if (Test-IsLink $dst) { return }
     try {
         if (Test-Path $dst) {
             $cfg = Get-Content $dst -Raw | ConvertFrom-Json
@@ -188,9 +192,25 @@ function Invoke-TemplatePython {
     if (-not $ok) { [Console]::Error.WriteLine("WARN: $What did not complete; deploy continues.") }
 }
 
+# A symlink in the project is never written through: it can point anywhere,
+# and --recursive deploys into every project under a directory (see init.sh).
+function Test-IsLink {
+    param([string]$Path)
+    try {
+        $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    } catch {
+        return $false
+    }
+    if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+        [Console]::Error.WriteLine("WARN: $Path is a symlink; not writing through it (it could point outside the project).")
+        return $true
+    }
+    return $false
+}
+
 function Seed-Copy {
     param([string]$Src, [string]$Dst)
-    if (Test-Path $Dst) {
+    if ((Test-IsLink $Dst) -or (Test-Path -LiteralPath $Dst)) {
         Write-Host "  - skip: $Dst (already exists)"
         return
     }
@@ -222,7 +242,7 @@ if ($Recursive) {
     $py = Resolve-TemplatePython
     if (-not $py) {
         [Console]::Error.WriteLine("ERROR: --recursive needs a working Python (tried python3, python, py -3).")
-        exit 1
+        exit 12
     }
     $pwshExe = (Get-Process -Id $PID).Path
     $walkerArgs = @($py | Select-Object -Skip 1) + @((Join-Path $TemplateDir "scripts/update-projects.py"),
@@ -232,6 +252,8 @@ if ($Recursive) {
 }
 
 # --- Per-project .claude/ : only the project-specific files ------------------
+$claudeLinked = Test-IsLink $DstRoot
+if (-not $claudeLinked) {
 if (-not (Test-Path $DstRoot)) { New-Item -ItemType Directory -Path $DstRoot -Force | Out-Null }
 
 # settings.json: per-project stub (base config is central). Seed only if absent.
@@ -247,10 +269,11 @@ if (Test-Path $localExample) {
         [Console]::Error.WriteLine("DRIFT: .claude\settings.local.json.example (template updated; your edits kept)")
     }
 }
+}
 
 # --- Obsolete artifacts: prune dead hook entries, report the rest ------------
 # Lockstep sibling of the init.sh block, through the SAME Python script so the
-# pruning rules exist once. stdout carries KEY= lines for detect-drift.py only.
+# pruning rules exist once. Its stdout KEY= lines are for its tests only.
 $obsolete = Join-Path $TemplateDir "obsolete.json"
 if (Test-Path $obsolete) {
     $pruneArgs = @((Join-Path $TemplateDir "scripts/prune-obsolete.py"), $obsolete, (Get-Location).Path)
@@ -259,16 +282,16 @@ if (Test-Path $obsolete) {
 }
 
 # --- CLAUDE.md, CHANGELOG.md : user-owned, seed when absent ------------------
-if (-not (Test-Path ".\CLAUDE.md"))    { Copy-Item (Join-Path $TemplateDir "CLAUDE.md.template")    ".\CLAUDE.md" }
-if (-not (Test-Path ".\CHANGELOG.md")) { Copy-Item (Join-Path $TemplateDir "CHANGELOG.md.template") ".\CHANGELOG.md" }
+if (-not (Test-IsLink ".\CLAUDE.md") -and -not (Test-Path ".\CLAUDE.md"))       { Copy-Item (Join-Path $TemplateDir "CLAUDE.md.template")    ".\CLAUDE.md" }
+if (-not (Test-IsLink ".\CHANGELOG.md") -and -not (Test-Path ".\CHANGELOG.md")) { Copy-Item (Join-Path $TemplateDir "CHANGELOG.md.template") ".\CHANGELOG.md" }
 
 # --- docs/ : portable contract surface, seed each file when absent -----------
 $DocsSrc = Join-Path $TemplateDir "docs"
-if (Test-Path $DocsSrc) {
+if ((Test-Path $DocsSrc) -and -not (Test-IsLink ".\docs")) {
     if (-not (Test-Path ".\docs")) { New-Item -ItemType Directory -Path ".\docs" -Force | Out-Null }
     Get-ChildItem -Path $DocsSrc -Filter "*.md" -File | ForEach-Object {
         $dst = Join-Path ".\docs" $_.Name
-        if (-not (Test-Path $dst)) { Copy-Item -Path $_.FullName -Destination $dst }
+        if (-not (Test-IsLink $dst) -and -not (Test-Path $dst)) { Copy-Item -Path $_.FullName -Destination $dst }
     }
 }
 
@@ -279,7 +302,9 @@ if (Test-Path $DocsSrc) {
 # template's own `!.env.example` and a user's `!keep.log` ended up ignored.
 $gi = ".\.gitignore"
 $giTpl = Join-Path $TemplateDir ".gitignore.template"
-if (Test-Path $gi) {
+if (Test-IsLink $gi) {
+    # reported by Test-IsLink; nothing written
+} elseif (Test-Path $gi) {
     # Appends are accumulated and written once through Write-Utf8NoBom rather
     # than with Add-Content: on PS 5.1 Add-Content defaults to ANSI and CRLF,
     # which mangles a non-ASCII pattern and mixes line endings in a checkout

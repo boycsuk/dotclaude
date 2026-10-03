@@ -65,7 +65,7 @@ Skip §0. The project already exists and its high-level description already live
 Use the regular `Bash` tool to gather context. None of these need to be `!`-blocks.
 
 - `pwd` — current project directory.
-- `uname -s` — `Linux` or `Darwin` → the user runs the `bash`/`init.sh` command in step 5. If it fails (native Windows without WSL), they run `init.ps1` instead.
+- `uname -s` — `Linux` or `Darwin` → the user runs the `bash`/`init.sh` command in step 5. `MINGW*`, `MSYS*` or `CYGWIN*` means native Windows (Claude Code runs Bash through Git Bash there) → they run `init.ps1`; so does a `uname` that fails.
 - `uname -r` — if output contains `microsoft`, it's WSL → still the `bash` path.
 - `ls -la .claude` — **if `.claude/` already exists, this is a re-run.** Load `references/update-mode.md` and follow it instead of the first-time flow below.
 - `ls package.json pyproject.toml requirements.txt Cargo.toml go.mod Gemfile Makefile` — present files are stack signals.
@@ -93,8 +93,7 @@ Based on steps 1-4, choose the right flags. **Show the user this block verbatim*
 | `--ui` | User selected the Playwright MCP in §3 — recommend it whenever the project has a web UI. Merges the `playwright` browser server (`npx @playwright/mcp`) into `.mcp.json`: the model can navigate, resize and screenshot the running app, which is what the central `/implement-ui` skill uses to verify UI work against a design reference. Combines with the other MCP flags in any order. See `references/mcp-and-db.md`. |
 | `--codebase-memory` | User selected codebase-memory-mcp in §3. Merges the `codebase-memory-mcp` server (persistent code graph: callers, impact of a change, dead code, architecture) into `.mcp.json` AND its read-only tool names into the project `settings.json` `permissions.allow` (do not add them by hand). Exit 8 if the binary is missing. See `references/mcp-and-db.md`. |
 | `--lsp=<plugin>` | **Always** for a code project whose language has an official LSP plugin — map the language from §2 through `~/.claude/templates/project/lsp-plugins.json` (e.g. Python → `--lsp=pyright-lsp`, TypeScript/JavaScript → `--lsp=typescript-lsp`); repeat the flag for each main language. It runs `claude plugin install <plugin>@claude-plugins-official --scope project`, which records the plugin in `.claude/settings.json`. The language-server binary must be on PATH (the catalog has the install hint; the script warns if it is missing). No official plugin for the language (e.g. Bash, PowerShell) → tell the user and pass nothing; do NOT offer community plugins. See `references/mcp-and-db.md` §3b. |
-| `--update` | Re-run path (see `references/update-mode.md`). Never on a first-time deploy. |
-| `--db` | Optional, no-op (kept for compatibility). The db-inspector agent is central now; a SQL stack only affects which client permission you add to the project `settings.json` stub in step 6, not a flag. |
+| `--update` | Re-run path (see `references/update-mode.md`). Informational: every deploy already skips files that exist, so it changes nothing by itself — but it tells the reader this is a re-deploy. Never on a first-time deploy. |
 
 ### Scaffold flags (first-time deploy only — re-runs skip files that exist)
 
@@ -149,7 +148,10 @@ If the script fails:
 - Exit 6: `xcrun mcpbridge` unavailable. Needs Xcode 26.3+; check `xcode-select -p` points at it, then enable MCP in Xcode > Settings > Intelligence.
 - Exit 7: `npx` missing (`--ui` needs it to launch the playwright server). Install Node.js — it ships npx — and re-run.
 - Exit 8: `codebase-memory-mcp` missing. Show the install options the script printed (binary only — never its `install` subcommand) and re-run.
-- Exit 9: unknown flag, or a directory given without `--recursive`. Nothing was deployed; check the command (or update the install if the flag is new).
+- Exit 9: unknown flag, or a directory, `--yes`, `--dry-run` or `--depth` given without `--recursive`. Nothing was deployed; check the command (or update the install if the flag is new).
+- Exit 10 (`--recursive`): at least one project failed; the output lists each with its last lines.
+- Exit 11 (`--recursive`): cancelled at the prompt, or run without a terminal and without `--yes`. Nothing changed.
+- Exit 12 (`--recursive`): no working Python; the walker runs on it.
 
 ### Pointer to `create-X` for app code
 
@@ -185,7 +187,7 @@ For any command that does not apply, write `<not configured>` with an HTML comme
 
 ### docs/conventions.md
 
-One placeholder to fill, since this file is copied verbatim by the deployer:
+One placeholder to fill, since this file is copied verbatim by the deployer (also on a re-run, if the file still contains it — `--update` seeds `conventions.md` into projects that predate it):
 - `{{WORKING_LANGUAGE}}` → the language the user actually works in (ask if it is not obvious from the conversation; the conventions themselves are language-neutral, only this line is per-user).
 
 **Leave the remaining `<!-- ... -->` blocks intact** — they are guides for the user to fill in WHY and Don't manually.
@@ -265,7 +267,9 @@ Use the regular `Bash` tool (a non-zero exit there is informative, not fatal):
 - `ls .claude/` — should show only the per-project files: `settings.json` and `settings.local.json.example`. The hooks/agents/skills/rules/output-styles are CENTRAL (`ls ~/.claude/` to see them) and are NOT copied into the project.
 - `ls CLAUDE.md CHANGELOG.md` — both must exist.
 - `ls docs/` — `README.md`, `backend.md`, `ui.md`, `user-stories.md`, `conventions.md` must exist (seeds for the portable contract surface).
-- If the user picked "Everything on main" in §7b: `python3 ~/.claude/skills/init-project/scripts/detect-drift.py` should report `ALLOW_PUSH_MAIN=TRUE`. (Inline `python3 -c` is blocked by the central `guard-destructive` hook — the checks live in that script.)
+- Run `python3 ~/.claude/skills/init-project/scripts/detect-drift.py` once and read its lines. (Inline `python3 -c` is blocked by the central `guard-destructive` hook — the checks live in that script.)
+  - If the user picked "Everything on main" in §7b: `ALLOW_PUSH_MAIN=TRUE`.
+  - For every MCP flag in the command (`--xcode` → `xcode`, `--ui` → `playwright`, `--codebase-memory` → `codebase-memory-mcp`): its server must be listed in `MCP_SERVERS`. A merge failure only prints a WARN in the user's terminal and still ends in `deploy OK`, so a missing server here means it was NOT configured — say so, and do not add its permissions.
 
 Summarize to the user what was deployed.
 

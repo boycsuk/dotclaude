@@ -119,9 +119,7 @@ def prune_settings_file(path, matches):
     if not removed:
         return
     try:
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump(settings, fh, indent=2, ensure_ascii=False)
-            fh.write("\n")
+        _write(path, settings)
     except OSError as exc:
         print(f"  ! could not write {path} ({exc}); remove these hooks by hand: {removed}", file=sys.stderr)
         return
@@ -130,6 +128,10 @@ def prune_settings_file(path, matches):
 
 
 def _write(path, data):
+    # Never through a symlink: it can point outside the project, and
+    # --recursive deploys into every project under a directory.
+    if os.path.islink(path) or os.path.islink(os.path.dirname(path) or "."):
+        raise OSError("it goes through a symlink")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
         fh.write("\n")

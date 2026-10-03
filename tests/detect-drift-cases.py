@@ -51,7 +51,7 @@ def run(project, path_prefix=None):
 
 
 LEGACY = {"OBSOLETE_HOOKS": "1", "OBSOLETE_MCP": "serena",
-          "OBSOLETE_FILES": ".serena", "ALLOW_PUSH_MAIN": "TRUE"}
+          "OBSOLETE_FILES": ".serena", "ALLOW_PUSH_MAIN": "TRUE", "MCP_SERVERS": "serena"}
 
 
 def case_legacy(project):
@@ -95,8 +95,26 @@ def case_list_local(project):
 
 def case_clean(project):
     write(project, ".claude/settings.local.json", '{"allowPushToMain": false}')
-    return run(project), {"OBSOLETE_HOOKS": "0", "OBSOLETE_MCP": "",
-                          "OBSOLETE_FILES": "", "ALLOW_PUSH_MAIN": "FALSE"}
+    return run(project), {"OBSOLETE_HOOKS": "0", "OBSOLETE_MCP": "", "OBSOLETE_FILES": "",
+                          "ALLOW_PUSH_MAIN": "FALSE", "MCP_SERVERS": "", "SETTINGS_EXAMPLE_DRIFT": "ABSENT"}
+
+
+def case_example_drift(project):
+    # The deploy prints DRIFT on the user's terminal, which the skill never
+    # sees, so the skill reads it here.
+    with open(os.path.join(TEMPLATE_DIR, ".claude", "settings.local.json.example")) as fh:
+        write(project, ".claude/settings.local.json.example", fh.read())
+    first = run(project)
+    write(project, ".claude/settings.local.json.example", '{"edited": true}')
+    second = run(project)
+    if first[1].get("SETTINGS_EXAMPLE_DRIFT") != "NO":
+        return first, {"SETTINGS_EXAMPLE_DRIFT": "NO"}
+    return second, {"SETTINGS_EXAMPLE_DRIFT": "YES"}
+
+
+def case_mcp_servers(project):
+    write(project, ".mcp.json", '{"mcpServers": {"playwright": {}, "xcode": {}}}')
+    return run(project), {"MCP_SERVERS": "playwright,xcode"}
 
 
 CASES = [
@@ -107,6 +125,8 @@ CASES = [
     ("unreadable files report UNKNOWN, never clean or ABSENT", case_corrupt),
     ("a non-object settings.local.json reports UNKNOWN", case_list_local),
     ("a clean project reports nothing", case_clean),
+    ("an edited settings.local.json.example reports drift", case_example_drift),
+    ("the servers in .mcp.json are listed for the §8 check", case_mcp_servers),
 ]
 
 

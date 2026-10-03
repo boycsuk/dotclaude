@@ -57,7 +57,7 @@ If the project type is **Fullstack** (Case B step 5) — or if you detect that a
 
 - **Existing project that already matches:** confirm and document it. Do not move files around.
 - **Existing project with a different layout** (e.g. `apps/web` + `apps/api`, or backend at the root with a `frontend/` sibling): tell the user the convention and ask whether they want to migrate or keep their current layout. **Do not move files without explicit confirmation** — that is a high-impact change that deserves its own session, not a side effect of `/init-project`.
-- **Empty project:** ask whether to create the directories now. If yes, after the deploy step the user runs `mkdir -p backend clients/web scripts`; the skill itself does not create them (no shell side effects beyond `init.sh`).
+- **Empty project:** ask whether to create the directories now. If yes, add `--fullstack` to the deploy command: `init.sh` creates `backend/`, `clients/web/` and `scripts/` and seeds `.env.example` (the skill itself runs no shell side effects).
 
 In all cases, ensure `.env` is in `.gitignore` (the template's `.gitignore` already excludes it) and prompt the user to also commit a `.env.example`.
 
@@ -136,7 +136,7 @@ Add a new section `## WHAT — Deployment` summarizing the answers. Example for 
 - Bring-up: ./deploy.sh {start|stop|restart|logs} (APP_MODE in .env lets `start` branch dev vs prod; fill the function bodies for this project's runner)
 ```
 
-Adapt the bullets to the user's answers. If Caddy was chosen, also remind the user to commit a `Caddyfile` at the repo root with the basic reverse-proxy block — the skill does not create it but flags it as a TODO. Same for nginx (`nginx.conf`), Traefik (labels in `docker-compose.yml`).
+Adapt the bullets to the user's answers. If Caddy was chosen, `--proxy=caddy` writes a starter `Caddyfile` at the repo root; remind the user to commit it after adjusting the domain. nginx and Traefik have no scaffold yet: flag `nginx.conf` or the labels in `docker-compose.yml` as a TODO.
 
 `./deploy.sh` at the repo root is the natural home for the actual bring-up logic — it's the project's primary command, so it sits at the top level. `scripts/` is reserved for secondary automation (seed, migrations, codegen). The `--deploy-script` flag writes a **skeleton** (the `.ps1` variant on Windows) that accepts four subcommands:
 
