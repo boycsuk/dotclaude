@@ -43,7 +43,8 @@
 #              unknown plugin name each print a WARN with the fix. (Listing the
 #              plugin in enabledPlugins alone does NOT load it — verified: an
 #              uninstalled plugin stays off until installed.)
-#   --update   Re-deploy mode. Per-project files are user-owned: CLAUDE.md,
+#   --update   Informational: marks a re-deploy, but every deploy already
+#              behaves this way. Per-project files are user-owned: CLAUDE.md,
 #              CHANGELOG.md, docs/* and settings.json are only seeded when
 #              absent, never overwritten. settings.local.json.example is
 #              refreshed if untouched, drift-reported if edited. (There is no
