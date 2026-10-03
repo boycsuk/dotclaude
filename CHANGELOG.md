@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `.github/workflows/matrices.yml`: check.py, its self-test and every case matrix on ubuntu, macOS and Windows runners — on Windows under both `pwsh` and Windows PowerShell 5.1. Only Linux was ever tested, and the first run on a real Windows host found `install.ps1` unable to even parse under 5.1. `tests/run-matrices.py` runs the whole set, so every OS runs the same thing.
+- `.github/workflows/matrices.yml`: check.py, its self-test and every case matrix on ubuntu, macOS and Windows runners — on Windows under both `pwsh` and Windows PowerShell 5.1. Only Linux was ever tested, and the first run on a real Windows host found `install.ps1` unable to even parse under 5.1. `tests/run-matrices.py` runs the whole set, so every OS runs the same thing. The actions are pinned to their Node 24 majors (`checkout@v7`, `setup-python@v7`); Node 20 is deprecated on the runners.
 - `.gitattributes` forcing LF: Git for Windows checks out with `core.autocrlf=true`, giving every shell script and scaffold CRLF line endings that bash, and a Linux container running a deployed `deploy.sh`, cannot run.
 - `statusline.{sh,ps1}` and a seeded `statusLine` key, printing
   `<model> · <context>% ctx` below the prompt. Context percentage is the point:
