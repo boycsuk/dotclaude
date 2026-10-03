@@ -11,7 +11,7 @@
 # prunes hook entries dotclaude no longer ships (obsolete.json).
 #
 # Usage (run inside the target project directory):
-#   bash ~/.claude/templates/project/init.sh [--xcode] [--ui] [--lsp=<plugin>] [--update] [scaffold flags]
+#   bash ~/.claude/templates/project/init.sh [--xcode] [--ui] [--codebase-memory] [--lsp=<plugin>] [--update] [scaffold flags]
 #
 # Core flags:
 #   --xcode    Merge the 'xcode' server (Apple's own `xcrun mcpbridge`, shipped
@@ -29,6 +29,12 @@
 #   Both MCP flags COMPOSE ./.mcp.json rather than copying it: each owns its own
 #   server keys, so they combine in either order, re-run idempotently, and never
 #   drop a server the user added by hand. See tests/mcp-merge-cases.py.
+#   --codebase-memory  Merge the 'codebase-memory-mcp' server (DeusData's
+#              persistent code graph: callers, impact of a change, dead code,
+#              architecture) into ./.mcp.json and its READ-ONLY tool names into
+#              .claude/settings.json permissions.allow. Exit 8 if the binary is
+#              not in PATH. Binary only: never run its own `install`
+#              subcommand, which rewrites ~/.claude/settings.json hooks.
 #   --lsp=<plugin>  Install an official LSP plugin (lsp-plugins.json, e.g.
 #              pyright-lsp) at PROJECT scope via `claude plugin install
 #              --scope project`, which also records it in .claude/settings.json
@@ -66,11 +72,13 @@
 #   5  --xcode requested on a non-macOS host
 #   6  --xcode requested but `xcrun mcpbridge` is unavailable (needs Xcode 26.3+)
 #   7  --ui requested but 'npx' is not in PATH
+#   8  --codebase-memory requested but 'codebase-memory-mcp' is not in PATH
 
 set -euo pipefail
 
 INSTALL_XCODE=false
 INSTALL_UI=false
+INSTALL_CODEBASE_MEMORY=false
 LSP_PLUGINS=()
 FULLSTACK=false
 RUNTIME=""
@@ -84,6 +92,7 @@ for arg in "$@"; do
     --xcode)          INSTALL_XCODE=true ;;
     --ui)             INSTALL_UI=true ;;
     --lsp=*)          LSP_PLUGINS+=("${arg#--lsp=}") ;;
+    --codebase-memory) INSTALL_CODEBASE_MEMORY=true ;;
     --update)         : ;;  # informational: seeding always skips existing files
     --db)             : ;;  # accepted, no-op (db-inspector is central now)
     --fullstack)      FULLSTACK=true ;;
@@ -281,6 +290,28 @@ if [ "$INSTALL_UI" = "true" ]; then
     exit 7
   fi
   merge_mcp_servers "$TEMPLATE_DIR/mcp/playwright.json"
+fi
+
+# --- codebase-memory-mcp (opt-in) ---------------------------------------------
+# A persistent code graph for structural questions. Opt-in, not default: its
+# authors' own benchmark scores it below plain file exploration on answer
+# quality (it wins on tokens) — DESIGN.md §33. Only the binary is a
+# prerequisite; dotclaude wires the server and permissions itself.
+if [ "$INSTALL_CODEBASE_MEMORY" = "true" ]; then
+  if ! command -v codebase-memory-mcp >/dev/null 2>&1; then
+    echo "ERROR: 'codebase-memory-mcp' not found in PATH (--codebase-memory needs it)." >&2
+    echo "       Install the BINARY only, with one of:" >&2
+    echo "         npm install -g codebase-memory-mcp" >&2
+    echo "         pip install --user codebase-memory-mcp" >&2
+    echo "         release archive + checksums.txt from github.com/DeusData/codebase-memory-mcp/releases" >&2
+    echo "         (verify with sha256sum -c, then put the binary in ~/.local/bin)" >&2
+    echo "       Do NOT run 'codebase-memory-mcp install' or its curl|bash one-liner: they rewrite" >&2
+    echo "       ~/.claude/settings.json hooks, add agents and skills, and edit your shell rc." >&2
+    exit 8
+  fi
+  merge_mcp_servers "$TEMPLATE_DIR/mcp/codebase-memory-mcp.json"
+  python3 "$TEMPLATE_DIR/scripts/merge-permissions.py" "$TEMPLATE_DIR/permissions/codebase-memory-mcp.json" . \
+    || echo "WARN: codebase-memory-mcp permissions not merged; deploy continues." >&2
 fi
 
 # --- LSP plugins (opt-in, one per --lsp=<plugin>) -----------------------------

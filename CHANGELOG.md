@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Both installers print a notice when a re-install removes a hook file, pointing at `/init-project --update` to prune it from projects.
 - `--lsp=<plugin>` for `init.sh`/`init.ps1` (repeatable): installs an official Claude Code LSP plugin at project scope via `claude plugin install --scope project`, warning — never failing — when the language-server binary, the `claude` CLI or the plugin name is missing. `templates/project/lsp-plugins.json` maps the 13 official plugins to their binaries and install hints; `/init-project` passes the flag for the detected language and offers it on `--update`. Covered by `tests/lsp-plugin-cases.py`; `check.py` check 13 validates the catalog.
 
+- `--codebase-memory` for `init.sh`/`init.ps1`: merges the `codebase-memory-mcp` server (persistent code graph) into `.mcp.json` and its 13 read-only tools into the project `permissions.allow` by exact name (index-writing and deleting tools stay on ask), through the shared `scripts/merge-permissions.py`. Exit 8 when the binary is missing, with binary-only install options; dotclaude never runs the upstream `install` subcommand. Covered in `tests/mcp-merge-cases.py`.
 ### Changed
 - The Explore agent is no longer described as running on Haiku: since Claude Code v2.1.198 it inherits the session model (`rules/ai-collaboration.md`, template README).
 

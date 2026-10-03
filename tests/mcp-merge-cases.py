@@ -57,6 +57,7 @@ def make_bin(tmp, omit=(), uname_out="Darwin", xcrun_fail=False):
         "uname": "#!/bin/sh\necho %s\n" % uname_out,
         "xcrun": "#!/bin/sh\nexit 1\n" if xcrun_fail else "#!/bin/sh\nexit 0\n",
         "npx": "#!/bin/sh\nexit 0\n",
+        "codebase-memory-mcp": "#!/bin/sh\nexit 0\n",
     }
     for name, body in stubs.items():
         if name not in omit:
@@ -137,6 +138,12 @@ CASES = [
          [["--xcode", "--ui"], ["--update"]], {"xcode", "playwright"}),
     case("bare --update preserves ui",
          [["--ui"], ["--update"]], {"playwright"}),
+    case("codebase-memory alone", [["--codebase-memory"]], {"codebase-memory-mcp"},
+         extra=lambda tmp: readonly_permissions(tmp)),
+    case("codebase-memory with the other flags, re-run",
+         [["--codebase-memory", "--ui"], ["--xcode"], ["--update", "--codebase-memory"]],
+         {"codebase-memory-mcp", "playwright", "xcode"},
+         extra=lambda tmp: readonly_permissions(tmp)),
     # A command printed by an older /init-project may still carry --serena:
     # it must warn and deploy normally, not abort or compose anything.
     case("removed --serena is ignored", [["--serena"]], None),
@@ -153,6 +160,8 @@ PROBES = [
      dict(xcrun_fail=True), 6),
     ("missing npx aborts --ui: exit 7", ["--ui"],
      dict(omit={"npx"}, scrub_path=True), 7),
+    ("missing codebase-memory-mcp aborts: exit 8", ["--codebase-memory"],
+     dict(omit={"codebase-memory-mcp"}, scrub_path=True), 8),
 ]
 
 
@@ -174,6 +183,25 @@ def run_case(c, pwsh=None):
         return None
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+CBM_WRITERS = ("index_repository", "delete_project", "manage_adr", "ingest_traces")
+
+
+def readonly_permissions(tmp):
+    """--codebase-memory allows the read-only graph tools by exact name, once
+    each, and never a wildcard or a tool that writes or deletes."""
+    with open(os.path.join(tmp, ".claude", "settings.json")) as fh:
+        allow = json.load(fh).get("permissions", {}).get("allow", [])
+    cbm = [r for r in allow if r.startswith("mcp__codebase-memory-mcp")]
+    if "mcp__codebase-memory-mcp__trace_path" not in cbm:
+        return f"read-only graph tools not allowed: {cbm}"
+    if len(cbm) != len(set(cbm)):
+        return "a re-run duplicated permission rules"
+    bad = [r for r in cbm if r.endswith("*") or r.split("__")[-1] in CBM_WRITERS]
+    if bad:
+        return f"write-capable or wildcard rules allowed: {bad}"
+    return None
 
 
 THIRD_PARTY = {"command": "my-mcp", "args": ["--flag"], "env": {"K": "v"}}

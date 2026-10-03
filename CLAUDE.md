@@ -42,7 +42,9 @@ dotclaude/
     ├── obsolete.json            # artifacts dotclaude stopped shipping; init prunes their hook entries
     ├── lsp-plugins.json         # official LSP plugins -> language-server binary (for --lsp=<plugin>)
     ├── scripts/prune-obsolete.py  # the pruning, shared by init.sh and init.ps1
-    ├── mcp/                     # one fragment per MCP server (xcode, playwright);
+    ├── permissions/             # permission rules a flag merges into the project stub (codebase-memory-mcp)
+    ├── scripts/merge-permissions.py  # that merge, shared by init.sh and init.ps1
+    ├── mcp/                     # one fragment per MCP server (xcode, playwright, codebase-memory-mcp);
     │                            # ./.mcp.json is COMPOSED from these, never copied
     ├── scaffolds/               # infra templates (Dockerfile, compose, deploy.sh, …)
     ├── docs/                    # portable contract docs (backend.md, ui.md, user-stories.md, conventions.md, README.md)
@@ -57,7 +59,7 @@ dotclaude/
 
 ### 1. The skill plans, the user executes — do not merge them back
 
-`skills/init-project/SKILL.md` deliberately does NOT run `init.sh` itself. It detects the stack, runs the interview, then **prints** the exact `bash …/init.sh [--lsp=<plugin>] [--xcode] [--ui]` command for the user to run from a normal terminal. After the user confirms `deploy OK`, the skill resumes with `Edit` to fill placeholders.
+`skills/init-project/SKILL.md` deliberately does NOT run `init.sh` itself. It detects the stack, runs the interview, then **prints** the exact `bash …/init.sh [--lsp=<plugin>] [--codebase-memory] [--xcode] [--ui]` command for the user to run from a normal terminal. After the user confirms `deploy OK`, the skill resumes with `Edit` to fill placeholders.
 
 The temptation to "just run the script from the skill" via a `!`-prefixed shell block is real and was tried — it fails reliably for reasons that are not in our control:
 
@@ -98,9 +100,9 @@ When `/compound` (a skill inside the template) suggests promoting a project-loca
    - Detects stack from `package.json` / `pyproject.toml` / `Cargo.toml` / `go.mod` etc., or interviews via AskUserQuestion if empty.
    - Asks which MCPs to authorize (multiSelect).
    - Detects SQL stack for the `db-inspector` agent.
-   - Prints the exact terminal command (`bash ~/.claude/templates/project/init.sh [--lsp=<plugin>] [--xcode] [--ui]`) for the user to run.
+   - Prints the exact terminal command (`bash ~/.claude/templates/project/init.sh [--lsp=<plugin>] [--codebase-memory] [--xcode] [--ui]`) for the user to run.
 
-3. **User executes.** From a normal terminal (not from inside Claude Code), the user runs the printed command. `init.sh` copies only the per-project files (CLAUDE.md, CHANGELOG.md, docs/, the settings.json stub, .gitignore), composes `.mcp.json` from the `mcp/` fragments the flags select (`--xcode` → xcode, `--ui` → playwright), installs the official LSP plugin at project scope for each `--lsp=<plugin>` (catalog: `lsp-plugins.json`), prunes hook entries for artifacts listed in `obsolete.json`, writes any requested scaffolds, and prints `init.sh: deploy OK`. The central hooks/agents/skills/rules/output-styles are NOT copied — they already live in `~/.claude/`. See decision 15 in DESIGN.md for why this is split from the skill.
+3. **User executes.** From a normal terminal (not from inside Claude Code), the user runs the printed command. `init.sh` copies only the per-project files (CLAUDE.md, CHANGELOG.md, docs/, the settings.json stub, .gitignore), composes `.mcp.json` from the `mcp/` fragments the flags select (`--xcode` → xcode, `--ui` → playwright, `--codebase-memory` → codebase-memory-mcp plus its read-only tool permissions), installs the official LSP plugin at project scope for each `--lsp=<plugin>` (catalog: `lsp-plugins.json`), prunes hook entries for artifacts listed in `obsolete.json`, writes any requested scaffolds, and prints `init.sh: deploy OK`. The central hooks/agents/skills/rules/output-styles are NOT copied — they already live in `~/.claude/`. See decision 15 in DESIGN.md for why this is split from the skill.
 
 4. **Per-project personalize.** The user returns to Claude Code and confirms. The skill resumes and fills `{{placeholders}}` in the deployed `CLAUDE.md` and `settings.json` using the `Edit` tool, then verifies the deploy.
 

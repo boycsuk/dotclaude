@@ -42,12 +42,12 @@ nothing to refresh inside the project for those five types.
 files that were missing and drift-reports `settings.local.json.example`:
 
 ```
-bash ~/.claude/templates/project/init.sh --update [--xcode] [--ui] [--lsp=<plugin>]
+bash ~/.claude/templates/project/init.sh --update [--xcode] [--ui] [--codebase-memory] [--lsp=<plugin>]
 ```
 
 Include `--xcode` only if `.mcp.json` has an `xcode` entry
-(`grep -q '"xcode"' ./.mcp.json`), and `--ui` only if it has a `playwright`
-entry. Re-passing any of them is safe:
+(`grep -q '"xcode"' ./.mcp.json`), `--ui` only if it has a `playwright`
+entry, and `--codebase-memory` only if it has a `codebase-memory-mcp` entry. Re-passing any of them is safe:
 all merge idempotently. Omitting a flag on a re-deploy does **not** remove its
 server — `.mcp.json` is never rewritten except by the flag that owns the entry.
 (`--db` is accepted but a no-op now — the db-inspector agent is central.)
@@ -98,7 +98,7 @@ Example: if `## WHAT — Versions` already says `- Database: PostgreSQL 17.2`, w
 When you reach step 5, the deploy command includes `--update`:
 
 ```
-bash ~/.claude/templates/project/init.sh --update [--xcode] [--ui] [--lsp=<plugin>]
+bash ~/.claude/templates/project/init.sh --update [--xcode] [--ui] [--codebase-memory] [--lsp=<plugin>]
 ```
 
 After deploy OK, step 6 fills only the placeholders that changed (e.g. if the user added Docker, write a new `docker compose exec` prefix on the commands). Do not touch sections the user did not change. Then run §1c, §1d, and §1e before step 8.

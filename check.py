@@ -420,7 +420,8 @@ def _():
     # passed green while check 10 deferred to "the JSON validity check".
     fragments = sorted(
         os.path.relpath(p, REPO)
-        for p in glob.glob(os.path.join(REPO, "templates/project/mcp/*.json")))
+        for p in glob.glob(os.path.join(REPO, "templates/project/mcp/*.json"))
+        + glob.glob(os.path.join(REPO, "templates/project/permissions/*.json")))
     for rel in ["global/.claude/settings.json",
                 "templates/project/.claude/settings.json",
                 "templates/project/obsolete.json",

@@ -47,7 +47,7 @@ Ask for a short description: what the product does, who uses it, which pieces it
 - **Docker**: "self-hosted / VPS / homelab" → bias toward Docker Compose; "Vercel / serverless / Cloudflare Workers" → advise against Compose.
 - **Deployment**: "SaaS for customers" → VPS or container platform; "tool that runs on my machine" → No deployment; mentions HTTPS / own domains → Caddy + Let's Encrypt.
 - **Versions**: explicit constraints ("the client's Ubuntu 20.04") narrow the options (Node 20 LTS, not 22).
-- **MCPs**: "scraping / E2E tests / web UI" → playwright; "tickets / Linear / Asana" → their MCP; "iOS / macOS / Swift app" → xcode (only on a macOS host).
+- **MCPs**: "scraping / E2E tests / web UI" → playwright; "tickets / Linear / Asana" → their MCP; "large or multi-service codebase / impact analysis / dead code" → codebase-memory; "iOS / macOS / Swift app" → xcode (only on a macOS host).
 - **DB**: "catalogs / users / transactions" → PostgreSQL; "cache / sessions / queues" → Redis; "documents / flexible JSON" → Mongo; "embedded / single machine / edge" → SQLite.
 
 **The bias is a suggestion, not a decision.** The user can always pick "Other" or a different option. **If they contradict the description** (said "daily scraper" but picks "Frontend"), don't push back: accept the change and keep biasing with the combined information.
@@ -91,6 +91,7 @@ Based on steps 1-4, choose the right flags. **Show the user this block verbatim*
 |---|---|
 | `--xcode` | User selected the Xcode MCP in §3. **macOS + Apple-platform projects only** (`*.xcodeproj` / `*.xcworkspace` / `Package.swift`) — never offer it otherwise. Merges Apple's `xcode` server (`xcrun mcpbridge`, Xcode 26.3+) into `.mcp.json`; combines with the other MCP flags in any order. See `references/mcp-and-db.md`. |
 | `--ui` | User selected the Playwright MCP in §3 — recommend it whenever the project has a web UI. Merges the `playwright` browser server (`npx @playwright/mcp`) into `.mcp.json`: the model can navigate, resize and screenshot the running app, which is what the central `/implement-ui` skill uses to verify UI work against a design reference. Combines with the other MCP flags in any order. See `references/mcp-and-db.md`. |
+| `--codebase-memory` | User selected codebase-memory-mcp in §3. Merges the `codebase-memory-mcp` server (persistent code graph: callers, impact of a change, dead code, architecture) into `.mcp.json` AND its read-only tool names into the project `settings.json` `permissions.allow` (do not add them by hand). Exit 8 if the binary is missing. See `references/mcp-and-db.md`. |
 | `--lsp=<plugin>` | **Always** for a code project whose language has an official LSP plugin — map the language from §2 through `~/.claude/templates/project/lsp-plugins.json` (e.g. Python → `--lsp=pyright-lsp`, TypeScript/JavaScript → `--lsp=typescript-lsp`); repeat the flag for each main language. It runs `claude plugin install <plugin>@claude-plugins-official --scope project`, which records the plugin in `.claude/settings.json`. The language-server binary must be on PATH (the catalog has the install hint; the script warns if it is missing). No official plugin for the language (e.g. Bash, PowerShell) → tell the user and pass nothing; do NOT offer community plugins. See `references/mcp-and-db.md` §3b. |
 | `--update` | Re-run path (see `references/update-mode.md`). Never on a first-time deploy. |
 | `--db` | Optional, no-op (kept for compatibility). The db-inspector agent is central now; a SQL stack only affects which client permission you add to the project `settings.json` stub in step 6, not a flag. |
@@ -149,6 +150,7 @@ If the script fails:
 - Exit 5: `--xcode` on a non-macOS host. Drop the flag — Apple's mcpbridge ships with Xcode.
 - Exit 6: `xcrun mcpbridge` unavailable. Needs Xcode 26.3+; check `xcode-select -p` points at it, then enable MCP in Xcode > Settings > Intelligence.
 - Exit 7: `npx` missing (`--ui` needs it to launch the playwright server). Install Node.js — it ships npx — and re-run.
+- Exit 8: `codebase-memory-mcp` missing. Show the install options the script printed (binary only — never its `install` subcommand) and re-run.
 
 ### Pointer to `create-X` for app code
 
@@ -212,7 +214,10 @@ Only edit the project stub if this project needs something project-specific:
 
 - **MCP tool permissions:** add `mcp__<server>__*` to `permissions.allow` for
   each MCP the user selected. Selecting the Xcode MCP adds `mcp__xcode__*`;
-  selecting Playwright (`--ui`) adds `mcp__playwright__*`.
+  selecting Playwright (`--ui`) adds `mcp__playwright__*`. **Not** for
+  codebase-memory-mcp: `--codebase-memory` already merged its read-only tools
+  by exact name, and a `mcp__codebase-memory-mcp__*` wildcard would also allow
+  the tools that write or delete the index.
 - **SQL client (if a SQL stack was detected):** add `Bash(psql:*)` and/or
   `Bash(sqlite3:*)` to `permissions.allow` (on Windows the user is on the
   central PowerShell config, so add `PowerShell(psql *)` / `PowerShell(sqlite3 *)`).
@@ -264,6 +269,12 @@ Use the regular `Bash` tool (a non-zero exit there is informative, not fatal):
 - If the user picked "Everything on main" in §7b: `python3 ~/.claude/skills/init-project/scripts/detect-drift.py` should report `ALLOW_PUSH_MAIN=TRUE`. (Inline `python3 -c` is blocked by the central `guard-destructive` hook — the checks live in that script.)
 
 Summarize to the user what was deployed.
+
+**If `--codebase-memory` was deployed**, the graph is empty until the first
+index. Offer to build it now: call the `index_repository` tool of the
+`codebase-memory-mcp` server on the project root (it is on ask, so the user
+approves it). On a large repo this takes a while; later changes are re-indexed
+automatically by the server's git watcher.
 
 ## 9. Next steps for the user
 

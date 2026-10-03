@@ -48,7 +48,7 @@ Running it deploys only the project-specific surface:
 - `docs/` — contract docs (backend, UI, user stories, conventions) maintained by `/update-docs`
 - `.claude/settings.json` stub for project-level additions
 - The official Claude Code LSP plugin for the project's language (`--lsp=<plugin>`, installed at project scope): symbol navigation and diagnostics after every edit
-- `.mcp.json` composed from fragments: `--xcode` adds the Xcode server, `--ui` adds Playwright
+- `.mcp.json` composed from fragments: `--codebase-memory` adds a persistent code graph (codebase-memory-mcp), `--xcode` adds the Xcode server, `--ui` adds Playwright
 - Optional infra scaffolds (Dockerfile, docker-compose, Caddyfile, deploy script, `.env.example`)
 
 The hooks, agents, skills and rules are not copied into the project — they already apply from `~/.claude/`.

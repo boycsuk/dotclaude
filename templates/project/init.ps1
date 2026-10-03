@@ -11,7 +11,7 @@
 # Lockstep sibling of init.sh — see it for the full semantics.
 #
 # Usage (run inside the target project directory):
-#   powershell -File "$HOME\.claude\templates\project\init.ps1" [--xcode] [--ui] [--lsp=<plugin>] [--update] [scaffold flags]
+#   powershell -File "$HOME\.claude\templates\project\init.ps1" [--xcode] [--ui] [--codebase-memory] [--lsp=<plugin>] [--update] [scaffold flags]
 #
 # --update, --db (no-op now: db-inspector is central), and the scaffold flags
 # (--fullstack, --runtime=, --compose, --proxy=, --deploy-script) behave as in
@@ -26,6 +26,9 @@
 # ./.mcp.json for the visual verification loop the central /implement-ui skill
 # drives. Exit 7 if 'npx' is not in PATH.
 #
+# --codebase-memory merges the 'codebase-memory-mcp' server and its read-only
+# tool permissions (see init.sh). Exit 8 if the binary is not in PATH.
+#
 # --lsp=<plugin> (repeatable) installs an official LSP plugin at project scope
 # via `claude plugin install --scope project`; never fatal (see init.sh).
 
@@ -34,6 +37,7 @@ $ErrorActionPreference = "Stop"
 $InstallXcode  = $false
 $InstallUi     = $false
 $LspPlugins    = @()
+$InstallCodebaseMemory = $false
 $Fullstack     = $false
 $Runtime       = ""
 $Compose       = $false
@@ -45,6 +49,7 @@ foreach ($arg in $args) {
     elseif ($arg -eq "--xcode")         { $InstallXcode  = $true }
     elseif ($arg -eq "--ui")            { $InstallUi     = $true }
     elseif ($arg -like "--lsp=*")       { $LspPlugins   += $arg.Substring(6) }
+    elseif ($arg -eq "--codebase-memory") { $InstallCodebaseMemory = $true }
     elseif ($arg -eq "--update")        { }  # informational: seeding always skips existing files
     elseif ($arg -eq "--db")            { }  # accepted, no-op (db-inspector is central now)
     elseif ($arg -eq "--fullstack")     { $Fullstack     = $true }
@@ -257,6 +262,30 @@ if ($InstallUi) {
         exit 7
     }
     Merge-McpServers @((Join-Path $TemplateDir "mcp/playwright.json"))
+}
+
+# --- codebase-memory-mcp (opt-in) ---------------------------------------------
+# Lockstep sibling of the init.sh block; permissions go through the SAME Python
+# script so the read-only allowlist is merged identically on both platforms.
+if ($InstallCodebaseMemory) {
+    if (-not (Get-Command codebase-memory-mcp -ErrorAction SilentlyContinue)) {
+        [Console]::Error.WriteLine("ERROR: 'codebase-memory-mcp' not found in PATH (--codebase-memory needs it).")
+        [Console]::Error.WriteLine("       Install the BINARY only, with one of:")
+        [Console]::Error.WriteLine("         npm install -g codebase-memory-mcp")
+        [Console]::Error.WriteLine("         pip install --user codebase-memory-mcp")
+        [Console]::Error.WriteLine("         release archive + checksums.txt from github.com/DeusData/codebase-memory-mcp/releases")
+        [Console]::Error.WriteLine("         (verify the SHA-256 with Get-FileHash, then put the binary on PATH)")
+        [Console]::Error.WriteLine("       Do NOT run 'codebase-memory-mcp install' or its install.ps1: they rewrite")
+        [Console]::Error.WriteLine("       ~/.claude/settings.json hooks, add agents and skills, and edit your profile.")
+        exit 8
+    }
+    Merge-McpServers @((Join-Path $TemplateDir "mcp/codebase-memory-mcp.json"))
+    $py = Get-Command python3, python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($py) {
+        & $py.Source (Join-Path $TemplateDir "scripts/merge-permissions.py") (Join-Path $TemplateDir "permissions/codebase-memory-mcp.json") (Get-Location).Path
+    } else {
+        [Console]::Error.WriteLine("WARN: python not found; codebase-memory-mcp permissions not merged. Deploy continues.")
+    }
 }
 
 # --- LSP plugins (opt-in, one per --lsp=<plugin>) -----------------------------

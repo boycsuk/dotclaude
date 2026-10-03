@@ -1,0 +1,18 @@
+{
+  "_comment": "Merged into the project's .claude/settings.json permissions.allow by init --codebase-memory. Read-only tools only, named one by one: a wildcard (mcp__codebase-memory-mcp__*) would also allow index_repository, delete_project, manage_adr and ingest_traces, which write or delete and stay on the default ask. ingest_traces is annotated read-only upstream but documented as creating graph edges, so it stays on ask too.",
+  "allow": [
+    "mcp__codebase-memory-mcp__search_graph",
+    "mcp__codebase-memory-mcp__trace_path",
+    "mcp__codebase-memory-mcp__query_graph",
+    "mcp__codebase-memory-mcp__get_code_snippet",
+    "mcp__codebase-memory-mcp__get_file_outline",
+    "mcp__codebase-memory-mcp__get_graph_schema",
+    "mcp__codebase-memory-mcp__compare_graphs",
+    "mcp__codebase-memory-mcp__get_architecture",
+    "mcp__codebase-memory-mcp__search_code",
+    "mcp__codebase-memory-mcp__list_projects",
+    "mcp__codebase-memory-mcp__index_status",
+    "mcp__codebase-memory-mcp__check_index_coverage",
+    "mcp__codebase-memory-mcp__detect_changes"
+  ]
+}

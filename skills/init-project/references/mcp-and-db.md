@@ -18,10 +18,56 @@ Ask via AskUserQuestion (multiSelect) which MCPs the user wants for this project
 - `github` / `gitlab` — code hosting
 - `linear` / `asana` — task tracking
 - `terraform` — infrastructure
+- `codebase-memory` — persistent code graph (deployed by `--codebase-memory`;
+  see the section below before recommending it)
 - `xcode` — Apple's own Xcode bridge (iOS/macOS projects only; **offer it only on
   a macOS host with an Xcode project**, and see the section below before doing so)
 
 Remember the selection. You will write the permissions and CLAUDE.md section in step 6.
+
+### codebase-memory-mcp prerequisite (`--codebase-memory`)
+
+[codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) (DeusData,
+MIT, a single C binary) keeps a persistent graph of the code: callers and call
+paths (`trace_path`), the impact of the current diff (`detect_changes`),
+architecture overviews (`get_architecture`), dead code, links between
+services. It answers *structural* questions; the LSP plugin (§3b) answers
+questions about *one symbol*; Grep/Read stay for literal text and config.
+
+**Recommend it only for large or multi-service codebases.** Its authors'
+own benchmark (arXiv:2603.27277) scores 83% answer quality against 92% for
+plain file exploration: it saves tokens, it does not answer better. On a small
+repo it is context cost for no gain.
+
+Type resolution varies by language: Python, TypeScript/JavaScript, Go, Rust,
+Java, Kotlin, C#, C/C++ and PHP get its "hybrid LSP" layer (a C
+re-implementation, not a real language server); everything else, including
+Bash, PowerShell and Swift, is tree-sitter only — weaker for call resolution.
+Mention that when the project's language is in the second group.
+
+**Install the binary only** (the deploy exits 8 and prints these if missing):
+`npm install -g codebase-memory-mcp`, `pip install --user codebase-memory-mcp`,
+or the release archive from GitHub verified against its `checksums.txt`.
+**Never** run `codebase-memory-mcp install` or the upstream `curl | bash`
+one-liner: that subcommand writes hook entries into `~/.claude/settings.json`
+(which dotclaude's `install.sh` owns and would overwrite), adds three agents
+and a skill to `~/.claude/`, appends a PATH line to the shell rc, and
+configures every other AI client it detects. dotclaude wires the server
+itself; DESIGN.md §33 has the reasoning.
+
+What the flag does: merges the `codebase-memory-mcp` server into `.mcp.json`
+and its 13 read-only tools into `permissions.allow` by exact name.
+`index_repository`, `delete_project`, `manage_adr` and `ingest_traces` stay on
+ask. The index lives in `~/.cache/codebase-memory-mcp/` (outside the repo, so
+nothing to gitignore; `.codebase-memory/` only appears with its opt-in
+`persistence: true`, and the template's `.gitignore` already covers it). On
+WSL, keep that cache on the Linux filesystem, not under `/mnt/<drive>`
+(override with `CBM_CACHE_DIR`).
+
+The model is told when to use the graph by the central `code-intel-context`
+hook (session start and every code-reading subagent) and the
+`explore-graph-prompt` hook (every Explore delegation) — not by CLAUDE.md
+prose. Both stay silent in projects without the server.
 
 ### Xcode MCP prerequisite (`--xcode`)
 

@@ -18,7 +18,7 @@ and applies to every project automatically. See DESIGN.md §23.
 │   ├── ui.md                    # Visual contract: brand design tokens (palette, type, spacing) + sections
 │   ├── user-stories.md          # Behavioral contract: what the user can do (platform-agnostic)
 │   └── conventions.md           # How to write the code — portable mirror of the central rules for non-Claude-Code tools
-├── .mcp.json              # Only when MCP flags were passed — COMPOSED per server (--xcode, --ui → playwright); hand-added servers survive
+├── .mcp.json              # Only when MCP flags were passed — COMPOSED per server (--xcode, --ui → playwright, --codebase-memory); hand-added servers survive
 └── .claude/
     ├── settings.json            # Per-project STUB — only adds project-specific perms (MCP, etc.); base config is central
     └── settings.local.json.example   # Personal overrides; rename to settings.local.json
@@ -54,10 +54,10 @@ The skill detects your OS, detects your stack (or interviews you), and asks whic
 
 ```bash
 cd <your project>
-bash ~/.claude/templates/project/init.sh [--lsp=<plugin>] [--xcode] [--ui] [scaffold flags]
+bash ~/.claude/templates/project/init.sh [--lsp=<plugin>] [--codebase-memory] [--xcode] [--ui] [scaffold flags]
 ```
 
-`--lsp=<plugin>` installs the official Claude Code LSP plugin for the project's language at project scope (see below). The MCP flags are added by the skill per the interview: `--xcode` (Apple's `xcrun mcpbridge`, macOS + Xcode 26.3+ only), `--ui` (Playwright browser MCP — lets the model screenshot the running app, which `/implement-ui` uses to verify UI work against a design reference; needs `npx`). Scaffold flags (`--fullstack`, `--runtime=`, `--compose`, `--proxy=`, `--deploy-script`) per the interview. When the script prints `init.sh: deploy OK`, return to Claude Code.
+`--lsp=<plugin>` installs the official Claude Code LSP plugin for the project's language at project scope (see below). The MCP flags are added by the skill per the interview: `--codebase-memory` (persistent code graph; needs the `codebase-memory-mcp` binary), `--xcode` (Apple's `xcrun mcpbridge`, macOS + Xcode 26.3+ only), `--ui` (Playwright browser MCP — lets the model screenshot the running app, which `/implement-ui` uses to verify UI work against a design reference; needs `npx`). Scaffold flags (`--fullstack`, `--runtime=`, `--compose`, `--proxy=`, `--deploy-script`) per the interview. When the script prints `init.sh: deploy OK`, return to Claude Code.
 
 **3. Personalize with Claude Code.** The skill resumes: it fills in placeholders in the deployed `CLAUDE.md` and `settings.json`, sanity-checks `.gitignore`, and verifies the deploy.
 
@@ -100,6 +100,12 @@ The reusable core is central, so **where** you add something depends on whether 
 `/init-project` maps the project's language to one of Claude Code's 13 official LSP plugins (`lsp-plugins.json`: pyright-lsp, typescript-lsp, gopls-lsp, rust-analyzer-lsp, …) and passes `--lsp=<plugin>`. The deploy runs `claude plugin install <plugin>@claude-plugins-official --scope project`, which records it in `.claude/settings.json`. The model then gets a read-only `LSP` tool (definitions, references, hover types, call hierarchy) and the language server's diagnostics after every edit ("Found N new diagnostic issues").
 
 The plugin is only the wiring: the language-server binary (`pyright-langserver`, `typescript-language-server`, …) must be on PATH — the deploy warns with the install command if it is not. A teammate who clones the project runs the same `claude plugin install … --scope project` once: a plugin listed in `enabledPlugins` but not installed stays off. Languages without an official plugin (Bash, PowerShell, …) get none.
+
+## Optional code graph: codebase-memory-mcp (`--codebase-memory`)
+
+[codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) keeps a persistent graph of the code for structural questions: who calls X, what the current diff affects, dead code, architecture. The flag merges the server into `.mcp.json` and its 13 read-only tools into `permissions.allow` by exact name; the tools that write or delete the index stay on ask. Index it once after the deploy (`index_repository`); the server re-indexes on git changes after that. The index lives in `~/.cache/codebase-memory-mcp/`, not in the repo.
+
+Install the binary only (`npm install -g codebase-memory-mcp`, `pip install --user codebase-memory-mcp`, or a checksum-verified release archive). Do not run its own `install` subcommand: it rewrites hooks in `~/.claude/settings.json`, adds agents and a skill, and edits your shell rc. Recommended for large or multi-service codebases only — its authors' benchmark scores it below plain file exploration on answer quality; it wins on tokens.
 
 ## Retired artifacts are pruned on every deploy
 
@@ -171,7 +177,7 @@ The `init.sh` / `init.ps1` scripts work on their own — useful for CI, scripted
 ```bash
 # Linux / macOS / WSL
 cd <your project>
-bash ~/.claude/templates/project/init.sh [--lsp=<plugin>] [--xcode] [--ui]
+bash ~/.claude/templates/project/init.sh [--lsp=<plugin>] [--codebase-memory] [--xcode] [--ui]
 # Edit CLAUDE.md: replace {{...}} placeholders with real values
 ```
 
