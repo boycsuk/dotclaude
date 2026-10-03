@@ -10,6 +10,7 @@ Usage: python3 tests/inject.py <repo-copy> <regression-name>
 
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -40,12 +41,54 @@ def diverge_extensions(repo):
         fh.write(text.replace(",sql,vue,svelte", ""))
 
 
-def drop_hook_from_readme(repo):
+def _drop_from_inventory_line(repo, anchor, name):
+    """Delete `name` from the one inventory line containing `anchor` only.
+
+    The realistic regression: the name still appears in the doc's prose, so a
+    whole-document search would pass on it.
+    """
     path = os.path.join(repo, "templates/project/README.md")
     with open(path) as fh:
-        text = fh.read()
+        lines = fh.read().split("\n")
+    for i, line in enumerate(lines):
+        if anchor in line and name in line:
+            lines[i] = re.sub(rf"\b{re.escape(name)}\b(,\s*)?", "", line, count=1)
+            break
+    else:
+        raise SystemExit(f"inject: no inventory line with {anchor!r} lists {name!r}")
     with open(path, "w") as fh:
-        fh.write(text.replace("reinject-rules", "xxx"))
+        fh.write("\n".join(lines))
+
+
+def drop_hook_from_readme(repo):
+    _drop_from_inventory_line(repo, "- **hooks/** —", "reinject-rules")
+
+
+def drop_skill_from_readme(repo):
+    _drop_from_inventory_line(repo, "- **skills/** —", "resume-context")
+
+
+def unwire_shell_hook(repo):
+    """A safety .sh hook dropped from settings.json still has its file and matrix."""
+    path = os.path.join(repo, "global/.claude/settings.json")
+    with open(path) as fh:
+        settings = json.load(fh)
+    for groups in settings["hooks"].values():
+        for group in groups:
+            group["hooks"] = [h for h in group["hooks"] if "detect-secrets" not in h["command"]]
+    with open(path, "w") as fh:
+        json.dump(settings, fh, indent=2)
+
+
+def reinject_to_stderr(repo):
+    """SessionStart context written to stderr never reaches the model."""
+    path = os.path.join(repo, "global/.claude/hooks/reinject-rules.sh")
+    with open(path) as fh:
+        text = fh.read()
+    if "cat <<'EOF'" not in text:
+        raise SystemExit("inject: reinject-rules.sh no longer emits with cat <<'EOF'")
+    with open(path, "w") as fh:
+        fh.write(text.replace("cat <<'EOF'", "cat >&2 <<'EOF'", 1))
 
 
 def wire_missing_hook(repo):
@@ -231,13 +274,13 @@ def unwire_py_hook(repo):
 def heredoc_back_into_subshell(repo):
     """Fold the python heredoc back inside a $( ), the DESIGN.md §32 defect.
 
-    Bash mishandles a heredoc opened within a command substitution when the
-    command is followed by an operator: it stops treating the quoted body as
-    opaque and lexes it for parens, quotes and backticks while hunting the
-    closing paren. The Python body contains all three, so the script becomes
-    unparseable -- and since both guards are PreToolUse hooks on Bash, that
-    blocks every Bash call in every project. Looks tidier, which is exactly
-    why someone will try it again.
+    Bash 4.1 and older (macOS /bin/bash is 3.2) mishandle a heredoc opened
+    within a command substitution: they lex the quoted body for parens, quotes
+    and backticks while hunting the closing paren. The Python body contains all
+    three, so the script becomes unparseable there -- and since both guards are
+    PreToolUse hooks on Bash, that blocks every Bash call in every project.
+    bash 4.2+ parses it, so only check.py's static rule catches it on a modern
+    host. Looks tidier, which is exactly why someone will try it again.
     """
     path = os.path.join(repo, "global/.claude/hooks/guard-destructive.sh")
     with open(path) as fh:
@@ -343,6 +386,9 @@ def drop_ps1_exit_code(repo):
 
 
 REGRESSIONS = {
+    "drop-skill-from-readme": drop_skill_from_readme,
+    "unwire-shell-hook": unwire_shell_hook,
+    "reinject-to-stderr": reinject_to_stderr,
     "drop-ps1-exit-code": drop_ps1_exit_code,
     "obsolete-broad-match": obsolete_broad_match,
     "unwire-py-hook": unwire_py_hook,

@@ -30,7 +30,7 @@ CMD=$(printf '%s' "$INPUT" | python3 -c "import sys, json; d=json.load(sys.stdin
 # parens, quotes and backticks while hunting the closing paren, so a regex or
 # comment in the Python body can make the whole script unparseable -- which,
 # for a PreToolUse hook on Bash, blocks every Bash call in every project.
-# Known bash bug, 4.x onward: https://lists.gnu.org/archive/html/bug-bash/2010-07/msg00043.html
+# Known bash bug in 4.1 and older (macOS ships 3.2), fixed in 4.2: https://lists.gnu.org/archive/html/bug-bash/2010-07/msg00043.html
 # Writing to a temp file and reading it back keeps the heredoc at top level,
 # where a quoted delimiter really is opaque. Do not fold this back into $( ).
 _GD_OUT="$(mktemp -t guard-destructive.XXXXXX)"

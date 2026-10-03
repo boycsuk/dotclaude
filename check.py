@@ -61,6 +61,18 @@ def check(name):
     return wrap
 
 
+def code_only(text):
+    """`text` without full-line `#` comments and triple-quoted docstrings.
+
+    Marker checks run on this, not the raw file: a hook that names
+    `additionalContext` only in a comment explaining it still passed a
+    whole-file substring test while emitting on stderr.
+    """
+    text = re.sub(r'"""(?:.|\n)*?"""', "", text)
+    text = re.sub(r"<#(?:.|\n)*?#>", "", text)
+    return re.sub(r"^\s*#.*$", "", text, flags=re.M)
+
+
 def py_hooks():
     """Names of the single-file Python hooks (no .sh/.ps1 twin by design)."""
     return sorted(os.path.basename(p)[:-3]
@@ -259,22 +271,26 @@ def _():
     not_hooks = {"statusline"}
     hooks = [h for h in hooks if h not in not_hooks]
 
-    inventories = {
-        "CLAUDE.md": read("CLAUDE.md"),
-        "templates/project/README.md": read("templates/project/README.md"),
-    }
-    for doc, text in inventories.items():
-        for hook in hooks:
-            if hook not in text:
-                fail("doc inventories", f"{doc} never mentions the '{hook}' hook")
-        for agent in agents:
-            if agent not in text:
-                fail("doc inventories", f"{doc} never mentions the '{agent}' agent")
-    readme = inventories["templates/project/README.md"]
-    for skill in skills:
-        if skill not in readme:
-            fail("doc inventories",
-                 f"templates/project/README.md never mentions the '{skill}' skill")
+    # Names are matched inside the inventory LINE, as whole words. Searching the
+    # whole document passed on a deleted inventory: every name also appears in
+    # prose elsewhere ("guard-push-main" seven times in CLAUDE.md alone).
+    inventories = [
+        ("CLAUDE.md", "The central hooks (", "hook", hooks),
+        ("CLAUDE.md", "├── agents/", "agent", agents),
+        ("templates/project/README.md", "- **hooks/** —", "hook", hooks),
+        ("templates/project/README.md", "- **agents/** —", "agent", agents),
+        ("templates/project/README.md", "- **skills/** —", "skill", skills),
+    ]
+    for doc, anchor, kind, names in inventories:
+        line = next((ln for ln in read(doc).splitlines() if anchor in ln), None)
+        if line is None:
+            fail("doc inventories", f"{doc} has no inventory line containing {anchor!r} — "
+                                    f"fix this check before trusting a pass")
+            continue
+        for name in names:
+            if not re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", line):
+                fail("doc inventories",
+                     f"{doc}: the {kind} inventory ({anchor.strip()}) never lists '{name}'")
 
 
 # --- 6. The code-extension lists agree across the path-scoped rules ----------
@@ -302,16 +318,19 @@ def _():
 # --- 7. Skills never use inline interpreters (guard-destructive blocks them) --
 @check("skills avoid inline interpreters")
 def _():
-    # Matches `python3 -c "..."`, `node -e '...'` and the bare `-c` form. The
-    # quote right after the flag is the common shape, so it must not be required
-    # to be preceded by a space.
-    pattern = re.compile(r"""(python3?|node|ruby|perl)\s+-(c|e)[\s"']""")
+    # The same forms guard-destructive.sh blocks, so a skill that passes here
+    # cannot die with exit 2 at runtime. A narrower list let `bash -c`,
+    # `sh -c`, `node --eval` and `python3 -Ic` through. A quote right after
+    # the flag is the common shape, so the terminator also accepts quotes.
+    pattern = re.compile(
+        r"""(^|[\s`(])(python[0-9.]*\s+(-[A-Za-z]*)?-c|node\s+--eval|node\s+-e|deno\s+eval"""
+        r"""|(ruby|perl)\s+(-[A-Za-z]*)?-e|php\s+-r|(ba|z|da|k)?sh\s+-c)([\s"']|$)""")
     # os.walk, not glob: glob skips dot-directories, so `global/.claude/skills/`
     # — every central skill — was invisible to this check.
     for path in walk_files(("skills", "global/.claude/skills"), ".md"):
         rel = os.path.relpath(path, REPO)
         for i, line in enumerate(open(path), 1):
-            if pattern.search(line) and "guard-destructive" not in line:
+            if pattern.search(line):
                 fail("skills avoid inline interpreters",
                      f"{rel}:{i} uses an inline interpreter; guard-destructive "
                      f"blocks it with exit 2 (put the code in a script file)")
@@ -324,9 +343,9 @@ def _():
     # reveal (DESIGN.md §18, §26, §27). Their matrices are the regression net;
     # a hook silently losing its matrix would be invisible in a passing run.
     #
-    # The four advisory hooks share ONE matrix: their failure mode is silence,
+    # The shell advisory hooks share ONE matrix: their failure mode is silence,
     # not a wrong verdict, so nothing else would notice them breaking — which
-    # is how three of them sat on a dead delivery channel for months (§17).
+    # is how three advisory hooks sat on a dead delivery channel for months (§17).
     advisory = "tests/advisory-hooks-cases.py"
     for hook, matrix in (("guard-push-main", "tests/guard-push-main-cases.py"),
                          ("guard-destructive", "tests/guard-destructive-cases.py"),
@@ -425,6 +444,27 @@ def _():
         if not os.path.exists(os.path.join(REPO, "global/.claude/skills", skill, "SKILL.md")):
             fail("central artifact inventory",
                  f"global/.claude/skills/{skill}/SKILL.md is missing")
+    # The per-project surface init.sh copies: a missing one makes the deploy
+    # exit 1, which the skill reports as "template missing" on every machine.
+    for rel in ("templates/project/CLAUDE.md.template",
+                "templates/project/CHANGELOG.md.template",
+                "templates/project/.gitignore.template",
+                "templates/project/.claude/settings.json",
+                "templates/project/.claude/settings.local.json.example",
+                "templates/project/obsolete.json",
+                "templates/project/lsp-plugins.json",
+                "templates/project/scripts/prune-obsolete.py",
+                "templates/project/scripts/merge-permissions.py",
+                "templates/project/scripts/update-projects.py",
+                "templates/project/docs/README.md",
+                "templates/project/docs/backend.md",
+                "templates/project/docs/ui.md",
+                "templates/project/docs/user-stories.md",
+                "templates/project/docs/conventions.md",
+                "skills/init-project/SKILL.md",
+                "skills/init-project/scripts/detect-drift.py"):
+        if not os.path.exists(os.path.join(REPO, rel)):
+            fail("central artifact inventory", f"{rel} is missing — every deploy needs it")
 
 
 # --- 8c. Agent and skill frontmatter parses and declares what it must --------
@@ -483,28 +523,48 @@ def _():
     # were inert for months (DESIGN.md §17, 2026-08-15).
     for name in ("sync-mirror-docs",):
         for ext in ("sh", "ps1"):
-            body = read(f"global/.claude/hooks/{name}.{ext}")
+            body = code_only(read(f"global/.claude/hooks/{name}.{ext}"))
             if "additionalContext" not in body:
                 fail("hook wiring",
                      f"{name}.{ext} does not emit additionalContext — an advisory "
                      f"written to stderr with exit 0 never reaches the model")
+    # reinject-rules runs on SessionStart, where plain stdout is the context
+    # channel; the same stderr regression would silence it.
+    for ext, stderr_marks in (("sh", (">&2",)), ("ps1", ("[Console]::Error", "Write-Error"))):
+        body = code_only(read(f"global/.claude/hooks/reinject-rules.{ext}"))
+        if any(mark in body for mark in stderr_marks):
+            fail("hook wiring",
+                 f"reinject-rules.{ext} writes to stderr — on SessionStart only "
+                 f"stdout reaches the model")
 
-    wired = {os.path.basename(h["command"].rstrip('"'))
-             for groups in settings.get("hooks", {}).values() for g in groups for h in g.get("hooks", [])}
+    hook_entries = [h for groups in settings.get("hooks", {}).values()
+                    for g in groups for h in g.get("hooks", [])]
+    wired = {os.path.basename(h["command"].rstrip('"')) for h in hook_entries}
     for name in py_hooks():
         if f"{name}.py" not in wired:
             fail("hook wiring", f"{name}.py ships but no event in settings.json runs it")
+    # Shell hooks too: a safety hook dropped from settings.json still has its
+    # file and its matrix, so nothing else notices it stopped running.
+    status_command = settings.get("statusLine", {}).get("command", "")
+    for path in sorted(glob.glob(os.path.join(REPO, "global/.claude/hooks/*.sh"))):
+        name = os.path.basename(path)
+        if name == "statusline.sh":
+            if name not in status_command:
+                fail("hook wiring", "statusline.sh ships but statusLine.command does not run it")
+        elif name not in wired:
+            fail("hook wiring", f"{name} ships but no event in settings.json runs it")
 
     # Python hooks declare their kind instead of being listed here by hand, so
     # a new hook cannot dodge this check by never being added to a tuple.
     for name in py_hooks():
-        body = read(f"global/.claude/hooks/{name}.py")
-        m = re.search(r"^# hook-kind: (guard|advisory|rewrite)\s*$", body, re.M)
+        raw = read(f"global/.claude/hooks/{name}.py")
+        m = re.search(r"^# hook-kind: (guard|advisory|rewrite)\s*$", raw, re.M)
         if not m:
             fail("hook wiring",
                  f"{name}.py has no `# hook-kind: guard|advisory|rewrite` header line")
             continue
         kind = m.group(1)
+        body = code_only(raw)
         if kind == "advisory" and "hookio.context(" not in body:
             fail("hook wiring",
                  f"{name}.py is advisory but never calls hookio.context() — its "
@@ -585,9 +645,6 @@ def _():
                 "templates/project/lsp-plugins.json",
                 "templates/project/.claude/settings.local.json.example",
                 ] + fragments:
-        path = os.path.join(REPO, rel)
-        if not os.path.exists(path):
-            continue
         try:
             json.loads(read(rel))
         except json.JSONDecodeError as exc:
@@ -670,22 +727,58 @@ def _():
         for field in ("languages", "binary", "install"):
             if not entry.get(field):
                 fail("LSP plugin catalog", f"{name} has no {field!r}")
-# --- 12. Every shipped script actually parses ---------------------------------
+
+
+def heredoc_in_substitution(line):
+    """True when `line` opens a heredoc inside a `$(` it has not closed yet.
+
+    Bash 4.1 and older (macOS ships 3.2) lex such a heredoc body for parens,
+    quotes and backticks while hunting the closing paren, so a body that
+    parses on a modern bash breaks there. `$((`, here-strings (`<<<`) and
+    comment lines are not this shape.
+    """
+    if line.lstrip().startswith("#"):
+        return False
+    depth = 0
+    quote = None
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if quote:
+            if ch == quote:
+                quote = None
+            elif ch == "\\" and quote == '"':
+                i += 1
+        elif ch in "'\"":
+            quote = ch
+        elif line.startswith("$((", i):
+            i += 2
+        elif line.startswith("$(", i):
+            depth += 1
+            i += 1
+        elif ch == ")" and depth:
+            depth -= 1
+        elif depth and line.startswith("<<", i) and not line.startswith("<<<", i):
+            return True
+        i += 1
+    return False
+
+
+# --- 14. Every shipped script actually parses ---------------------------------
 @check("script syntax")
 def _():
     # Every other check reads these files as TEXT: it globs names, greps for
     # markers, compares inventories. None of them would notice a script that
     # cannot be parsed at all. That is not hypothetical: a literal backtick
     # inside a Python heredoc opened inside $( ) made guard-destructive.sh and
-    # guard-push-main.sh unparseable (bash scans the heredoc body for backtick
-    # substitutions while hunting the closing paren, and quoting the delimiter
-    # does not stop it). Both are PreToolUse hooks on Bash, so EVERY Bash call
-    # in EVERY project failed — while this validator reported a clean pass.
+    # guard-push-main.sh unparseable on bash 4.1 and older (bash scanned the
+    # heredoc body for backtick substitutions while hunting the closing paren,
+    # and quoting the delimiter did not stop it). Both are PreToolUse hooks on
+    # Bash, so EVERY Bash call in EVERY project failed — while this validator
+    # reported a clean pass.
     #
-    # The case matrices would have caught it (they pipe real JSON through the
-    # real script), but they need a working shell to run, and the hook had
-    # already broken the shell. So the cheap syntax gate belongs here, in the
-    # thing CLAUDE.md says to run before every commit.
+    # `bash -n` alone cannot catch that shape on a bash fixed in 4.2, so the
+    # shape itself is rejected statically below, on every host.
     #
     # pwsh is optional (absent on most Unix dev machines); skip rather than
     # fail, since CLAUDE.md is explicit that a .ps1 parse pass proves nothing
@@ -699,6 +792,12 @@ def _():
         if os.path.exists(os.path.join(REPO, n))]
     for path in scripts:
         rel = os.path.relpath(path, REPO)
+        for i, line in enumerate(read(rel).splitlines(), 1):
+            if heredoc_in_substitution(line):
+                fail("script syntax",
+                     f"{rel}:{i} opens a heredoc inside $( ) — bash 4.1 and older "
+                     f"(macOS /bin/bash) cannot parse that; write the heredoc in a "
+                     f"function at top level and substitute the function")
         try:
             proc = subprocess.run(["bash", "-n", path], capture_output=True,
                                   text=True, timeout=10)
@@ -710,6 +809,17 @@ def _():
             fail("script syntax",
                  f"{rel} does not parse: {detail[0] if detail else 'bash -n failed'}")
 
+    # Python is now the standard hook form, and a .py hook that fails to
+    # compile exits 1 — a non-blocking error, so the guard is silently off.
+    # A broken _lib/hookio.py takes every .py hook down with it.
+    py_roots = ["global/.claude/hooks", "templates/project/scripts", "skills", "tests"]
+    for path in sorted(walk_files(py_roots, ".py")) + [os.path.join(REPO, "check.py")]:
+        rel = os.path.relpath(path, REPO)
+        try:
+            compile(read(rel), rel, "exec")
+        except SyntaxError as exc:
+            fail("script syntax", f"{rel}:{exc.lineno} does not compile: {exc.msg}")
+
     if not shutil.which("pwsh"):
         return
     ps_scripts = sorted(walk_files(roots, ".ps1")) + [
@@ -718,10 +828,11 @@ def _():
     for path in ps_scripts:
         rel = os.path.relpath(path, REPO)
         # Parse without executing: the AST parser reports syntax errors only.
+        quoted = path.replace("'", "''")
         probe = ("$ErrorActionPreference='Stop';"
                  "$t=$null;$e=$null;"
                  "[System.Management.Automation.Language.Parser]::ParseFile("
-                 f"'{path}',[ref]$t,[ref]$e)|Out-Null;"
+                 f"'{quoted}',[ref]$t,[ref]$e)|Out-Null;"
                  "if($e.Count){$e[0].Message;exit 1};exit 0")
         try:
             proc = subprocess.run(["pwsh", "-NoProfile", "-Command", probe],

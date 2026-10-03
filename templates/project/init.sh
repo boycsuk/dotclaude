@@ -357,16 +357,21 @@ fi
 # Native code intelligence: go-to-definition/references through the `LSP` tool
 # and diagnostics after every edit. The plugin is only wiring; the language
 # server binary must be on PATH, so its absence is reported, not fatal.
-# ${arr[@]+...}: an empty array under `set -u` is an error on bash < 4.4.
-for plugin in ${LSP_PLUGINS[@]+"${LSP_PLUGINS[@]}"}; do
-  spec=$(python3 - "$TEMPLATE_DIR/lsp-plugins.json" "$plugin" <<'PY' 2>/dev/null || true
+# The heredoc lives in a function at top level: inside $( ) bash 4.1 and older
+# (macOS /bin/bash) lex its body and break on a stray quote or backtick.
+lsp_spec() {
+  python3 - "$TEMPLATE_DIR/lsp-plugins.json" "$1" 2>/dev/null <<'PY'
 import json, sys
 catalog = json.load(open(sys.argv[1], encoding="utf-8"))
 entry = catalog["plugins"].get(sys.argv[2])
 if entry:
     print("%s\t%s\t%s" % (catalog["marketplace"], entry["binary"], entry["install"]))
 PY
-)
+}
+
+# ${arr[@]+...}: an empty array under `set -u` is an error on bash < 4.4.
+for plugin in ${LSP_PLUGINS[@]+"${LSP_PLUGINS[@]}"}; do
+  spec=$(lsp_spec "$plugin" || true)
   if [ -z "$spec" ]; then
     echo "WARN: --lsp=$plugin is not an official LSP plugin (see $TEMPLATE_DIR/lsp-plugins.json); skipped." >&2
     continue
