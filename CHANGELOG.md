@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `.github/workflows/matrices.yml`: check.py, its self-test and every case matrix on ubuntu, macOS and Windows runners — on Windows under both `pwsh` and Windows PowerShell 5.1. Only Linux was ever tested, and the first run on a real Windows host found `install.ps1` unable to even parse under 5.1. `tests/run-matrices.py` runs the whole set, so every OS runs the same thing.
+- `.gitattributes` forcing LF: Git for Windows checks out with `core.autocrlf=true`, giving every shell script and scaffold CRLF line endings that bash, and a Linux container running a deployed `deploy.sh`, cannot run.
 - `statusline.{sh,ps1}` and a seeded `statusLine` key, printing
   `<model> · <context>% ctx` below the prompt. Context percentage is the point:
   the number that decides when compaction hits is otherwise invisible until it

@@ -1,0 +1,5 @@
+# Git for Windows defaults to core.autocrlf=true, which checked out every
+# shell script and scaffold with CRLF: bash then fails on `$'\r'`, and a
+# deploy.sh scaffold copied into a project breaks inside a Linux container.
+# Nothing here needs CRLF (PowerShell and Python read LF fine).
+* text=auto eol=lf
