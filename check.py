@@ -171,6 +171,24 @@ def _():
                  f"permissions.{key} is in settings.json but never read by "
                  f"install.ps1 — it would be dropped on Windows")
 
+    # Claude Code runs a "shell": "powershell" hook through `-Command`, which
+    # turns exit 2 into exit 1 unless the command re-raises $LASTEXITCODE.
+    # Without it every .ps1 guard ran and blocked nothing.
+    new_hook = re.search(r"function New-Hook\b.*?\n\}", ps1, re.S)
+    if not new_hook:
+        fail("install.ps1 derives from settings.json",
+             "could not find function New-Hook — fix this check before trusting a pass")
+        return
+    commands = re.findall(r'^\s*\$command\s*=\s*"(.*)"\s*$', new_hook.group(0), re.M)
+    if not commands:
+        fail("install.ps1 derives from settings.json",
+             "New-Hook assigns no $command — fix this check before trusting a pass")
+    for command in commands:
+        if not command.endswith("; exit `$LASTEXITCODE"):
+            fail("install.ps1 derives from settings.json",
+                 f"New-Hook writes `{command}` without `; exit $LASTEXITCODE` — "
+                 f"PowerShell -Command turns the hook's exit 2 into a non-blocking 1")
+
 
 # --- 4b. OWNED/SEEDED key classes agree across all three sites ---------------
 # The same two lists are written by hand in install.sh and install.ps1, and a

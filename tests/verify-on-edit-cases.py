@@ -28,6 +28,9 @@ import shutil
 import stat
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pyhook  # noqa: E402
 import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -159,7 +162,7 @@ def main():
 
     runners = [("sh", ["bash", SH])]
     if args.pwsh:
-        runners.append(("ps1", [args.pwsh, "-NoProfile", "-File", PS1]))
+        runners.append(("ps1", pyhook.ps1_hook(args.pwsh, PS1)))
 
     failures = 0
     for name, kind, rel, want, why in CASES:

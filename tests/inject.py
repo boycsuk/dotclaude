@@ -325,7 +325,25 @@ def add_unclassified_key(repo):
         json.dump(settings, fh, indent=2)
 
 
+def drop_ps1_exit_code(repo):
+    """Write the .ps1 hook command without re-raising its exit code.
+
+    Under `powershell -Command`, `& "x.ps1"` turns the script's exit 2 into
+    exit 1, so every .ps1 guard runs, prints BLOCKED, and blocks nothing. The
+    bare form reads as the obvious one, which is how it shipped.
+    """
+    path = os.path.join(repo, "install.ps1")
+    with open(path) as fh:
+        text = fh.read()
+    fixed = '$command = "& `"$Target\\hooks\\$name.ps1`"; exit `$LASTEXITCODE"'
+    if fixed not in text:
+        raise SystemExit("inject: install.ps1 no longer writes the .ps1 hook command this way")
+    with open(path, "w") as fh:
+        fh.write(text.replace(fixed, '$command = "& `"$Target\\hooks\\$name.ps1`""'))
+
+
 REGRESSIONS = {
+    "drop-ps1-exit-code": drop_ps1_exit_code,
     "obsolete-broad-match": obsolete_broad_match,
     "unwire-py-hook": unwire_py_hook,
     "undocument-opt-out": undocument_opt_out,

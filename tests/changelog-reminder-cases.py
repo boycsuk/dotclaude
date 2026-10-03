@@ -23,6 +23,9 @@ import os
 import shutil
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pyhook  # noqa: E402
 import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -60,7 +63,7 @@ def run_hook(repo, pwsh=None, stop_hook_active=False):
         "session_id": "test",
         "last_assistant_message": "done",
     })
-    cmd = [pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]
+    cmd = pyhook.ps1_hook(pwsh, PS1) if pwsh else ["bash", SH]
     p = subprocess.run(cmd, input=payload, capture_output=True, text=True, cwd=repo)
     return p.returncode, p.stdout.strip(), p.stderr.strip()
 
@@ -159,7 +162,7 @@ def case_lockfile_only(tmp, pwsh):
 
 def case_missing_cwd(tmp, pwsh):
     """A payload without cwd must not crash or warn about the wrong repo."""
-    cmd = [pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]
+    cmd = pyhook.ps1_hook(pwsh, PS1) if pwsh else ["bash", SH]
     p = subprocess.run(cmd, input='{"hook_event_name":"Stop"}',
                        capture_output=True, text=True, cwd=tmp)
     if p.returncode != 0:
@@ -168,7 +171,7 @@ def case_missing_cwd(tmp, pwsh):
 
 
 def case_garbage_input(tmp, pwsh):
-    cmd = [pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]
+    cmd = pyhook.ps1_hook(pwsh, PS1) if pwsh else ["bash", SH]
     p = subprocess.run(cmd, input="not json at all", capture_output=True,
                        text=True, cwd=tmp)
     if p.returncode != 0:

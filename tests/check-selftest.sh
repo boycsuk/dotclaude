@@ -92,6 +92,10 @@ python3 "$SRC/tests/inject.py" "$WORK/repo" add-permissions-key
 expect_fail "a new permissions key never reaches install.ps1"
 
 setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" drop-ps1-exit-code
+expect_fail "install.ps1 writes .ps1 hooks without re-raising the exit code"
+
+setup
 python3 "$SRC/tests/inject.py" "$WORK/repo" stop-hook-starts-blocking
 expect_fail "the Stop hook matrix stops asserting it never blocks"
 

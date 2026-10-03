@@ -250,6 +250,35 @@ def case_python_hook_installed_and_runs(home, pwsh):
     return None
 
 
+def case_installed_guard_blocks(home, pwsh):
+    # The matrices run each hook from the repo; this runs the command the
+    # installer WROTE, exactly as Claude Code launches it. Under PowerShell,
+    # `-Command '& "x.ps1"'` turns the script's exit 2 into exit 1, which does
+    # not block — every .ps1 guard shipped that way while its matrix, run
+    # through `-File`, passed.
+    if run_install(home, pwsh) != 0:
+        return "installer exited non-zero"
+    with open(claude(home, "settings.json")) as fh:
+        installed = json.load(fh)
+    commands = [h["command"] for g in installed["hooks"].get("PreToolUse", [])
+                for h in g["hooks"] if "guard-destructive" in h["command"]]
+    if len(commands) != 1:
+        return f"expected one wired guard-destructive hook, found {commands}"
+    if pwsh:
+        runner = [pwsh, "-NoProfile", "-NonInteractive", "-Command", commands[0]]
+        tool = "PowerShell"
+    else:
+        runner = ["bash", "-c", commands[0]]
+        tool = "Bash"
+    payload = json.dumps({"tool_name": tool, "tool_input": {"command": "rm -rf /"}})
+    proc = subprocess.run(runner, input=payload, capture_output=True, text=True,
+                          env=dict(os.environ, HOME=home))
+    if proc.returncode != 2:
+        return (f"installed guard-destructive exited {proc.returncode} on `rm -rf /`; "
+                f"only exit 2 blocks (err={proc.stderr.strip()[:200]!r})")
+    return None
+
+
 def case_output_style_defaults_on(home, pwsh):
     if run_install(home, pwsh) != 0:
         return "installer exited non-zero"
@@ -272,6 +301,7 @@ def case_output_style_defaults_on(home, pwsh):
 CASES = [
     ("output style defaults on, a user choice is kept", case_output_style_defaults_on),
     ("a .py hook is installed, manifested and runs as wired", case_python_hook_installed_and_runs),
+    ("an installed guard blocks through its wired command", case_installed_guard_blocks),
     ("fresh install: settings, hooks, manifest", case_fresh_install),
     ("personal settings keys survive the merge", case_user_keys_survive),
     ("re-install keeps user-added files", case_rerun_keeps_user_files),

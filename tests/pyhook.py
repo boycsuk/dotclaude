@@ -1,10 +1,11 @@
-"""Run a single-file Python hook the way Claude Code does, for the case matrices.
+"""Run hooks the way Claude Code does, for the case matrices.
 
 A `.py` hook has no `.sh`/`.ps1` twin, so there is no parity to check — but the
 Windows *invocation* still differs: install.ps1 wires it as
-`& "<python>" "<hook>.py"` under PowerShell. With `pwsh` given, `run` goes
-through that exact command form, so quoting or stdin handling that breaks only
-under PowerShell fails the matrix instead of a user's session.
+`& "<python>" "<hook>.py"; exit $LASTEXITCODE` under PowerShell. With `pwsh`
+given, `run` goes through that exact command form, so quoting, stdin or exit
+code handling that breaks only under PowerShell fails the matrix instead of a
+user's session. `ps1_hook` gives the same form for the `.ps1` twins.
 """
 
 import json
@@ -20,11 +21,28 @@ def hook_path(name):
     return os.path.join(HOOKS, f"{name}.py")
 
 
+def powershell_hook(pwsh, command):
+    """argv that runs an install.ps1 hook `command` the way Claude Code does.
+
+    A `"shell": "powershell"` hook is launched as `powershell -Command <command>`,
+    and -Command turns a script's `exit 2` into process exit 1, which does not
+    block. install.ps1 therefore appends `; exit $LASTEXITCODE`; running a
+    matrix through `-File` instead hid that every .ps1 guard was non-blocking.
+    """
+    return [pwsh, "-NoProfile", "-NonInteractive", "-Command",
+            f"{command}; exit $LASTEXITCODE"]
+
+
+def ps1_hook(pwsh, script):
+    """argv for a .ps1 hook, in the exact command form install.ps1 writes."""
+    return powershell_hook(pwsh, f'& "{script}"')
+
+
 def run(name, payload, cwd=None, env=None, pwsh=None):
     """Run hook `name` with `payload` on stdin; return (exit_code, parsed_stdout_or_None, stderr)."""
     script = hook_path(name)
     if pwsh:
-        cmd = [pwsh, "-NoProfile", "-Command", f'& "{sys.executable}" "{script}"']
+        cmd = powershell_hook(pwsh, f'& "{sys.executable}" "{script}"')
     else:
         cmd = [sys.executable, script]
     full_env = dict(os.environ, **(env or {}))

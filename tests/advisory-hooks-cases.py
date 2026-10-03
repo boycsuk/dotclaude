@@ -30,6 +30,9 @@ import json
 import os
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pyhook  # noqa: E402
 import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -41,7 +44,7 @@ NUDGE, SILENT = "NUDGE", "SILENT"
 def run(runner, hook, payload, cwd, env_extra=None):
     """Pipe real hook JSON through the script; return (verdict, stdout, rc)."""
     script = os.path.join(HOOKS, hook + (".ps1" if runner == "ps1" else ".sh"))
-    cmd = ([PWSH, "-NoProfile", "-File", script] if runner == "ps1"
+    cmd = (pyhook.ps1_hook(PWSH, script) if runner == "ps1"
            else ["bash", script])
     env = dict(os.environ, CLAUDE_PROJECT_DIR=cwd)
     # Each case gets its own HOME so the 5-minute debounce marker of one case

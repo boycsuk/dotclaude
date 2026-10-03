@@ -144,12 +144,16 @@ function New-Hook($name, $t, $isPython) {
     # prefix-anchored pattern reopens the wrapped-form bypasses the hooks'
     # own parsers close — DESIGN.md §27b). check.py enforces the same on the
     # source JSON; the guard below keeps Windows from reintroducing one.
+    # Claude Code launches a "shell": "powershell" hook as `powershell -Command
+    # <command>`, and -Command converts a script's or program's exit 2 into
+    # process exit 1 — which does not block. Without the trailing
+    # `exit $LASTEXITCODE` every .ps1 guard was a no-op on Windows.
     if ($isPython) {
         $script = Join-Path (Join-Path $Target "hooks") "$name.py"
         $launcherArgs = if ($PythonArgs) { " $PythonArgs" } else { "" }
-        $command = "& `"$PythonExe`"$launcherArgs `"$script`""
+        $command = "& `"$PythonExe`"$launcherArgs `"$script`"; exit `$LASTEXITCODE"
     } else {
-        $command = "& `"$Target\hooks\$name.ps1`""
+        $command = "& `"$Target\hooks\$name.ps1`"; exit `$LASTEXITCODE"
     }
     return [ordered]@{
         type    = "command"
