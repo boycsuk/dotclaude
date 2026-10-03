@@ -52,6 +52,21 @@ all merge idempotently. Omitting a flag on a re-deploy does **not** remove its
 server — `.mcp.json` is never rewritten except by the flag that owns the entry.
 (`--db` is accepted but a no-op now — the db-inspector agent is central.)
 
+**Many projects at once.** To refresh every dotclaude project under a folder
+(for example after a dotclaude change that retires an artifact), the user runs,
+from their terminal:
+
+```
+bash ~/.claude/templates/project/init.sh --update --recursive ~/projects
+```
+
+It lists each project with the flags derived from its `.mcp.json`, the
+obsolete hooks it prunes, the obsolete MCP servers it removes (with their
+`mcp__<name>` permissions) and the obsolete directories it only reports, then
+asks before changing anything (`--dry-run` shows the list only, `--yes` skips
+the question). Mention it when the user has several projects to update; it does
+not replace §1d/§1e, which stay per project.
+
 **Offer `--lsp=<plugin>` to code projects that predate it.** Read
 `enabledPlugins` in `.claude/settings.json`. If the project's language has an
 official plugin in `~/.claude/templates/project/lsp-plugins.json` and it is not

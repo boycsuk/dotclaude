@@ -4,7 +4,7 @@
 Run by init.sh and init.ps1 on every deploy (one implementation for both, so
 the pruning rules cannot drift between them):
 
-    python3 prune-obsolete.py <obsolete.json> [project-dir]
+    python3 prune-obsolete.py <obsolete.json> [project-dir] [--remove-mcp]
 
 Why it exists: removing a hook from dotclaude deletes its script from
 ~/.claude/hooks/ on the next install, but projects deployed earlier still wire
@@ -12,13 +12,17 @@ it in .claude/settings.json, so every matching tool call then reports a hook
 error. The deploy merge only ever ADDS entries; this is the matching removal.
 
 Hook entries are pruned in place (they point at files that no longer exist).
-Obsolete MCP servers and files are only reported on stdout as
-`OBSOLETE_MCP=` / `OBSOLETE_FILES=` lines: removing them is the user's call.
+Obsolete MCP servers are reported on stdout as `OBSOLETE_MCP=` lines, and with
+--remove-mcp (the user's explicit choice, passed by init --remove-obsolete-mcp)
+they are removed from .mcp.json together with their `mcp__<name>` permission
+rules. Obsolete directories are only ever reported (`OBSOLETE_FILES=`): they
+may hold committed content, such as .serena/memories.
 Never fatal: an unreadable file is reported and skipped, exit code is 0.
 """
 
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -94,6 +98,58 @@ def prune_settings_file(path, matches):
         print(f"  - pruned obsolete hook from {path}: {command}", file=sys.stderr)
 
 
+def _write(path, data):
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+        fh.write("\n")
+
+
+def remove_mcp(project, names):
+    """Delete `names` from .mcp.json and their mcp__<name> rules from the project settings."""
+    mcp_path = os.path.join(project, ".mcp.json")
+    try:
+        mcp = load(mcp_path)
+        servers = mcp.get("mcpServers")
+    except (OSError, ValueError, AttributeError):
+        return
+    if not isinstance(servers, dict):
+        return
+    gone = [n for n in names if n in servers]
+    if not gone:
+        return
+    for name in gone:
+        del servers[name]
+    try:
+        _write(mcp_path, mcp)
+    except OSError as exc:
+        print(f"  ! could not write {mcp_path} ({exc}); remove {gone} by hand", file=sys.stderr)
+        return
+    print(f"  - removed obsolete MCP server(s) from .mcp.json: {', '.join(gone)}", file=sys.stderr)
+    rule = re.compile(r"^mcp__(%s)(__.*)?$" % "|".join(re.escape(n) for n in gone))
+    for name in SETTINGS_FILES:
+        path = os.path.join(project, ".claude", name)
+        try:
+            settings = load(path)
+        except (OSError, ValueError):
+            continue
+        perms = settings.get("permissions") if isinstance(settings, dict) else None
+        if not isinstance(perms, dict):
+            continue
+        dropped = []
+        for key in ("allow", "ask", "deny"):
+            rules = perms.get(key)
+            if isinstance(rules, list):
+                kept = [r for r in rules if not (isinstance(r, str) and rule.match(r))]
+                dropped += [r for r in rules if r not in kept]
+                perms[key] = kept
+        if dropped:
+            try:
+                _write(path, settings)
+                print(f"  - removed their permission rules from {path}: {', '.join(dropped)}", file=sys.stderr)
+            except OSError as exc:
+                print(f"  ! could not write {path} ({exc}); remove {dropped} by hand", file=sys.stderr)
+
+
 def obsolete_mcp(project, names):
     try:
         servers = load(os.path.join(project, ".mcp.json")).get("mcpServers", {})
@@ -103,12 +159,13 @@ def obsolete_mcp(project, names):
 
 
 def main():
-    if len(sys.argv) not in (2, 3):
+    args = [a for a in sys.argv[1:] if a != "--remove-mcp"]
+    if len(args) not in (1, 2):
         print(__doc__, file=sys.stderr)
         return 0
-    project = sys.argv[2] if len(sys.argv) == 3 else "."
+    project = args[1] if len(args) == 2 else "."
     try:
-        manifest = load(sys.argv[1])
+        manifest = load(args[0])
     except (OSError, ValueError) as exc:
         print(f"  ! obsolete manifest unreadable ({exc}); nothing pruned", file=sys.stderr)
         return 0
@@ -117,7 +174,10 @@ def main():
     for name in SETTINGS_FILES:
         prune_settings_file(os.path.join(project, ".claude", name), matches)
 
-    servers = obsolete_mcp(project, [s["name"] for s in manifest.get("mcpServers", [])])
+    names = [s["name"] for s in manifest.get("mcpServers", [])]
+    if "--remove-mcp" in sys.argv[1:]:
+        remove_mcp(project, names)
+    servers = obsolete_mcp(project, names)
     files = [f["path"] for f in manifest.get("files", [])
              if os.path.exists(os.path.join(project, f["path"]))]
     print("OBSOLETE_MCP=" + ",".join(servers))
