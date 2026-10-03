@@ -630,6 +630,12 @@ def _():
         if len(data) != 1:
             fail("MCP fragments",
                  f"{rel} defines {len(data)} servers; one file per server")
+        # `@latest` re-resolves on every server start: one compromised publish
+        # runs as the user on every machine deployed with the flag.
+        for server in data.values():
+            for arg in server.get("args", []) if isinstance(server, dict) else []:
+                if isinstance(arg, str) and arg.endswith("@latest"):
+                    fail("MCP fragments", f"{rel} runs {arg!r} — pin an exact version")
         stem = name[:-len(".json")]
         if stem not in data:
             fail("MCP fragments",

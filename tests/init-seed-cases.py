@@ -188,8 +188,29 @@ def case_scaffolds(project, pwsh):
     return None
 
 
+def case_ui_permissions_are_named(project, pwsh):
+    stub = os.path.join(project, "bin")
+    os.makedirs(stub)
+    write(os.path.join(stub, "npx"), "#!/bin/sh\nexit 0\n")
+    os.chmod(os.path.join(stub, "npx"), 0o755)
+    cmd = ([pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]) + ["--ui"]
+    proc = subprocess.run(cmd, cwd=project, capture_output=True, text=True,
+                          env=dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR,
+                                   PATH=stub + os.pathsep + os.environ["PATH"]))
+    if proc.returncode != 0:
+        return f"init --ui exited {proc.returncode}: {proc.stderr[-200:]}"
+    with open(os.path.join(project, ".claude", "settings.json")) as fh:
+        allow = json.load(fh).get("permissions", {}).get("allow", [])
+    if "mcp__playwright__browser_navigate" not in allow:
+        return f"--ui did not merge the browser tool permissions: {allow}"
+    risky = [r for r in allow if r.endswith(("__*", "browser_evaluate", "browser_file_upload",
+                                             "browser_run_code_unsafe"))]
+    return f"--ui allowed tools that must stay on ask: {risky}" if risky else None
+
+
 CASES = [
     ("a fresh project is seeded", case_fresh_project_is_seeded),
+    ("--ui allows the safe browser tools by name only", case_ui_permissions_are_named),
     ("user files are never overwritten, missing ones are seeded", case_user_files_never_overwritten),
     (".gitignore merge keeps order, glues nothing, appends once", case_gitignore_merge),
     ("a CRLF .gitignore is merged once", case_gitignore_crlf),

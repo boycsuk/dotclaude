@@ -1,0 +1,23 @@
+{
+  "_comment": "Merged into the project's .claude/settings.json permissions.allow by init --ui. Navigation, observation and ordinary interaction with the app under test, named one by one: a wildcard (mcp__playwright__*) would also allow browser_evaluate and browser_run_code_unsafe (arbitrary JavaScript in the page), browser_file_upload (sends a local file — a project .env included — to whatever page is open) and browser_network_request, which stay on the default ask.",
+  "allow": [
+    "mcp__playwright__browser_navigate",
+    "mcp__playwright__browser_navigate_back",
+    "mcp__playwright__browser_snapshot",
+    "mcp__playwright__browser_take_screenshot",
+    "mcp__playwright__browser_resize",
+    "mcp__playwright__browser_console_messages",
+    "mcp__playwright__browser_network_requests",
+    "mcp__playwright__browser_wait_for",
+    "mcp__playwright__browser_tabs",
+    "mcp__playwright__browser_close",
+    "mcp__playwright__browser_click",
+    "mcp__playwright__browser_hover",
+    "mcp__playwright__browser_type",
+    "mcp__playwright__browser_press_key",
+    "mcp__playwright__browser_select_option",
+    "mcp__playwright__browser_fill_form",
+    "mcp__playwright__browser_handle_dialog",
+    "mcp__playwright__browser_find"
+  ]
+}

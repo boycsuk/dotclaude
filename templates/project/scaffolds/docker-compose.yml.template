@@ -5,8 +5,11 @@ services:
     # PORT must match the Dockerfile's EXPOSE and the app's listen port.
     # Dockerfile.node listens on 3000, Dockerfile.python on 8000 — set PORT in
     # .env accordingly (the default below only fits the Node scaffold).
+    # Published on localhost only by default: a reverse proxy on the same host
+    # reaches it, the network does not (Docker's published ports also bypass
+    # ufw). Set BIND_ADDRESS=0.0.0.0 in .env to expose it on purpose.
     ports:
-      - "${PORT:-3000}:${PORT:-3000}"
+      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}"
     restart: unless-stopped
     depends_on:
       db:
@@ -32,12 +35,13 @@ services:
 
   db:
     image: postgres:17-alpine
-    # Trivial dev-only credentials. NEVER reuse these in production — set real
-    # values via the .env file (POSTGRES_PASSWORD, etc.) before deploying.
+    # The defaults are trivial dev-only credentials. NEVER reuse them in
+    # production: set POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB in .env,
+    # which compose reads for these ${...} values.
     environment:
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: app
-      POSTGRES_DB: app
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
     volumes:
       - db-data:/var/lib/postgresql/data
     # The app reaches Postgres over the compose network as `db:5432`; no need
@@ -46,7 +50,7 @@ services:
     # ports:
     #   - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5

@@ -1,7 +1,7 @@
 ---
 name: verify
 description: Runs the project's full verification chain — tests, typecheck, and linter — over the whole project to confirm a code task is actually complete. Auto-detects the stack. Use before closing any code task, and whenever the user asks to verify, validate, or check that changes pass. Complements the per-edit verify-on-edit hook, which only lints/typechecks single files; this also runs the test suite.
-allowed-tools: Bash(npm *) Bash(npx *) Bash(pnpm *) Bash(yarn *) Bash(bun *) Bash(bunx *) Bash(python *) Bash(python3 *) Bash(pytest *) Bash(ruff *) Bash(mypy *) Bash(uv *) Bash(poetry *) Bash(cargo *) Bash(go *) Bash(make *) Glob
+allowed-tools: Bash(npm *) Bash(pnpm *) Bash(yarn *) Bash(bun *) Bash(python *) Bash(python3 *) Bash(pytest *) Bash(ruff *) Bash(mypy *) Bash(uv *) Bash(poetry *) Bash(cargo *) Bash(go *) Bash(make *) Glob
 model: haiku
 context: fork
 background: false
@@ -26,7 +26,7 @@ Glob: {package.json,pnpm-lock.yaml,yarn.lock,bun.lock,bun.lockb,pyproject.toml,r
 Run **in this order** if they exist for the detected stack. Use the runner the lockfile names — a project on pnpm/bun often has no working `npm`:
 
 **Node / TypeScript** (`package.json`): `pnpm-lock.yaml` → `pnpm`, `yarn.lock` → `yarn`, `bun.lock`/`bun.lockb` → `bun`, otherwise `npm`.
-- `<pm> run typecheck` (or `npx tsc --noEmit` / `bunx tsc --noEmit` if there is no script)
+- `<pm> run typecheck` (or `npx --no-install tsc --noEmit` / `bunx --no-install tsc --noEmit` if there is no script — without `--no-install`, npx in a non-interactive shell downloads and runs whatever registry package answers to `tsc`)
 - `<pm> run lint`
 - `<pm> test`
 

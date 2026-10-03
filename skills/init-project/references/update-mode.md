@@ -83,8 +83,8 @@ silently.
 `package.json` — react/vue/svelte/next/angular/astro —, an `index.html`, or a
 `clients/web/` dir), ask via AskUserQuestion whether to add the
 Playwright MCP for visual UI verification (the loop `/implement-ui` drives). If
-accepted, include `--ui` in the command above and add `mcp__playwright__*` to
-the project stub's `permissions.allow` in step 6. If declined, don't ask again
+accepted, include `--ui` in the command above (it merges the browser tools'
+permissions by exact name — add no wildcard). If declined, don't ask again
 on later re-runs unless the user brings it up. This mirrors §1e's shape:
 reconcile an improvement the template gained after the project was deployed,
 by asking — never by silently editing.

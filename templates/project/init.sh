@@ -354,6 +354,8 @@ if [ "$INSTALL_UI" = "true" ]; then
     exit 7
   fi
   merge_mcp_servers "$TEMPLATE_DIR/mcp/playwright.json"
+  python3 "$TEMPLATE_DIR/scripts/merge-permissions.py" "$TEMPLATE_DIR/permissions/playwright.json" . \
+    || echo "WARN: playwright permissions not merged; deploy continues." >&2
 fi
 
 # --- codebase-memory-mcp (opt-in) ---------------------------------------------

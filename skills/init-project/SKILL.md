@@ -213,15 +213,15 @@ base config and there is no `{{SCRIPT_EXT}}` placeholder anymore.
 
 Only edit the project stub if this project needs something project-specific:
 
-- **MCP tool permissions:** add `mcp__<server>__*` to `permissions.allow` for
-  each MCP the user selected. Selecting the Xcode MCP adds `mcp__xcode__*`;
-  selecting Playwright (`--ui`) adds `mcp__playwright__*`. **Not** for
-  codebase-memory-mcp: `--codebase-memory` already merged its read-only tools
-  by exact name, and a `mcp__codebase-memory-mcp__*` wildcard would also allow
-  the tools that write or delete the index.
+- **MCP tool permissions:** selecting the Xcode MCP adds `mcp__xcode__*` to
+  `permissions.allow`. **Not** for Playwright or codebase-memory-mcp: `--ui`
+  and `--codebase-memory` already merged their safe tools by exact name, and a
+  wildcard would also allow what they leave on ask — `browser_evaluate`,
+  `browser_run_code_unsafe` and `browser_file_upload` (which can send a local
+  `.env` to any open page), or the tools that write or delete the index.
 - **SQL client (if a SQL stack was detected):** add `Bash(psql:*)` and/or
-  `Bash(sqlite3:*)` to `permissions.allow` (on Windows the user is on the
-  central PowerShell config, so add `PowerShell(psql *)` / `PowerShell(sqlite3 *)`).
+  `Bash(sqlite3:*)` to `permissions.allow` (on Windows add `PowerShell(psql *)` /
+  `PowerShell(sqlite3 *)` too: both shell tools are available there).
 
 If the project needs nothing project-specific, leave the stub's empty
 `allow`/`ask`/`deny` arrays as they are. Do NOT copy the central hooks or the

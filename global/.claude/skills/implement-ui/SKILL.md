@@ -83,7 +83,8 @@ Per section:
      missing states), fix them, and re-screenshot. Two or three iterations is
      the normal convergence; do not stop at one.
    - If no browser MCP is available: say so, offer to add it (`claude mcp add
-     playwright -- npx -y @playwright/mcp@latest`, or re-deploying with
+     playwright -- npx -y @playwright/mcp@0.0.83` — a pinned version, never
+     `@latest`, which re-resolves on every start —, or re-deploying with
      `init.sh --update --ui` in template projects), and meanwhile ask the user
      for a screenshot to compare against.
 4. Only when the section matches (or the user accepts the remaining

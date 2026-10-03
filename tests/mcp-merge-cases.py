@@ -330,7 +330,9 @@ def main():
             with open(os.path.join(tmp, ".mcp.json")) as fh:
                 spec = json.load(fh)["mcpServers"].get("playwright", {})
             problem = None
-            if "@playwright/mcp@latest" not in spec.get("args", []):
+            with open(os.path.join(TEMPLATE_DIR, "mcp", "playwright.json")) as fh:
+                shipped = json.load(fh)["playwright"]
+            if spec.get("args") != shipped["args"]:
                 problem = f"hand-added playwright not adopted by --ui: {spec}"
         finally:
             shutil.rmtree(tmp, ignore_errors=True)

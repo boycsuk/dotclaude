@@ -203,6 +203,10 @@ inject drop-fork-from-verify
 expect_fail "frontmatter validity" "a skill pins haiku without context: fork"
 
 setup
+inject unpin-mcp-fragment
+expect_fail "MCP fragments" "an MCP fragment goes back to @latest"
+
+setup
 rm "$WORK/repo/templates/project/init.ps1"
 expect_fail "installer/deployer pairs" "the Windows deployer is deleted"
 

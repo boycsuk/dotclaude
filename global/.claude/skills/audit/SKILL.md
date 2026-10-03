@@ -2,7 +2,7 @@
 name: audit
 description: Audits code for vulnerabilities, dead code, duplication, comment/doc hygiene, test coverage, and (on web projects) duplicated styles and repeated markup that should be components. Asks WHICH categories, then how deep, then over what — nothing runs before those answers. Covers both uncommitted changes and code already in the repo. Use for a security review before committing, a whole-project audit, hunting dead or unused code or duplication, or checking what could become a component. For a quick bug-focused pass over the current diff use /code-review.
 effort: high
-allowed-tools: Bash(npx *) Bash(npm *) Bash(pnpm *) Bash(bunx *) Bash(uv *) Bash(python3 *) Bash(pip *) Bash(cargo *) Bash(go *) Bash(git *) Bash(rg *) Bash(grep *) Bash(find *) Bash(wc *) Bash(ls *) Bash(gitleaks *) Bash(pip-audit *) Bash(govulncheck *) Glob Grep Read Task
+allowed-tools: Bash(npm *) Bash(pnpm *) Bash(uv *) Bash(python3 *) Bash(pip *) Bash(cargo *) Bash(go *) Bash(git *) Bash(rg *) Bash(grep *) Bash(find *) Bash(wc *) Bash(ls *) Bash(gitleaks *) Bash(pip-audit *) Bash(govulncheck *) Glob Grep Read Task
 ---
 
 # Audit
@@ -56,14 +56,14 @@ Before asking, **size the job**: count the files in scope (`git ls-files <scope>
 
 ## 2. Run the deterministic detectors first — at every depth
 
-A linter that resolves imports beats an LLM guessing about reachability, and it is nearly free. **Run only the detectors belonging to a selected category** — a dead-code sweep on a security-only run is wasted time. Skip silently if the tool is absent (do NOT install anything without asking).
+A linter that resolves imports beats an LLM guessing about reachability, and it is nearly free. **Run only the detectors belonging to a selected category** — a dead-code sweep on a security-only run is wasted time. Run only what is already installed: `npx --no-install` and `uvx --offline` never fetch. Without those flags, npx in a non-interactive shell assumes `--yes` and downloads and executes the latest registry package — an install the user did not approve (`guard-dependencies` asks before it). Skip a missing tool, or ask before fetching it.
 
 | Stack | Dead code / unused deps | Duplication |
 |---|---|---|
-| Node / TS | `npx knip` (best single tool: unused files, exports, deps) — else `npx ts-prune` + `npx depcheck` | `npx jscpd <scope>` |
-| Python | `uvx vulture <scope>` or `python3 -m vulture <scope>`; `uvx deptry .` for deps | `npx jscpd <scope>` |
-| Rust | `cargo +nightly udeps` if available; `cargo clippy -- -W dead_code` | `npx jscpd <scope>` |
-| Go | `go vet ./...`; `staticcheck ./...` if available | `npx jscpd <scope>` |
+| Node / TS | `npx --no-install knip` (best single tool: unused files, exports, deps) — else `npx --no-install ts-prune` + `npx --no-install depcheck` | `npx --no-install jscpd <scope>` |
+| Python | `uvx --offline vulture <scope>` or `python3 -m vulture <scope>`; `uvx --offline deptry .` for deps | `npx --no-install jscpd <scope>` |
+| Rust | `cargo +nightly udeps` if available; `cargo clippy -- -W dead_code` | `npx --no-install jscpd <scope>` |
+| Go | `go vet ./...`; `staticcheck ./...` if available | `npx --no-install jscpd <scope>` |
 | Any | `git grep -n "TODO\|FIXME\|XXX\|HACK"` for known debt | — |
 
 Security scanners, when present: `npm audit --audit-level=moderate`, `pip-audit`, `cargo audit`, `govulncheck ./...`, plus `gitleaks detect` / `trufflehog` for historical secrets.

@@ -52,7 +52,16 @@
       "Read(//**/.env.staging)",
       "Read(//**/secrets/**)",
       "Read(//**/credentials/**)",
-      "Read(~/.claude/.credentials.json)"
+      "Read(~/.claude/.credentials.json)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.kube/**)",
+      "Read(~/.docker/config.json)",
+      "Read(~/.netrc)",
+      "Read(~/.npmrc)",
+      "Read(~/.pypirc)"
     ],
     "disableBypassPermissionsMode": "disable",
     "defaultMode": "auto"

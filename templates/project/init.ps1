@@ -376,6 +376,8 @@ if ($InstallUi) {
         exit 7
     }
     Merge-McpServers @((Join-Path $TemplateDir "mcp/playwright.json"))
+    Invoke-TemplatePython -What "playwright permission merge" `
+        -ScriptArgs @((Join-Path $TemplateDir "scripts/merge-permissions.py"), (Join-Path $TemplateDir "permissions/playwright.json"), (Get-Location).Path)
 }
 
 # --- codebase-memory-mcp (opt-in) ---------------------------------------------

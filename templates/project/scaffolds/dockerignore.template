@@ -13,8 +13,15 @@ compose*.yml
 .env.*
 !.env.example
 secrets/
+credentials/
 *.pem
 *.p12
+*.key
+id_rsa*
+id_ed25519*
+.npmrc
+.pypirc
+.netrc
 
 # Dependencies and build output — reinstalled/rebuilt inside the image.
 node_modules

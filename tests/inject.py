@@ -397,7 +397,18 @@ def drop_fork_from_verify(repo):
         fh.write(text.replace("\ncontext: fork\n", "\n", 1))
 
 
+def unpin_mcp_fragment(repo):
+    """An MCP server fragment back on @latest re-resolves the package on every start."""
+    path = os.path.join(repo, "templates/project/mcp/playwright.json")
+    with open(path) as fh:
+        data = json.load(fh)
+    data["playwright"]["args"] = ["-y", "@playwright/mcp@latest"]
+    with open(path, "w") as fh:
+        json.dump(data, fh, indent=2)
+
+
 REGRESSIONS = {
+    "unpin-mcp-fragment": unpin_mcp_fragment,
     "drop-fork-from-verify": drop_fork_from_verify,
     "drop-skill-from-readme": drop_skill_from_readme,
     "unwire-shell-hook": unwire_shell_hook,
