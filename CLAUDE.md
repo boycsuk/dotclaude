@@ -40,6 +40,7 @@ dotclaude/
     ├── CHANGELOG.md.template    # Keep-a-Changelog starter
     ├── .gitignore.template
     ├── obsolete.json            # artifacts dotclaude stopped shipping; init prunes their hook entries
+    ├── lsp-plugins.json         # official LSP plugins -> language-server binary (for --lsp=<plugin>)
     ├── scripts/prune-obsolete.py  # the pruning, shared by init.sh and init.ps1
     ├── mcp/                     # one fragment per MCP server (xcode, playwright);
     │                            # ./.mcp.json is COMPOSED from these, never copied
@@ -56,7 +57,7 @@ dotclaude/
 
 ### 1. The skill plans, the user executes — do not merge them back
 
-`skills/init-project/SKILL.md` deliberately does NOT run `init.sh` itself. It detects the stack, runs the interview, then **prints** the exact `bash …/init.sh [--xcode] [--ui]` command for the user to run from a normal terminal. After the user confirms `deploy OK`, the skill resumes with `Edit` to fill placeholders.
+`skills/init-project/SKILL.md` deliberately does NOT run `init.sh` itself. It detects the stack, runs the interview, then **prints** the exact `bash …/init.sh [--lsp=<plugin>] [--xcode] [--ui]` command for the user to run from a normal terminal. After the user confirms `deploy OK`, the skill resumes with `Edit` to fill placeholders.
 
 The temptation to "just run the script from the skill" via a `!`-prefixed shell block is real and was tried — it fails reliably for reasons that are not in our control:
 
@@ -97,9 +98,9 @@ When `/compound` (a skill inside the template) suggests promoting a project-loca
    - Detects stack from `package.json` / `pyproject.toml` / `Cargo.toml` / `go.mod` etc., or interviews via AskUserQuestion if empty.
    - Asks which MCPs to authorize (multiSelect).
    - Detects SQL stack for the `db-inspector` agent.
-   - Prints the exact terminal command (`bash ~/.claude/templates/project/init.sh [--xcode] [--ui]`) for the user to run.
+   - Prints the exact terminal command (`bash ~/.claude/templates/project/init.sh [--lsp=<plugin>] [--xcode] [--ui]`) for the user to run.
 
-3. **User executes.** From a normal terminal (not from inside Claude Code), the user runs the printed command. `init.sh` copies only the per-project files (CLAUDE.md, CHANGELOG.md, docs/, the settings.json stub, .gitignore), composes `.mcp.json` from the `mcp/` fragments the flags select (`--xcode` → xcode, `--ui` → playwright), prunes hook entries for artifacts listed in `obsolete.json`, writes any requested scaffolds, and prints `init.sh: deploy OK`. The central hooks/agents/skills/rules/output-styles are NOT copied — they already live in `~/.claude/`. See decision 15 in DESIGN.md for why this is split from the skill.
+3. **User executes.** From a normal terminal (not from inside Claude Code), the user runs the printed command. `init.sh` copies only the per-project files (CLAUDE.md, CHANGELOG.md, docs/, the settings.json stub, .gitignore), composes `.mcp.json` from the `mcp/` fragments the flags select (`--xcode` → xcode, `--ui` → playwright), installs the official LSP plugin at project scope for each `--lsp=<plugin>` (catalog: `lsp-plugins.json`), prunes hook entries for artifacts listed in `obsolete.json`, writes any requested scaffolds, and prints `init.sh: deploy OK`. The central hooks/agents/skills/rules/output-styles are NOT copied — they already live in `~/.claude/`. See decision 15 in DESIGN.md for why this is split from the skill.
 
 4. **Per-project personalize.** The user returns to Claude Code and confirms. The skill resumes and fills `{{placeholders}}` in the deployed `CLAUDE.md` and `settings.json` using the `Edit` tool, then verifies the deploy.
 
@@ -142,7 +143,7 @@ DESIGN.md captures the reasoning behind every structural choice — read it befo
 
 - **Run `python3 check.py` before every commit.** It is the closest thing this repo has to a test suite: twelve checks over the duplications the architecture requires (`.sh`/`.ps1` pairs, `install.ps1` deriving its rules from `settings.json`, doc inventories, shared extension globs, no inline interpreters in skills, hook wiring — no `if` gates and advisory hooks still emitting `additionalContext` — the safety-hook matrices and their known-bypass cases, DESIGN.md's structural headings, JSON validity). It exists because prose asking for lockstep did not hold — four of five spot-checked duplications had already diverged. See DESIGN.md §25.
 - **After touching a safety hook, run its case matrix** — `tests/guard-push-main-cases.py` (61 cases), `tests/guard-destructive-cases.py` (48), `tests/detect-secrets-cases.py` (39), `tests/guard-central-config-cases.py` (17), `tests/verify-on-edit-cases.py` (11). Add `--pwsh <path>` to verify the PowerShell sibling agrees on every case. Every one of these hooks shipped defects that reading them did not reveal, so a newly discovered case goes in the matrix *before* the fix. See DESIGN.md §18, §26 and §27.
-- **After touching a deployer or installer, run their matrices** — `tests/mcp-merge-cases.py` (composition, prerequisite exit codes), `tests/update-prune-cases.py` (obsolete hook pruning through both init scripts) and `tests/install-cases.py` (settings merge preserves personal keys, manifest add/remove cycle, unparseable-settings backup). Both take `--pwsh <path>`.
+- **After touching a deployer or installer, run their matrices** — `tests/mcp-merge-cases.py` (composition, prerequisite exit codes), `tests/update-prune-cases.py` (obsolete hook pruning through both init scripts), `tests/lsp-plugin-cases.py` (`--lsp`, never fatal) and `tests/install-cases.py` (settings merge preserves personal keys, manifest add/remove cycle, unparseable-settings backup). Both take `--pwsh <path>`.
 - **Hook entries in `settings.json` carry no `if:` gates, on purpose.** An `if` pattern is prefix-anchored, so it reopens exactly the wrapped-form bypasses the hooks' own parsers close (`"if": "Bash(git push *)"` let `git -C /repo push origin main` through unjudged, while the matrix passed because it invokes the hook directly). Every hook self-gates and exits 0 fast on non-matches. DESIGN.md §27(b).
 - **An advisory hook must deliver through `hookSpecificOutput.additionalContext` on stdout, never stderr.** With exit 0, stderr goes to the debug log only — three hooks were inert for months that way. DESIGN.md §17 (2026-08-15 revision).
 - **After touching `check.py`, run `bash tests/check-selftest.sh`** — it injects each regression check.py claims to catch and asserts it fails, plus a control run on a pristine copy. A validator nobody tests passes on a broken repo: this one shipped blind to every central skill (a `glob("**/*.md")` that silently skips dot-directories) and the self-test is what found it.

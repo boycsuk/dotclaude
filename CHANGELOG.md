@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Obsolete-artifact manifest (`templates/project/obsolete.json`) and `scripts/prune-obsolete.py`: every `init.sh`/`init.ps1` run removes project hook entries that point at hooks dotclaude no longer ships (in `settings.json` and `settings.local.json`) and reports obsolete MCP servers and directories without deleting them. `detect-drift.py` exposes `OBSOLETE_HOOKS`, `OBSOLETE_MCP` and `OBSOLETE_FILES`. Covered by `tests/update-prune-cases.py`.
 - `check.py` check 12: `obsolete.json` may not name a hook or MCP fragment dotclaude still ships.
 - Both installers print a notice when a re-install removes a hook file, pointing at `/init-project --update` to prune it from projects.
+- `--lsp=<plugin>` for `init.sh`/`init.ps1` (repeatable): installs an official Claude Code LSP plugin at project scope via `claude plugin install --scope project`, warning — never failing — when the language-server binary, the `claude` CLI or the plugin name is missing. `templates/project/lsp-plugins.json` maps the 13 official plugins to their binaries and install hints; `/init-project` passes the flag for the detected language and offers it on `--update`. Covered by `tests/lsp-plugin-cases.py`; `check.py` check 13 validates the catalog.
 
 ### Changed
 - The Explore agent is no longer described as running on Haiku: since Claude Code v2.1.198 it inherits the session model (`rules/ai-collaboration.md`, template README).

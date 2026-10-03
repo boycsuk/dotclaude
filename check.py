@@ -424,6 +424,7 @@ def _():
     for rel in ["global/.claude/settings.json",
                 "templates/project/.claude/settings.json",
                 "templates/project/obsolete.json",
+                "templates/project/lsp-plugins.json",
                 "templates/project/.claude/settings.local.json.example",
                 ] + fragments:
         path = os.path.join(REPO, rel)
@@ -458,6 +459,26 @@ def _():
         if os.path.exists(os.path.join(REPO, "templates/project/mcp", f"{name}.json")):
             fail("obsolete manifest",
                  f"MCP server {name!r} is listed as obsolete but mcp/{name}.json still ships")
+
+
+# --- 13. The LSP plugin catalog is complete and well-formed -------------------
+@check("LSP plugin catalog")
+def _():
+    # init.sh/init.ps1 read the binary and install hint from here, and the
+    # skill maps languages through it: a missing field degrades into a WARN
+    # with an empty command, which looks like a hint and helps nobody.
+    catalog = json.loads(read("templates/project/lsp-plugins.json"))
+    if catalog.get("marketplace") != "claude-plugins-official":
+        fail("LSP plugin catalog", "marketplace must be claude-plugins-official (official plugins only)")
+    plugins = catalog.get("plugins", {})
+    if not plugins:
+        fail("LSP plugin catalog", "no plugins listed")
+    for name, entry in plugins.items():
+        if not name.endswith("-lsp"):
+            fail("LSP plugin catalog", f"{name!r} is not an official *-lsp plugin name")
+        for field in ("languages", "binary", "install"):
+            if not entry.get(field):
+                fail("LSP plugin catalog", f"{name} has no {field!r}")
 
 
 def main():

@@ -54,10 +54,10 @@ The skill detects your OS, detects your stack (or interviews you), and asks whic
 
 ```bash
 cd <your project>
-bash ~/.claude/templates/project/init.sh [--xcode] [--ui] [scaffold flags]
+bash ~/.claude/templates/project/init.sh [--lsp=<plugin>] [--xcode] [--ui] [scaffold flags]
 ```
 
-The MCP flags are added by the skill per the interview: `--xcode` (Apple's `xcrun mcpbridge`, macOS + Xcode 26.3+ only), `--ui` (Playwright browser MCP — lets the model screenshot the running app, which `/implement-ui` uses to verify UI work against a design reference; needs `npx`). Scaffold flags (`--fullstack`, `--runtime=`, `--compose`, `--proxy=`, `--deploy-script`) per the interview. When the script prints `init.sh: deploy OK`, return to Claude Code.
+`--lsp=<plugin>` installs the official Claude Code LSP plugin for the project's language at project scope (see below). The MCP flags are added by the skill per the interview: `--xcode` (Apple's `xcrun mcpbridge`, macOS + Xcode 26.3+ only), `--ui` (Playwright browser MCP — lets the model screenshot the running app, which `/implement-ui` uses to verify UI work against a design reference; needs `npx`). Scaffold flags (`--fullstack`, `--runtime=`, `--compose`, `--proxy=`, `--deploy-script`) per the interview. When the script prints `init.sh: deploy OK`, return to Claude Code.
 
 **3. Personalize with Claude Code.** The skill resumes: it fills in placeholders in the deployed `CLAUDE.md` and `settings.json`, sanity-checks `.gitignore`, and verifies the deploy.
 
@@ -94,6 +94,12 @@ The reusable core is central, so **where** you add something depends on whether 
 | A project-only skill/agent | Create `.claude/skills/<name>/SKILL.md` or `.claude/agents/<name>.md` (lives only here) |
 | Permissions for a new MCP, or a project-only override | Add to `permissions.allow` in the project's `.claude/settings.json` stub |
 | A new high-level area doc (e.g. `mobile.md`, `bot.md`) | Add the file under `docs/`; `/update-docs` keeps it in sync with the diff |
+
+## Code intelligence: the LSP plugin (`--lsp=<plugin>`)
+
+`/init-project` maps the project's language to one of Claude Code's 13 official LSP plugins (`lsp-plugins.json`: pyright-lsp, typescript-lsp, gopls-lsp, rust-analyzer-lsp, …) and passes `--lsp=<plugin>`. The deploy runs `claude plugin install <plugin>@claude-plugins-official --scope project`, which records it in `.claude/settings.json`. The model then gets a read-only `LSP` tool (definitions, references, hover types, call hierarchy) and the language server's diagnostics after every edit ("Found N new diagnostic issues").
+
+The plugin is only the wiring: the language-server binary (`pyright-langserver`, `typescript-language-server`, …) must be on PATH — the deploy warns with the install command if it is not. A teammate who clones the project runs the same `claude plugin install … --scope project` once: a plugin listed in `enabledPlugins` but not installed stays off. Languages without an official plugin (Bash, PowerShell, …) get none.
 
 ## Retired artifacts are pruned on every deploy
 
@@ -165,7 +171,7 @@ The `init.sh` / `init.ps1` scripts work on their own — useful for CI, scripted
 ```bash
 # Linux / macOS / WSL
 cd <your project>
-bash ~/.claude/templates/project/init.sh [--xcode] [--ui]
+bash ~/.claude/templates/project/init.sh [--lsp=<plugin>] [--xcode] [--ui]
 # Edit CLAUDE.md: replace {{...}} placeholders with real values
 ```
 

@@ -152,8 +152,19 @@ def obsolete_hits_shipped_hook(repo):
         json.dump(manifest, fh, indent=2)
 
 
+def lsp_entry_without_binary(repo):
+    """A catalog entry with no binary turns the PATH probe into a no-op."""
+    path = os.path.join(repo, "templates/project/lsp-plugins.json")
+    with open(path) as fh:
+        catalog = json.load(fh)
+    del catalog["plugins"]["pyright-lsp"]["binary"]
+    with open(path, "w") as fh:
+        json.dump(catalog, fh, indent=2)
+
+
 REGRESSIONS = {
     "obsolete-hits-shipped-hook": obsolete_hits_shipped_hook,
+    "lsp-entry-without-binary": lsp_entry_without_binary,
     "drop-hook-matrix": drop_hook_matrix,
     "delete-central-agent": delete_central_agent,
     "break-frontmatter": break_frontmatter,

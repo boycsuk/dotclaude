@@ -11,7 +11,7 @@
 # Lockstep sibling of init.sh — see it for the full semantics.
 #
 # Usage (run inside the target project directory):
-#   powershell -File "$HOME\.claude\templates\project\init.ps1" [--xcode] [--ui] [--update] [scaffold flags]
+#   powershell -File "$HOME\.claude\templates\project\init.ps1" [--xcode] [--ui] [--lsp=<plugin>] [--update] [scaffold flags]
 #
 # --update, --db (no-op now: db-inspector is central), and the scaffold flags
 # (--fullstack, --runtime=, --compose, --proxy=, --deploy-script) behave as in
@@ -25,11 +25,15 @@
 # --ui merges the 'playwright' browser server (@playwright/mcp via npx) into
 # ./.mcp.json for the visual verification loop the central /implement-ui skill
 # drives. Exit 7 if 'npx' is not in PATH.
+#
+# --lsp=<plugin> (repeatable) installs an official LSP plugin at project scope
+# via `claude plugin install --scope project`; never fatal (see init.sh).
 
 $ErrorActionPreference = "Stop"
 
 $InstallXcode  = $false
 $InstallUi     = $false
+$LspPlugins    = @()
 $Fullstack     = $false
 $Runtime       = ""
 $Compose       = $false
@@ -40,6 +44,7 @@ foreach ($arg in $args) {
     if     ($arg -eq "--serena")        { [Console]::Error.WriteLine("WARN: --serena was removed (Serena and Graphify are no longer shipped); ignoring it.") }
     elseif ($arg -eq "--xcode")         { $InstallXcode  = $true }
     elseif ($arg -eq "--ui")            { $InstallUi     = $true }
+    elseif ($arg -like "--lsp=*")       { $LspPlugins   += $arg.Substring(6) }
     elseif ($arg -eq "--update")        { }  # informational: seeding always skips existing files
     elseif ($arg -eq "--db")            { }  # accepted, no-op (db-inspector is central now)
     elseif ($arg -eq "--fullstack")     { $Fullstack     = $true }
@@ -252,6 +257,37 @@ if ($InstallUi) {
         exit 7
     }
     Merge-McpServers @((Join-Path $TemplateDir "mcp/playwright.json"))
+}
+
+# --- LSP plugins (opt-in, one per --lsp=<plugin>) -----------------------------
+# Lockstep sibling of the init.sh block: same catalog (lsp-plugins.json), same
+# never-fatal contract — every problem is a WARN carrying the command that fixes it.
+if ($LspPlugins.Count -gt 0) {
+    $catalog = Get-Content -Raw (Join-Path $TemplateDir "lsp-plugins.json") | ConvertFrom-Json
+    foreach ($plugin in $LspPlugins) {
+        $entry = $catalog.plugins.PSObject.Properties[$plugin]
+        if (-not $entry) {
+            [Console]::Error.WriteLine("WARN: --lsp=$plugin is not an official LSP plugin (see $(Join-Path $TemplateDir 'lsp-plugins.json')); skipped.")
+            continue
+        }
+        $marketplace = $catalog.marketplace
+        if (-not (Get-Command $entry.Value.binary -ErrorAction SilentlyContinue)) {
+            [Console]::Error.WriteLine("WARN: language server '$($entry.Value.binary)' is not in PATH — $plugin stays inert until you install it:")
+            [Console]::Error.WriteLine("        $($entry.Value.install)")
+        }
+        if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
+            [Console]::Error.WriteLine("WARN: 'claude' CLI not in PATH; install the plugin from Claude Code with:")
+            [Console]::Error.WriteLine("        /plugin install $plugin@$marketplace   (choose project scope)")
+            continue
+        }
+        & claude plugin install "$plugin@$marketplace" --scope project *> $null
+        if ($LASTEXITCODE -eq 0) {
+            [Console]::Error.WriteLine("  - installed LSP plugin $plugin (project scope, recorded in .claude/settings.json)")
+        } else {
+            [Console]::Error.WriteLine("WARN: could not install $plugin; run it yourself:")
+            [Console]::Error.WriteLine("        claude plugin install $plugin@$marketplace --scope project")
+        }
+    }
 }
 
 # --- Optional scaffolding — each block is independent; flags can be combined -

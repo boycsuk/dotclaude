@@ -11,7 +11,7 @@
 # prunes hook entries dotclaude no longer ships (obsolete.json).
 #
 # Usage (run inside the target project directory):
-#   bash ~/.claude/templates/project/init.sh [--xcode] [--ui] [--update] [scaffold flags]
+#   bash ~/.claude/templates/project/init.sh [--xcode] [--ui] [--lsp=<plugin>] [--update] [scaffold flags]
 #
 # Core flags:
 #   --xcode    Merge the 'xcode' server (Apple's own `xcrun mcpbridge`, shipped
@@ -29,6 +29,14 @@
 #   Both MCP flags COMPOSE ./.mcp.json rather than copying it: each owns its own
 #   server keys, so they combine in either order, re-run idempotently, and never
 #   drop a server the user added by hand. See tests/mcp-merge-cases.py.
+#   --lsp=<plugin>  Install an official LSP plugin (lsp-plugins.json, e.g.
+#              pyright-lsp) at PROJECT scope via `claude plugin install
+#              --scope project`, which also records it in .claude/settings.json
+#              so teammates see it. Repeatable for polyglot repos. Never fatal:
+#              a missing language-server binary, a missing `claude` CLI or an
+#              unknown plugin name each print a WARN with the fix. (Listing the
+#              plugin in enabledPlugins alone does NOT load it — verified: an
+#              uninstalled plugin stays off until installed.)
 #   --update   Re-deploy mode. Per-project files are user-owned: CLAUDE.md,
 #              CHANGELOG.md, docs/* and settings.json are only seeded when
 #              absent, never overwritten. settings.local.json.example is
@@ -63,6 +71,7 @@ set -euo pipefail
 
 INSTALL_XCODE=false
 INSTALL_UI=false
+LSP_PLUGINS=()
 FULLSTACK=false
 RUNTIME=""
 COMPOSE=false
@@ -74,6 +83,7 @@ for arg in "$@"; do
     --serena)         echo "WARN: --serena was removed (Serena and Graphify are no longer shipped); ignoring it." >&2 ;;
     --xcode)          INSTALL_XCODE=true ;;
     --ui)             INSTALL_UI=true ;;
+    --lsp=*)          LSP_PLUGINS+=("${arg#--lsp=}") ;;
     --update)         : ;;  # informational: seeding always skips existing files
     --db)             : ;;  # accepted, no-op (db-inspector is central now)
     --fullstack)      FULLSTACK=true ;;
@@ -272,6 +282,42 @@ if [ "$INSTALL_UI" = "true" ]; then
   fi
   merge_mcp_servers "$TEMPLATE_DIR/mcp/playwright.json"
 fi
+
+# --- LSP plugins (opt-in, one per --lsp=<plugin>) -----------------------------
+# Native code intelligence: go-to-definition/references through the `LSP` tool
+# and diagnostics after every edit. The plugin is only wiring; the language
+# server binary must be on PATH, so its absence is reported, not fatal.
+# ${arr[@]+...}: an empty array under `set -u` is an error on bash < 4.4.
+for plugin in ${LSP_PLUGINS[@]+"${LSP_PLUGINS[@]}"}; do
+  spec=$(python3 - "$TEMPLATE_DIR/lsp-plugins.json" "$plugin" <<'PY' 2>/dev/null || true
+import json, sys
+catalog = json.load(open(sys.argv[1], encoding="utf-8"))
+entry = catalog["plugins"].get(sys.argv[2])
+if entry:
+    print("%s\t%s\t%s" % (catalog["marketplace"], entry["binary"], entry["install"]))
+PY
+)
+  if [ -z "$spec" ]; then
+    echo "WARN: --lsp=$plugin is not an official LSP plugin (see $TEMPLATE_DIR/lsp-plugins.json); skipped." >&2
+    continue
+  fi
+  IFS=$'\t' read -r marketplace binary install_hint <<< "$spec"
+  if ! command -v "$binary" >/dev/null 2>&1; then
+    echo "WARN: language server '$binary' is not in PATH — $plugin stays inert until you install it:" >&2
+    echo "        $install_hint" >&2
+  fi
+  if ! command -v claude >/dev/null 2>&1; then
+    echo "WARN: 'claude' CLI not in PATH; install the plugin from Claude Code with:" >&2
+    echo "        /plugin install $plugin@$marketplace   (choose project scope)" >&2
+    continue
+  fi
+  if claude plugin install "$plugin@$marketplace" --scope project >/dev/null 2>&1; then
+    echo "  - installed LSP plugin $plugin (project scope, recorded in .claude/settings.json)" >&2
+  else
+    echo "WARN: could not install $plugin; run it yourself:" >&2
+    echo "        claude plugin install $plugin@$marketplace --scope project" >&2
+  fi
+done
 
 # --- Optional scaffolding ----------------------------------------------------
 SCAFFOLDS="$TEMPLATE_DIR/scaffolds"

@@ -21,8 +21,8 @@ This skill plans and personalizes a `.claude/` deployment, but **does not execut
 >   shipping (obsolete MCP servers, directories).
 > - `references/stack-interview.md` — stack / Docker / deployment / version
 >   pinning (§2/§2b/§2c/§2d). Read on a first-time deploy or the Reconfigure path.
-> - `references/mcp-and-db.md` — MCP authorization and SQL-stack detection
->   (§3/§4). Read after the stack interview on a first-time deploy or Reconfigure.
+> - `references/mcp-and-db.md` — MCP authorization, the LSP plugin and SQL-stack
+>   detection (§3/§3b/§4). Read after the stack interview on a first-time deploy or Reconfigure.
 >
 > Don't pre-read them. A CLI-tool deploy with no DB never touches the MCP/db
 > file; a refresh never touches the stack interview. That is the point.
@@ -79,7 +79,7 @@ For a first-time deploy, **load `references/stack-interview.md`** and work throu
 
 ## 3-4. MCPs and database stack
 
-After the stack interview, **load `references/mcp-and-db.md`**: ask which MCP servers to authorize (§3) and detect whether there is a SQL stack (§4, so step 6 can add the right client permission to the project settings stub). Skip on a pure refresh.
+After the stack interview, **load `references/mcp-and-db.md`**: ask which MCP servers to authorize (§3), pick the LSP plugin for the language (§3b), and detect whether there is a SQL stack (§4, so step 6 can add the right client permission to the project settings stub). Skip on a pure refresh.
 
 ## 5. Tell the user the exact command to run
 
@@ -91,6 +91,7 @@ Based on steps 1-4, choose the right flags. **Show the user this block verbatim*
 |---|---|
 | `--xcode` | User selected the Xcode MCP in §3. **macOS + Apple-platform projects only** (`*.xcodeproj` / `*.xcworkspace` / `Package.swift`) — never offer it otherwise. Merges Apple's `xcode` server (`xcrun mcpbridge`, Xcode 26.3+) into `.mcp.json`; combines with the other MCP flags in any order. See `references/mcp-and-db.md`. |
 | `--ui` | User selected the Playwright MCP in §3 — recommend it whenever the project has a web UI. Merges the `playwright` browser server (`npx @playwright/mcp`) into `.mcp.json`: the model can navigate, resize and screenshot the running app, which is what the central `/implement-ui` skill uses to verify UI work against a design reference. Combines with the other MCP flags in any order. See `references/mcp-and-db.md`. |
+| `--lsp=<plugin>` | **Always** for a code project whose language has an official LSP plugin — map the language from §2 through `~/.claude/templates/project/lsp-plugins.json` (e.g. Python → `--lsp=pyright-lsp`, TypeScript/JavaScript → `--lsp=typescript-lsp`); repeat the flag for each main language. It runs `claude plugin install <plugin>@claude-plugins-official --scope project`, which records the plugin in `.claude/settings.json`. The language-server binary must be on PATH (the catalog has the install hint; the script warns if it is missing). No official plugin for the language (e.g. Bash, PowerShell) → tell the user and pass nothing; do NOT offer community plugins. See `references/mcp-and-db.md` §3b. |
 | `--update` | Re-run path (see `references/update-mode.md`). Never on a first-time deploy. |
 | `--db` | Optional, no-op (kept for compatibility). The db-inspector agent is central now; a SQL stack only affects which client permission you add to the project `settings.json` stub in step 6, not a flag. |
 
@@ -112,7 +113,7 @@ Include based on the interview answers from `references/stack-interview.md`:
 
 ```
 cd <path from step 1>
-bash ~/.claude/templates/project/init.sh --fullstack --runtime=node --compose --proxy=caddy --deploy-script
+bash ~/.claude/templates/project/init.sh --lsp=typescript-lsp --fullstack --runtime=node --compose --proxy=caddy --deploy-script
 ```
 
 (A SQL stack adds `Bash(psql:*)` / `Bash(docker compose exec*:*)` to the project's `settings.json` stub in step 6 — no flag needed; the db-inspector agent is already central.)
@@ -121,7 +122,7 @@ bash ~/.claude/templates/project/init.sh --fullstack --runtime=node --compose --
 
 ```
 cd <path from step 1>
-bash ~/.claude/templates/project/init.sh --update
+bash ~/.claude/templates/project/init.sh --update --lsp=pyright-lsp
 ```
 
 **CLI tool, no Docker, no deployment:**

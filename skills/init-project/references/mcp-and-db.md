@@ -95,6 +95,35 @@ UI**, not only when the user asks for browser automation.
 
 Add `mcp__playwright__*` to `permissions.allow` in the project stub (step 6).
 
+## 3b. Code intelligence: the LSP plugin (`--lsp=<plugin>`)
+
+Not an MCP, but decided here because it is the other half of "what tools does
+the model get in this project". Claude Code's official LSP plugins give the
+model a read-only `LSP` tool (go-to-definition, references, hover types,
+symbols, call hierarchy) and push the language server's diagnostics after
+every edit ("Found N new diagnostic issues"). That replaces what Serena was
+used for, natively (DESIGN.md §32).
+
+1. Map the language(s) from §2 through the catalog:
+   `~/.claude/templates/project/lsp-plugins.json` (plugin → languages, binary,
+   install hint). Only the 13 official `claude-plugins-official` plugins are
+   listed; if the project's language has none (Bash, PowerShell, …), tell the
+   user plainly and add nothing — do not search for community plugins.
+2. Tell the user which language-server binary the plugin needs and the
+   catalog's install hint. The deploy script probes PATH itself and repeats
+   the hint as a WARN if the binary is missing; the plugin stays inert
+   ("Executable not found in $PATH" in `/plugin` → Errors) until it exists.
+3. Add `--lsp=<plugin>` to the step 5 command, once per main language. No
+   question needed for the main language — it is on by default for code
+   projects; ask only to choose among secondary languages in a polyglot repo.
+
+The flag runs `claude plugin install <plugin>@claude-plugins-official --scope
+project`, which installs the plugin and records it under `enabledPlugins` in
+`.claude/settings.json`. Listing it there by hand is NOT enough: an uninstalled
+plugin stays off even when enabled (verified 2026-10-03), so teammates who
+clone the project run the same `claude plugin install … --scope project` once
+(or accept the install prompt Claude Code shows).
+
 ## 4. Detect database stack (for SQL client permissions)
 
 The `db-inspector` agent is now **central** (in `~/.claude/agents/`, always

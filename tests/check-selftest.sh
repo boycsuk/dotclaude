@@ -120,6 +120,10 @@ python3 "$SRC/tests/inject.py" "$WORK/repo" obsolete-hits-shipped-hook
 expect_fail "obsolete.json names a hook dotclaude still ships"
 
 setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" lsp-entry-without-binary
+expect_fail "an LSP catalog entry loses its binary"
+
+setup
 if python3 "$WORK/repo/check.py" >/dev/null 2>&1; then
   echo "  caught:     (control) pristine repo passes"
   pass=$((pass + 1))
