@@ -206,7 +206,31 @@ def undocument_opt_out(repo):
              '"allowCommitTrailers"', '"someOtherKey"')
 
 
+def obsolete_broad_match(repo):
+    """A match like "python3 " hits no hook file name but every live .py hook command."""
+    path = os.path.join(repo, "templates/project/obsolete.json")
+    with open(path) as fh:
+        manifest = json.load(fh)
+    manifest["hooks"].append({"match": "python3 ", "reason": "x"})
+    with open(path, "w") as fh:
+        json.dump(manifest, fh, indent=2)
+
+
+def unwire_py_hook(repo):
+    """A .py hook that ships but is wired to no event never runs."""
+    path = os.path.join(repo, "global/.claude/settings.json")
+    with open(path) as fh:
+        settings = json.load(fh)
+    for groups in settings["hooks"].values():
+        for group in groups:
+            group["hooks"] = [h for h in group["hooks"] if "guard-dependencies" not in h["command"]]
+    with open(path, "w") as fh:
+        json.dump(settings, fh, indent=2)
+
+
 REGRESSIONS = {
+    "obsolete-broad-match": obsolete_broad_match,
+    "unwire-py-hook": unwire_py_hook,
     "undocument-opt-out": undocument_opt_out,
     "mixed-wildcard-rule": mixed_wildcard_rule,
     "drop-py-hook-kind": drop_py_hook_kind,

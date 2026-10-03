@@ -30,18 +30,23 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
 }
 # Resolve an interpreter that actually RUNS, and wire the .py hooks to its full
 # path. Get-Command alone is not enough: the Microsoft Store "python3" alias
-# exists on a clean Windows install and only opens the Store.
+# exists on a clean Windows install and only opens the Store. Every PATH match
+# is tried, and the py launcher last (the python.org installer's default when
+# python.exe is not on PATH). The path is baked into the hook commands, so after
+# moving or upgrading Python, re-run this installer.
 $PythonExe = $null
-foreach ($candidate in @("python3", "python")) {
-    $cmd = Get-Command $candidate -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $cmd) { continue }
-    try {
-        & $cmd.Source --version *> $null
-        if ($LASTEXITCODE -eq 0) { $PythonExe = $cmd.Source; break }
-    } catch { }
+$PythonArgs = ""
+foreach ($candidate in @(@("python3", ""), @("python", ""), @("py", "-3"))) {
+    foreach ($cmd in @(Get-Command $candidate[0] -CommandType Application -All -ErrorAction SilentlyContinue)) {
+        try {
+            if ($candidate[1]) { & $cmd.Source $candidate[1] --version *> $null } else { & $cmd.Source --version *> $null }
+            if ($LASTEXITCODE -eq 0) { $PythonExe = $cmd.Source; $PythonArgs = $candidate[1]; break }
+        } catch { }
+    }
+    if ($PythonExe) { break }
 }
 if (-not $PythonExe) {
-    [Console]::Error.WriteLine("ERROR: no working Python found (tried python3, python) — the .py hooks run on it. Install Python and re-run.")
+    [Console]::Error.WriteLine("ERROR: no working Python found (tried python3, python, py -3) — the .py hooks run on it. Install Python and re-run.")
     exit 1
 }
 
@@ -117,7 +122,8 @@ function New-Hook($name, $t, $isPython) {
     # source JSON; the guard below keeps Windows from reintroducing one.
     if ($isPython) {
         $script = Join-Path (Join-Path $Target "hooks") "$name.py"
-        $command = "& `"$PythonExe`" `"$script`""
+        $launcherArgs = if ($PythonArgs) { " $PythonArgs" } else { "" }
+        $command = "& `"$PythonExe`"$launcherArgs `"$script`""
     } else {
         $command = "& `"$Target\hooks\$name.ps1`""
     }

@@ -78,7 +78,7 @@
           {
             "type": "command",
             "command": "python3 \"$HOME\"/.claude/hooks/guard-commit.py",
-            "timeout": 10
+            "timeout": 20
           },
           {
             "type": "command",

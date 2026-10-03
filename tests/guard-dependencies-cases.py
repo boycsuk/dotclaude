@@ -49,7 +49,20 @@ BASH_CASES = [
     ("cd web && npm install axios", ASK, "after cd in a compound command"),
     ("git pull\nnpm i lodash", ASK, "second line of a multi-line command"),
     ("/usr/bin/pip3 install requests", ASK, "absolute path to pip"),
+    # Forms a review found walking past the first version (all verified bypasses).
+    ("npm i -s lodash", ASK, "-s is a flag for npm, not a valued option"),
+    ("pnpm add -w lodash", ASK, "-w is a flag for pnpm"),
+    ("pnpm -w add lodash", ASK, "global flag before the subcommand"),
+    ("npm --prefix web install lodash", ASK, "valued global option before the subcommand"),
+    ("pip3 install -v requests", ASK, "-v is verbose for pip"),
+    ("pip install -e git+https://github.com/x/y.git#egg=y", ASK, "editable VCS package"),
+    ("py -3 -m pip install requests", ASK, "Windows py launcher"),
+    ("yarn global add lodash", ASK, "yarn global add"),
+    ("timeout 600 npm install lodash", ASK, "timeout wrapper"),
+    ("bash -c 'npm i lodash'", ASK, "bash -c string"),
     # Installs nothing new, or is not an install at all — allow.
+    ("npm install ../shared-lib", ALLOW, "local path package"),
+    ("go get -u ./...", ALLOW, "updates the module's own packages"),
     ("npm ci", ALLOW, "lockfile install"),
     ("npm install", ALLOW, "bare install from package.json"),
     ("pnpm install --frozen-lockfile", ALLOW, "pnpm lockfile install"),
@@ -113,6 +126,13 @@ def edit_cases(tmp):
     ]
 
 
+PS_CASES = [
+    ("pnpm add left-pad", ASK, "PowerShell tool name"),
+    ("npm i lodash; npm test", ASK, "PowerShell statement separator"),
+    ("npm ci", ALLOW, "lockfile install under PowerShell"),
+]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
@@ -131,6 +151,15 @@ def main():
                 if got != want:
                     failures += 1
                     print(f"  FAIL want {want} got {got} | {command!r}  ({why})")
+            for command, want, why in PS_CASES:
+                payload = {"hook_event_name": "PreToolUse", "tool_name": "PowerShell", "cwd": tmp,
+                           "tool_input": {"command": command}}
+                code, out, err = pyhook.run("guard-dependencies", payload, cwd=tmp, pwsh=pwsh)
+                got = pyhook.decision(out) if code == 0 else f"exit {code}: {err.strip()[-150:]}"
+                total += 1
+                if got != want:
+                    failures += 1
+                    print(f"  FAIL [PowerShell tool] want {want} got {got} | {command!r}  ({why})")
             cases = edit_cases(tmp)
             for tool, tool_input, want, why in cases:
                 payload = {"hook_event_name": "PreToolUse", "tool_name": tool, "cwd": tmp,
@@ -141,6 +170,39 @@ def main():
                 if got != want:
                     failures += 1
                     print(f"  FAIL want {want} got {got} | {tool} {os.path.basename(tool_input['file_path'])}  ({why})")
+            # Without tomllib (Python < 3.11) a version bump must not read as a new
+            # dependency, and a real addition must still be caught.
+            no_toml = os.path.join(tmp, "no-tomllib")
+            os.makedirs(no_toml, exist_ok=True)
+            write(os.path.join(no_toml, "tomllib.py"), "raise ImportError('simulated Python < 3.11')\n")
+            cargo = os.path.join(tmp, "Cargo.toml")
+            pyproj = os.path.join(tmp, "pyproject.toml")
+            write(cargo, CARGO)
+            write(pyproj, PYPROJECT)
+            for tool_input, want, why in (
+                ({"file_path": cargo, "old_string": 'name = "app"', "new_string": 'name = "app"\nrust-version = "1.75"'},
+                 ALLOW, "package metadata, not a dependency"),
+                ({"file_path": cargo, "old_string": 'serde = "1"', "new_string": 'serde = "1"\nrand = "0.8"'},
+                 ASK, "new [dependencies] key"),
+                ({"file_path": pyproj, "old_string": 'name = "app"', "new_string": 'name = "app"\nversion = "0.2"'},
+                 ALLOW, "version bump"),
+                ({"file_path": pyproj, "old_string": '  "httpx==0.27.0",\n', "new_string": '  "httpx==0.27.0",\n  "rich>=13",\n'},
+                 ASK, "new entry in the dependencies array"),
+            ):
+                payload = {"tool_name": "Edit", "cwd": tmp, "tool_input": tool_input}
+                code, out, err = pyhook.run("guard-dependencies", payload, cwd=tmp, pwsh=pwsh,
+                                            env={"PYTHONPATH": no_toml})
+                got = pyhook.decision(out) if code == 0 else f"exit {code}: {err.strip()[-150:]}"
+                total += 1
+                if got != want:
+                    failures += 1
+                    print(f"  FAIL [no tomllib] want {want} got {got} ({why})")
+            for bad in ({"tool_name": "Bash", "tool_input": "npm i x"}, {"tool_name": "Edit", "tool_input": None}):
+                code, out, _ = pyhook.run("guard-dependencies", bad, cwd=tmp, pwsh=pwsh)
+                total += 1
+                if code != 0 or out is not None:
+                    failures += 1
+                    print(f"  FAIL malformed payload {bad}: exit {code}, out {out}")
             # The reason must be actionable: names, pinning, the audit command.
             payload = {"tool_name": "Bash", "cwd": tmp, "tool_input": {"command": "npm i lodash"}}
             _, out, _ = pyhook.run("guard-dependencies", payload, cwd=tmp, pwsh=pwsh)
@@ -149,7 +211,7 @@ def main():
             if not all(s in text for s in ("lodash", "Not pinned", "npm audit")):
                 failures += 1
                 print(f"  FAIL reason not actionable: {text!r}")
-            print(f"  {len(BASH_CASES) + len(cases) + 1} cases checked")
+            print(f"  {len(BASH_CASES) + len(PS_CASES) + len(cases) + 7} cases checked")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
     print()

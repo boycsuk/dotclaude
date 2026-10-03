@@ -38,13 +38,34 @@ MESSAGE_CASES = [
     ("git commit -s -m 'feat: add x'", DENY, "-s adds Signed-off-by"),
     ("git commit -sm 'feat: add x'", DENY, "-s clustered with -m"),
     ("git commit --signoff -m 'feat: add x'", DENY, "--signoff"),
-    ("git commit --trailer 'Reviewed-by: x' -m 'feat: add x'", DENY, "--trailer"),
-    ("git commit --trailer=Acked-by:x -m 'feat: add x'", DENY, "--trailer= form"),
+    ("git commit --trailer 'Signed-off-by: x <x@y>' -m 'feat: add x'", DENY, "--trailer with an attribution key"),
+    ("git commit --trailer=Co-authored-by=x -m 'feat: add x'", DENY, "--trailer= form, key=value"),
+    ("git commit --trailer 'Closes: #12' -m 'feat: add x'", ALLOW, "a non-attribution trailer"),
     ("git -C . commit -m 'feat' -m 'co-authored-by: someone'", DENY, "lowercase trailer through git -C"),
     ("env GIT_EDITOR=true git commit -m 'x' -m 'Co-Authored-By: a'", DENY, "env wrapper"),
     ("git add -A && git commit -m 'x' -m 'Co-Authored-By: a'", DENY, "after git add in the same command"),
     ("git commit -F msg.txt", DENY, "-F file carrying a trailer (file written by the case)"),
     ("git commit -F - <<'EOF'\nfeat: x\n\nSigned-off-by: a <a@b>\nEOF", DENY, "-F - from a heredoc"),
+    # Forms a review found walking past the first parser (all verified bypasses).
+    ("timeout 60 git commit -s -m 'feat: x'", DENY, "timeout wrapper with its duration"),
+    ("nice -n 5 git commit -s -m 'feat: x'", DENY, "nice with a valued flag"),
+    ("env -u FOO git commit -s -m 'feat: x'", DENY, "env -u NAME"),
+    ("echo x | xargs git commit -s -m", DENY, "xargs"),
+    ("(git commit -s -m 'feat: x')", DENY, "subshell"),
+    ("{ git commit -s -m 'feat: x'; }", DENY, "brace group"),
+    ("if true; then git commit -s -m 'feat: x'; fi", DENY, "inside if/then"),
+    ("bash -c \"git commit -s -m 'feat: x'\"", DENY, "bash -c string"),
+    ("git commit --signo --mess 'feat: x'", DENY, "abbreviated long options git accepts"),
+    ("git commit --mess 'feat: x' --mess 'Co-Authored-By: a'", DENY, "abbreviated --message with a trailer"),
+    ("git commit -m $'feat: x\\n\\nCo-Authored-By: a <a@b>'", DENY, "ANSI-C quoted message"),
+    (HEREDOC.format('fix: handle the "foo bar" case\n\nCo-Authored-By: a <a@b>'), DENY,
+     "double quotes inside the heredoc body"),
+    ("git commit -F - <<'EOF'\nfix: don't crash\n\nCo-Authored-By: a <a@b>\nEOF", DENY,
+     "apostrophe in a -F - heredoc"),
+    ("cat > /tmp/gc-msg <<'EOF'\nfeat: x\n\nSigned-off-by: a <a@b>\nEOF\ngit commit -F /tmp/gc-msg", DENY,
+     "message file written earlier in the same command"),
+    ("cat > notes.md <<'EOF'\nCo-Authored-By: x\nEOF\ngit commit -m 'feat: x'", ALLOW,
+     "an unrelated heredoc carrying the words"),
     # Emoji.
     ("git commit -m 'feat: add login ✨'", DENY, "sparkles emoji"),
     ("git commit -m 'fix: 🐛 null check'", DENY, "bug emoji"),
@@ -59,6 +80,7 @@ MESSAGE_CASES = [
     ("git commit -m 'docs: mention Signed-off-by policy in README'", ALLOW, "trailer name mid-line"),
     ("git commit -m 'fix: arrow → in output'", ALLOW, "arrow is not an emoji"),
     ("git commit -m 'feat: support café menus'", ALLOW, "one accented word is not Spanish"),
+    ("git commit -m 'fix: Pokémon list de-dup and un-wrap'", ALLOW, "English hyphen prefixes are not Spanish words"),
     ("git commit -m 'fix: handle the de la Cruz surname'", ALLOW, "Spanish-looking words, no accent"),
     ("git commit -m 'fix: parse `añade` keyword' -m 'Adds support for the parser'", ALLOW, "Spanish only inside a code span"),
     ("git log --grep 'Co-Authored-By:'", ALLOW, "not a commit"),
@@ -66,6 +88,14 @@ MESSAGE_CASES = [
     ("cat > notes.md <<'EOF'\ngit commit -s -m 'x'\nEOF", ALLOW, "heredoc that only writes a file"),
     ("git commit -S -m 'feat: signed with gpg'", ALLOW, "-S (GPG) is not -s"),
     ("git commit -m 'feat: x' --no-verify", ALLOW, "unrelated flag"),
+]
+
+# PowerShell command text (the hook receives it when the tool is PowerShell).
+PS_CASES = [
+    ('git commit -m "feat: x`n`nCo-Authored-By: a <a@b>"', DENY, "backtick-n newlines"),
+    ("git commit -m @'\nfeat: don't break\n\nCo-Authored-By: a <a@b>\n'@", DENY, "single-quoted here-string with an apostrophe"),
+    ('git commit -m @"\nfix: the "foo" case\n\nSigned-off-by: a <a@b>\n"@', DENY, "double-quoted here-string with quotes"),
+    ('git commit -m "feat: add x"', ALLOW, "plain PowerShell commit"),
 ]
 
 # (command, expected, state, why) — state keys: branch, staged, modified, local
@@ -130,10 +160,10 @@ def set_state(repo, branch="feature/x", staged=("app.py", "CHANGELOG.md"),
             json.dump(local, fh)
 
 
-def decide(repo, command, pwsh):
-    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": repo,
+def decide(repo, command, pwsh, tool="Bash", cwd=None):
+    payload = {"hook_event_name": "PreToolUse", "tool_name": tool, "cwd": cwd or repo,
                "tool_input": {"command": command}}
-    code, out, err = pyhook.run("guard-commit", payload, cwd=repo, pwsh=pwsh)
+    code, out, err = pyhook.run("guard-commit", payload, cwd=cwd or repo, pwsh=pwsh)
     if code != 0:
         return f"exit {code}: {err.strip()[-200:]}"
     return pyhook.decision(out)
@@ -156,6 +186,12 @@ def main():
                 if got != want:
                     failures += 1
                     print(f"  FAIL want {want} got {got} | {command!r}  ({why})")
+            for command, want, why in PS_CASES:
+                got = decide(repo, command, pwsh, tool="PowerShell")
+                total += 1
+                if got != want:
+                    failures += 1
+                    print(f"  FAIL [PowerShell tool] want {want} got {got} | {command!r}  ({why})")
             for command, want, state, why in STATE_CASES:
                 set_state(repo, **state)
                 got = decide(repo, command, pwsh)
@@ -173,7 +209,27 @@ def main():
                     failures += 1
                     print(f"  FAIL outside a repo: want {want} got {got} | {command!r}")
             shutil.rmtree(outside, ignore_errors=True)
-            print(f"  {len(MESSAGE_CASES) + len(STATE_CASES) + 2} cases checked")
+            # From a subdirectory, `git add <relative path>` must still count.
+            set_state(repo, staged=[], modified=["hooks/x.sh", "hooks/x.ps1", "CHANGELOG.md"])
+            got = decide(repo, "git add x.sh x.ps1 ../CHANGELOG.md && git commit -m 'feat: x'", pwsh,
+                         cwd=os.path.join(repo, "hooks"))
+            total += 1
+            if got != ALLOW:
+                failures += 1
+                print(f"  FAIL subdirectory add: want allow got {got}")
+            got = decide(repo, "git add x.sh && git commit -m 'feat: x'", pwsh, cwd=os.path.join(repo, "hooks"))
+            total += 1
+            if got != ASK:
+                failures += 1
+                print(f"  FAIL subdirectory add of one twin: want ask got {got}")
+            # Malformed payloads never crash.
+            for bad in ({"tool_input": "git commit -s"}, {"tool_input": None}, {}):
+                code, out, _ = pyhook.run("guard-commit", bad, cwd=repo, pwsh=pwsh)
+                total += 1
+                if code != 0 or out is not None:
+                    failures += 1
+                    print(f"  FAIL malformed payload {bad}: exit {code}, out {out}")
+            print(f"  {len(MESSAGE_CASES) + len(PS_CASES) + len(STATE_CASES) + 7} cases checked")
     finally:
         shutil.rmtree(repo, ignore_errors=True)
     print()

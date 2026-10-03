@@ -15,7 +15,7 @@ LSP_SUFFIX = "-lsp@claude-plugins-official"
 def _enabled_plugins(project):
     # Later scopes win, mirroring Claude Code's precedence: user < project < local.
     merged = {}
-    for path in (os.path.join(os.path.expanduser("~"), ".claude", "settings.json"),
+    for path in (os.path.join(_config_dir(), "settings.json"),
                  os.path.join(project, ".claude", "settings.json"),
                  os.path.join(project, ".claude", "settings.local.json")):
         data = hookio.load_json(path)
@@ -25,15 +25,35 @@ def _enabled_plugins(project):
     return merged
 
 
+def _config_dir():
+    return os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+
+
+def _mcp_servers(project):
+    """Servers from .mcp.json plus those added with `claude mcp add` (user or local scope)."""
+    servers = {}
+    mcp = hookio.load_json(os.path.join(project, ".mcp.json"))
+    if isinstance(mcp, dict) and isinstance(mcp.get("mcpServers"), dict):
+        servers.update(mcp["mcpServers"])
+    # Claude Code keeps user/local-scope servers in ~/.claude.json, or inside
+    # CLAUDE_CONFIG_DIR when that is set.
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+    state = hookio.load_json(os.path.join(config_dir, ".claude.json") if config_dir
+                             else os.path.join(os.path.expanduser("~"), ".claude.json"))
+    if isinstance(state, dict):
+        for scope in (state, (state.get("projects") or {}).get(project) or {}):
+            if isinstance(scope, dict) and isinstance(scope.get("mcpServers"), dict):
+                servers.update(scope["mcpServers"])
+    return servers
+
+
 def detect(payload):
     """Return (lsp_plugins, has_graph) for the payload's project."""
     project = hookio.project_dir(payload)
     lsp = sorted(name[:-len("@claude-plugins-official")]
                  for name, on in _enabled_plugins(project).items()
                  if on is True and name.endswith(LSP_SUFFIX))
-    mcp = hookio.load_json(os.path.join(project, ".mcp.json"))
-    servers = mcp.get("mcpServers") if isinstance(mcp, dict) else None
-    has_graph = isinstance(servers, dict) and GRAPH_SERVER in servers
+    has_graph = GRAPH_SERVER in _mcp_servers(project)
     return lsp, has_graph
 
 

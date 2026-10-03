@@ -120,6 +120,14 @@ python3 "$SRC/tests/inject.py" "$WORK/repo" obsolete-hits-shipped-hook
 expect_fail "obsolete.json names a hook dotclaude still ships"
 
 setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" obsolete-broad-match
+expect_fail "an obsolete.json match also matches live hook commands"
+
+setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" unwire-py-hook
+expect_fail "a Python hook ships but is wired to no event"
+
+setup
 python3 "$SRC/tests/inject.py" "$WORK/repo" undocument-opt-out
 expect_fail "a hook opt-out is missing from settings.local.json.example"
 

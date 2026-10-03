@@ -30,26 +30,60 @@ import shellwords  # noqa: E402
 AUDIT = {"npm": "npm audit", "python": "pip-audit", "cargo": "cargo audit",
          "go": "govulncheck ./...", "ruby": "bundle audit", "php": "composer audit",
          "dotnet": "dotnet list package --vulnerable"}
-NODE_TOOLS = {"npm": ("i", "install", "add"), "pnpm": ("i", "install", "add"),
-              "yarn": ("add",), "bun": ("i", "install", "add")}
-# Option flags of these commands that consume the next token as their value.
-VALUED = {"-r", "--requirement", "-c", "--constraint", "-e", "--editable", "--index-url",
-          "-i", "--extra-index-url", "--target", "-t", "--prefix", "--python",
-          "--group", "-G", "--optional", "--package", "-p", "--filter", "--workspace",
-          "-w", "--registry", "--source", "-s", "--version", "-v", "--project", "--framework",
-          "-f", "--features", "--rename", "--path", "--git", "--branch", "--tag", "--rev"}
+# Per tool: the subcommands that add packages, and the options that consume
+# the next token as their value. One shared list swallowed package names: `-s`
+# is --save-silent for npm but --source for gem, `-w` is a flag for pnpm.
+TOOLS = {
+    "npm":      ("npm", {"i", "install", "add", "isntall"},
+                 {"--prefix", "--registry", "-w", "--workspace", "--tag", "--cache", "--userconfig", "--loglevel"}),
+    "pnpm":     ("npm", {"i", "install", "add"},
+                 {"--filter", "-F", "--dir", "-C", "--registry", "--reporter", "--config", "--workspace"}),
+    "yarn":     ("npm", {"add"}, {"--cwd", "--registry", "--network-timeout"}),
+    "bun":      ("npm", {"i", "install", "add"}, {"--cwd", "--registry", "--backend", "--cache-dir"}),
+    "pip":      ("python", {"install"},
+                 {"-r", "--requirement", "-c", "--constraint", "-i", "--index-url", "--extra-index-url",
+                  "-t", "--target", "--prefix", "--root", "--python-version", "--platform", "-f",
+                  "--find-links", "--log", "--cache-dir", "--src", "--upgrade-strategy", "--implementation"}),
+    "uv":       ("python", {"add"},
+                 {"--group", "--optional", "--package", "--python", "-p", "--index", "--extra", "--rev",
+                  "--tag", "--branch", "--directory", "--project"}),
+    "poetry":   ("python", {"add"}, {"--group", "-G", "--python", "--platform", "--source", "--extras", "-E",
+                                     "--directory", "-C"}),
+    "pdm":      ("python", {"add"}, {"--group", "-G", "-p", "--project"}),
+    "cargo":    ("cargo", {"add"}, {"--features", "-F", "--rename", "--package", "-p", "--path", "--git",
+                                    "--branch", "--tag", "--rev", "--registry", "--manifest-path"}),
+    "go":       ("go", {"get"}, {"-C"}),
+    "gem":      ("ruby", {"install"}, {"-v", "--version", "-s", "--source", "-i", "--install-dir", "-n", "--bindir"}),
+    "bundle":   ("ruby", {"add"}, {"-v", "--version", "-g", "--group", "-s", "--source", "-r", "--require",
+                                   "--git", "--branch", "--path"}),
+    "composer": ("php", {"require"}, {"-d", "--working-dir"}),
+}
+LOCAL_SPEC = re.compile(r"^(\.|/|~|file:|link:|workspace:)|\.(tgz|tar\.gz|whl|gem)$")
 
 
-def positionals(args):
-    out, i = [], 0
+def split_options(args, valued):
+    """Return (positionals, raw option tokens) of `args`, skipping option values."""
+    out, opts, i = [], [], 0
     while i < len(args):
         a = args[i]
-        if a.startswith("-"):
-            i += 2 if a in VALUED and "=" not in a else 1
+        if a.startswith("-") and a != "-":
+            opts.append(a)
+            i += 2 if a.split("=", 1)[0] in valued and "=" not in a else 1
             continue
         out.append(a)
         i += 1
-    return out
+    return out, opts
+
+
+def _editable_packages(args):
+    """`pip install -e git+https://...` installs a package; `-e .` installs the project itself."""
+    pkgs = []
+    for i, a in enumerate(args):
+        if a in ("-e", "--editable") and i + 1 < len(args) and "://" in args[i + 1]:
+            pkgs.append(args[i + 1])
+        elif a.startswith("--editable=") and "://" in a:
+            pkgs.append(a.split("=", 1)[1])
+    return pkgs
 
 
 def bash_additions(seg):
@@ -58,27 +92,35 @@ def bash_additions(seg):
     if not seg:
         return None
     prog, args = shellwords.basename(seg[0]), seg[1:]
+    if prog == "py":
+        while args and re.fullmatch(r"-[23](\.\d+)?(-\d+)?", args[0]):
+            args = args[1:]
     if re.fullmatch(r"python[0-9.]*|py", prog) and args[:2] == ["-m", "pip"]:
         prog, args = "pip", args[2:]
     if prog == "uv" and args[:1] == ["pip"]:
         prog, args = "pip", args[1:]
-    if prog in NODE_TOOLS and args and args[0] in NODE_TOOLS[prog]:
-        pkgs = positionals(args[1:])
-        return ("npm", pkgs) if pkgs else None
-    if re.fullmatch(r"pip[0-9.]*", prog) and args[:1] == ["install"]:
-        rest = args[1:]
-        pkgs = [p for p in positionals(rest) if p not in (".",) and not p.startswith(("./", "/"))]
-        return ("python", pkgs) if pkgs else None
-    simple = {("uv", "add"): "python", ("poetry", "add"): "python", ("pdm", "add"): "python",
-              ("cargo", "add"): "cargo", ("go", "get"): "go", ("gem", "install"): "ruby",
-              ("bundle", "add"): "ruby", ("composer", "require"): "php"}
-    if args and (prog, args[0]) in simple:
-        pkgs = positionals(args[1:])
-        return (simple[(prog, args[0])], pkgs) if pkgs else None
-    if prog == "dotnet" and args[:1] == ["add"] and "package" in args:
-        pkgs = positionals(args[args.index("package") + 1:])
-        return ("dotnet", pkgs[:1]) if pkgs else None
-    return None
+    if re.fullmatch(r"pip[0-9.]*", prog):
+        prog = "pip"
+    if prog == "yarn" and args[:1] == ["global"]:
+        args = args[1:]
+    if prog == "dotnet":
+        if args[:1] == ["add"] and "package" in args:
+            pkgs, _ = split_options(args[args.index("package") + 1:], {"-v", "--version", "-s", "--source", "-f", "--framework"})
+            return ("dotnet", pkgs[:1]) if pkgs else None
+        return None
+    if prog not in TOOLS:
+        return None
+    ecosystem, subcommands, valued = TOOLS[prog]
+    # Global options may come before the subcommand: `npm --prefix web install x`.
+    positional, _ = split_options(args, valued)
+    if not positional or positional[0] not in subcommands:
+        return None
+    after = args[args.index(positional[0]) + 1:]
+    pkgs, _ = split_options(after, valued | ({"-e", "--editable"} if prog == "pip" else set()))
+    pkgs = [p for p in pkgs if not LOCAL_SPEC.search(p)]
+    if prog == "pip":
+        pkgs += _editable_packages(after)
+    return (ecosystem, pkgs) if pkgs else None
 
 
 # --- Manifest diffing ----------------------------------------------------------
@@ -94,11 +136,53 @@ def _json_deps(text, keys):
 
 
 def _toml(text):
+    if not text.strip():
+        return {}
     try:
         import tomllib
-    except ImportError:          # Python < 3.11: no stdlib TOML parser
-        return None
-    return tomllib.loads(text) if text.strip() else {}
+    except ImportError:          # Python < 3.11 (e.g. macOS system Python 3.9)
+        return _toml_lite(text)
+    return tomllib.loads(text)
+
+
+def _toml_lite(text):
+    """Tables, string keys, string values and string arrays — enough for dependency tables.
+
+    Without it, the pre-3.11 fallback compared raw lines and asked "new
+    dependency?" for any edit, including a version bump.
+    """
+    data, pending_key, pending = {}, None, ""
+    data_root = table = data
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip() if not pending_key else raw.strip()
+        if pending_key:
+            pending += " " + line
+            if pending.count("[") <= pending.count("]"):
+                table[pending_key] = re.findall(r"""["']([^"']*)["']""", pending)
+                pending_key, pending = None, ""
+            continue
+        if not line:
+            continue
+        header = re.fullmatch(r"\[\s*([^\[\]]+?)\s*\]", line)
+        if header:
+            table = data_root
+            for part in [p.strip().strip("\"'") for p in header.group(1).split(".")]:
+                table = table.setdefault(part, {})
+            continue
+        if line.startswith("[["):
+            table = {}
+            continue
+        key, eq, value = line.partition("=")
+        if not eq:
+            continue
+        key, value = key.strip().strip("\"'"), value.strip()
+        if value.startswith("[") and value.count("[") > value.count("]"):
+            pending_key, pending = key, value
+        elif value.startswith("["):
+            table[key] = re.findall(r"""["']([^"']*)["']""", value)
+        else:
+            table[key] = value.strip("\"'")
+    return data
 
 
 def _req_name(spec):
@@ -107,8 +191,6 @@ def _req_name(spec):
 
 def _pyproject_deps(text):
     data = _toml(text)
-    if data is None:
-        return _line_deps(text)
     out = {}
     project = data.get("project", {})
     specs = list(project.get("dependencies", []))
@@ -125,17 +207,10 @@ def _pyproject_deps(text):
 
 def _cargo_deps(text):
     data = _toml(text)
-    if data is None:
-        return _line_deps(text)
     out = {}
     for key in ("dependencies", "dev-dependencies", "build-dependencies"):
         out.update({k: str(v) for k, v in data.get(key, {}).items()})
     return out
-
-
-def _line_deps(text):
-    return {line.strip(): line.strip() for line in text.splitlines()
-            if line.strip() and not line.strip().startswith(("#", "//", "["))}
 
 
 def _requirements_deps(text):
@@ -230,11 +305,14 @@ def main():
     payload = hookio.read_payload()
     tool = payload.get("tool_name")
     tool_input = payload.get("tool_input") or {}
-    if tool == "Bash":
+    if not isinstance(tool_input, dict):
+        return 0
+    if tool in ("Bash", "PowerShell"):
         command = tool_input.get("command")
         if not isinstance(command, str):
             return 0
-        found = [bash_additions(seg) for seg in (shellwords.segments(command) or [])]
+        segments = shellwords.segments(command, shellwords.shell_of(payload)) or []
+        found = [bash_additions(seg) for seg in segments]
         found = [f for f in found if f]
         if found:
             ecosystem = found[0][0]

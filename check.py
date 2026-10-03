@@ -357,6 +357,12 @@ def _():
                      f"{name}.{ext} does not emit additionalContext — an advisory "
                      f"written to stderr with exit 0 never reaches the model")
 
+    wired = {os.path.basename(h["command"].rstrip('"'))
+             for groups in settings.get("hooks", {}).values() for g in groups for h in g.get("hooks", [])}
+    for name in py_hooks():
+        if f"{name}.py" not in wired:
+            fail("hook wiring", f"{name}.py ships but no event in settings.json runs it")
+
     # Python hooks declare their kind instead of being listed here by hand, so
     # a new hook cannot dodge this check by never being added to a tuple.
     for name in py_hooks():
@@ -371,6 +377,9 @@ def _():
             fail("hook wiring",
                  f"{name}.py is advisory but never calls hookio.context() — its "
                  f"text would not reach the model")
+        if kind == "guard" and "hookio.deny(" not in body and "hookio.ask(" not in body:
+            fail("hook wiring",
+                 f"{name}.py is a guard but never calls hookio.deny() or hookio.ask()")
         if kind == "rewrite" and "hookio.update_input(" not in body:
             fail("hook wiring",
                  f"{name}.py is a rewrite hook but never calls hookio.update_input()")
@@ -461,6 +470,12 @@ def _():
     # a live hook from every project on its next deploy.
     manifest = json.loads(read("templates/project/obsolete.json"))
     shipped_hooks = [f"hooks/{n}" for n in os.listdir(os.path.join(REPO, "global/.claude/hooks"))]
+    # Every command the central settings wire, in the POSIX form and in the
+    # PowerShell forms install.ps1 writes — a match hitting any of them (say
+    # "claude", "python3 " or "$HOME") would prune live hooks everywhere.
+    settings = json.loads(read("global/.claude/settings.json"))
+    live = [h["command"] for groups in settings["hooks"].values() for g in groups for h in g["hooks"]]
+    live += [c.replace("/", "\\") for c in live]
     for entry in manifest.get("hooks", []):
         match = entry.get("match", "")
         if not match or not entry.get("reason"):
@@ -471,6 +486,10 @@ def _():
                 fail("obsolete manifest",
                      f"match {match!r} hits {hook}, which dotclaude still ships — "
                      f"every project would lose it on the next deploy")
+        for command in live:
+            if match in command:
+                fail("obsolete manifest",
+                     f"match {match!r} also matches the live central hook command {command!r}")
     for entry in manifest.get("mcpServers", []):
         name = entry.get("name", "")
         if os.path.exists(os.path.join(REPO, "templates/project/mcp", f"{name}.json")):
@@ -486,7 +505,15 @@ def _():
     example = read("templates/project/.claude/settings.local.json.example")
     keys = set()
     for name in py_hooks():
-        keys |= set(re.findall(r'local_opt_out\(\w+, "(\w+)"\)', read(f"global/.claude/hooks/{name}.py")))
+        body = read(f"global/.claude/hooks/{name}.py")
+        found = re.findall(r'local_opt_out\(\w+, "(\w+)"\)', body)
+        # A call this pattern cannot read (single quotes, a constant) would
+        # otherwise drop out of the check silently.
+        if body.count("local_opt_out(") != len(found):
+            fail("opt-outs documented",
+                 f"{name}.py calls local_opt_out() in a form this check cannot read — "
+                 f"pass the key as a double-quoted literal")
+        keys |= set(found)
     for key in sorted(keys):
         if f'"{key}"' not in example:
             fail("opt-outs documented",

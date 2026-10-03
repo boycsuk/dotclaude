@@ -129,6 +129,37 @@ function Write-Utf8NoBom([string]$Path, [string]$Text) {
     [System.IO.File]::WriteAllText($full, $Text, (New-Object System.Text.UTF8Encoding($false)))
 }
 
+# Run one of the template's Python scripts (shared with init.sh). The
+# interpreter must actually RUN: the Microsoft Store "python3" alias exists on a
+# clean Windows install, exits non-zero and would make the step a silent no-op.
+# Never fatal — every failure is a WARN naming what did not happen.
+$script:PythonCmd = $null
+function Invoke-TemplatePython {
+    param([string]$What, [string[]]$ScriptArgs, [switch]$DiscardStdout)
+    if (-not $script:PythonCmd) {
+        foreach ($candidate in @(@("python3"), @("python"), @("py", "-3"))) {
+            foreach ($cmd in @(Get-Command $candidate[0] -CommandType Application -All -ErrorAction SilentlyContinue)) {
+                $prefix = @($cmd.Source) + @($candidate | Select-Object -Skip 1)
+                try {
+                    & $prefix[0] @($prefix | Select-Object -Skip 1) --version *> $null
+                    if ($LASTEXITCODE -eq 0) { $script:PythonCmd = $prefix; break }
+                } catch { }
+            }
+            if ($script:PythonCmd) { break }
+        }
+    }
+    if (-not $script:PythonCmd) {
+        [Console]::Error.WriteLine("WARN: no working Python (tried python3, python, py -3); $What skipped. Deploy continues.")
+        return
+    }
+    $argv = @($script:PythonCmd | Select-Object -Skip 1) + $ScriptArgs
+    try {
+        if ($DiscardStdout) { & $script:PythonCmd[0] @argv | Out-Null } else { & $script:PythonCmd[0] @argv }
+        $ok = ($LASTEXITCODE -eq 0)
+    } catch { $ok = $false }
+    if (-not $ok) { [Console]::Error.WriteLine("WARN: $What did not complete; deploy continues.") }
+}
+
 function Seed-Copy {
     param([string]$Src, [string]$Dst)
     if (Test-Path $Dst) {
@@ -179,12 +210,8 @@ if (Test-Path $localExample) {
 # pruning rules exist once. stdout carries KEY= lines for detect-drift.py only.
 $obsolete = Join-Path $TemplateDir "obsolete.json"
 if (Test-Path $obsolete) {
-    $py = Get-Command python3, python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($py) {
-        & $py.Source (Join-Path $TemplateDir "scripts/prune-obsolete.py") $obsolete (Get-Location).Path | Out-Null
-    } else {
-        [Console]::Error.WriteLine("WARN: python not found; obsolete-artifact check skipped. Deploy continues.")
-    }
+    Invoke-TemplatePython -What "obsolete-artifact check" -DiscardStdout `
+        -ScriptArgs @((Join-Path $TemplateDir "scripts/prune-obsolete.py"), $obsolete, (Get-Location).Path)
 }
 
 # --- CLAUDE.md, CHANGELOG.md : user-owned, seed when absent ------------------
@@ -280,12 +307,8 @@ if ($InstallCodebaseMemory) {
         exit 8
     }
     Merge-McpServers @((Join-Path $TemplateDir "mcp/codebase-memory-mcp.json"))
-    $py = Get-Command python3, python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($py) {
-        & $py.Source (Join-Path $TemplateDir "scripts/merge-permissions.py") (Join-Path $TemplateDir "permissions/codebase-memory-mcp.json") (Get-Location).Path
-    } else {
-        [Console]::Error.WriteLine("WARN: python not found; codebase-memory-mcp permissions not merged. Deploy continues.")
-    }
+    Invoke-TemplatePython -What "codebase-memory-mcp permission merge" `
+        -ScriptArgs @((Join-Path $TemplateDir "scripts/merge-permissions.py"), (Join-Path $TemplateDir "permissions/codebase-memory-mcp.json"), (Get-Location).Path)
 }
 
 # --- LSP plugins (opt-in, one per --lsp=<plugin>) -----------------------------
@@ -309,8 +332,13 @@ if ($LspPlugins.Count -gt 0) {
             [Console]::Error.WriteLine("        /plugin install $plugin@$marketplace   (choose project scope)")
             continue
         }
-        & claude plugin install "$plugin@$marketplace" --scope project *> $null
-        if ($LASTEXITCODE -eq 0) {
+        # try/catch: on PowerShell 5.1 redirected native stderr becomes an error
+        # record, which $ErrorActionPreference = "Stop" would turn into an abort.
+        try {
+            & claude plugin install "$plugin@$marketplace" --scope project *> $null
+            $installed = ($LASTEXITCODE -eq 0)
+        } catch { $installed = $false }
+        if ($installed) {
             [Console]::Error.WriteLine("  - installed LSP plugin $plugin (project scope, recorded in .claude/settings.json)")
         } else {
             [Console]::Error.WriteLine("WARN: could not install $plugin; run it yourself:")

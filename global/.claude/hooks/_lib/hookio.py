@@ -30,7 +30,7 @@ def project_dir(payload):
 def load_json(path):
     """Parse a JSON file; None when it is missing or unparseable."""
     try:
-        with open(path, encoding="utf-8") as fh:
+        with open(path, encoding="utf-8-sig") as fh:
             return json.load(fh)
     except (OSError, ValueError):
         return None
