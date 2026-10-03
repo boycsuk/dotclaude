@@ -53,7 +53,7 @@ one-liner: that subcommand writes hook entries into `~/.claude/settings.json`
 (which dotclaude's `install.sh` owns and would overwrite), adds three agents
 and a skill to `~/.claude/`, appends a PATH line to the shell rc, and
 configures every other AI client it detects. dotclaude wires the server
-itself; DESIGN.md §33 has the reasoning.
+itself; DESIGN.md §34 has the reasoning.
 
 What the flag does: merges the `codebase-memory-mcp` server into `.mcp.json`
 and its 13 read-only tools into `permissions.allow` by exact name.
@@ -148,7 +148,7 @@ the model get in this project". Claude Code's official LSP plugins give the
 model a read-only `LSP` tool (go-to-definition, references, hover types,
 symbols, call hierarchy) and push the language server's diagnostics after
 every edit ("Found N new diagnostic issues"). That replaces what Serena was
-used for, natively (DESIGN.md §32).
+used for, natively (DESIGN.md §33).
 
 1. Map the language(s) from §2 through the catalog:
    `~/.claude/templates/project/lsp-plugins.json` (plugin → languages, binary,

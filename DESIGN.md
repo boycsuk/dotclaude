@@ -42,7 +42,7 @@ The goal of this repo: turn that guide into a concrete, portable, reusable setup
 
 ### 4. Hooks in both Bash and PowerShell
 
-> **Amended by §35 (2026-10-03):** new hooks are a single Python file; this pairing now applies only to the older `.sh`/`.ps1` hooks until they are migrated.
+> **Amended by §36 (2026-10-03):** new hooks are a single Python file; this pairing now applies only to the older `.sh`/`.ps1` hooks until they are migrated.
 
 **Considered:** Bash-only (require Git Bash on Windows) or Python-only (universal).
 
@@ -151,7 +151,7 @@ The goal of this repo: turn that guide into a concrete, portable, reusable setup
 
 ### 13. Serena MCP as an opt-in symbol-level layer
 
-> **Superseded by §32 (2026-10-03).** Serena and Graphify were removed. The reasoning below is kept as history: it explains what old projects still carry and why `obsolete.json` lists it.
+> **Superseded by §33 (2026-10-03).** Serena and Graphify were removed. The reasoning below is kept as history: it explains what old projects still carry and why `obsolete.json` lists it.
 
 **Considered:** (a) baking Serena into the default template so every project gets it; (b) leaving it as a third-party tool the user wires up manually; (c) opt-in via `/init-project` with a pre-built `.mcp.json` template.
 
@@ -332,7 +332,7 @@ One feature appears in all three under a different lens, with no duplicated deta
 
 ### 20. Not packaged as a Claude Code plugin / marketplace
 
-> **Amended by §33 (2026-10-03):** dotclaude still is not a plugin, but `--lsp=<plugin>` installs official Claude Code LSP plugins into projects.
+> **Amended by §34 (2026-10-03):** dotclaude still is not a plugin, but `--lsp=<plugin>` installs official Claude Code LSP plugins into projects.
 
 **Considered:** distributing the template as a Claude Code plugin published to a marketplace (`plugin.json` + `marketplace.json`, `claude plugin install`, `defaultEnabled`), instead of `install.sh` copying files plus the `/init-project` planner skill.
 
@@ -366,7 +366,7 @@ One feature appears in all three under a different lens, with no duplicated deta
 
 ### 22. Tone/language conventions: rule by default, output style as opt-in hardening
 
-> **Revised by §36 (2026-10-03):** the output style is now on by default and the rule shrank to a short fallback.
+> **Revised by §37 (2026-10-03):** the output style is now on by default and the rule shrank to a short fallback.
 
 **Considered:** the "Castilian conversation / English code / no emojis / cite sources" conventions could live (a) only as advisory prose in `rules/ai-collaboration.md`, (b) only as an output style, or (c) both — prose as the always-on baseline plus an output style for stronger enforcement.
 
@@ -400,7 +400,7 @@ One feature appears in all three under a different lens, with no duplicated deta
 
 **Problem:** CLAUDE.md and `rules/` are re-read by the harness after a context compaction, but *adherence* to advisory prose decays when the transcript is summarized — the summary may drop the fact that a rule was being actively applied. This is the same failure mode that motivated the Serena drift-prevention hooks (§13): prose alone does not survive compaction; deterministic signals do (§10).
 
-**Chosen:** a central `SessionStart` hook gated by `matcher: "compact"` (fires only on auto/manual compaction, never on normal session starts) that prints a short digest of the conventions whose only enforcement is prose: no `--amend`, no AI trailers, branch-per-feature, verify + CHANGELOG before done, AskUserQuestion for decisions, challenge assumptions. (Since §35 the `--amend` and trailer lines are gone from the digest — `guard-commit` enforces them — and the Serena/Graphify line went with §32.) Stdout from a SessionStart hook is added to the fresh context (verified against docs/hooks). Deterministic guarantees (guard-destructive, guard-push-main, detect-secrets, guard-central-config) are deliberately NOT restated — they fire regardless of what the model remembers.
+**Chosen:** a central `SessionStart` hook gated by `matcher: "compact"` (fires only on auto/manual compaction, never on normal session starts) that prints a short digest of the conventions whose only enforcement is prose: no `--amend`, no AI trailers, branch-per-feature, verify + CHANGELOG before done, AskUserQuestion for decisions, challenge assumptions. (Since §36 the `--amend` and trailer lines are gone from the digest — `guard-commit` enforces them — and the Serena/Graphify line went with §33.) Stdout from a SessionStart hook is added to the fresh context (verified against docs/hooks). Deterministic guarantees (guard-destructive, guard-push-main, detect-secrets, guard-central-config) are deliberately NOT restated — they fire regardless of what the model remembers.
 
 **Accepted cost:** the digest is a second copy of prose that lives in `rules/workflow.md` and `rules/ai-collaboration.md`, so it carries a sync obligation. Mitigated the same way as `conventions.md` (§17): the `sync-mirror-docs` hook's reminder now also names `reinject-rules.{sh,ps1}` when a rule file is edited, and the hook's own header states the obligation. Kept as a hardcoded digest rather than generated from `rules/` because the value is *selection and brevity* (a ~8-line distillation), not completeness — generating it would re-inject the full rules that the harness already re-reads.
 
@@ -511,7 +511,7 @@ The recurring failure in design-to-code work was handing the model a whole HTML 
 
 **Rejected:** user-scope installation (`claude mcp add --scope user`) as the default recommendation. It works, but leaves nothing versioned in the project, so a second machine or collaborator silently loses the browser loop the skill's verification gate depends on.
 
-### 32. Serena and Graphify removed; retired artifacts are pruned, not left dangling (2026-10-03)
+### 33. Serena and Graphify removed; retired artifacts are pruned, not left dangling (2026-10-03)
 
 **Why remove them.** Claude Code now ships native LSP navigation and post-edit diagnostics through the official `*-lsp` plugins (the `LSP` tool, since v2.0.74), which covers what Serena was for in day-to-day work. Serena only paid off on large multi-file refactors, and the model kept ignoring its tools even with the drift-prevention hooks of §13 — the hooks guaranteed the reminder, not the behaviour. Graphify's strengths (docs, PDFs, mixed corpora) do not match a code-only workflow, and its advertised token savings did not hold up in practice. `--serena` is now accepted and ignored with a warning (an older `/init-project` may still print it); exit 4 is retired like exit 3.
 
@@ -525,7 +525,7 @@ The recurring failure in design-to-code work was handing the model a whole HTML 
 
 **Rejected:** keeping no-op stub hooks for a release (leaves dead files and entries forever, and hides the problem instead of fixing it); pruning inside `install.sh` (the installer does not know where the user's projects are).
 
-### 33. Code intelligence: official LSP plugins + optional codebase-memory-mcp, steered by hooks (2026-10-03)
+### 34. Code intelligence: official LSP plugins + optional codebase-memory-mcp, steered by hooks (2026-10-03)
 
 **Three layers, each answering a different question.** The official Claude Code LSP plugin answers questions about *one symbol* (definition, references, hover type, call hierarchy) and pushes diagnostics after every edit. codebase-memory-mcp (DeusData) answers *structural* questions — callers and call paths, the impact of the current diff, architecture, dead code. Grep/Read stay for literal text, config and non-code files.
 
@@ -540,15 +540,15 @@ Both read the project's `.mcp.json` and the merged user/project/local `enabledPl
 
 **Rejected:** a `prefer-graph` PreToolUse nudge on Grep/Glob (the `prefer-graphify` pattern; it did not change behaviour with Serena either); community LSP plugins; running the upstream installer with `--clients=claude-code`.
 
-### 34. `Bash(mkfs.*:*)` blocked nothing: wildcard and prefix syntax do not mix (2026-10-03)
+### 35. `Bash(mkfs.*:*)` blocked nothing: wildcard and prefix syntax do not mix (2026-10-03)
 
 Claude Code 2.1.288 warns at startup that a rule mixing a `*` wildcard with the trailing `:*` prefix suffix "is matched as a literal prefix (the * is not expanded)". So `Bash(mkfs.*:*)` matched only commands containing the literal text `mkfs.*`, and — verified with a headless session that had Bash allowed — `mkfs.ext4 -V` ran unblocked under the central deny list (`Bash(mkfs:*)` does not cover it either: the prefix form stops at a word boundary). §29 had already found this rule vanishing on Windows; it was inert on Unix too. The rule is now `Bash(mkfs.*)` (pure wildcard), which the same probe showed blocked.
 
 The verb extractor in check.py and install.ps1 used to strip an optional `:` and an optional `*` separately, which turns `mkfs.*` into the verb `mkfs.`; both now strip only a literal `:*` (so `git commit *--amend*` is its own verb too). check.py rejects any rule mixing the two syntaxes, with a self-test injection.
 
-### 35. Hook-first: hard rules become guards, preferences become delivered context; new hooks are one Python file (2026-10-03)
+### 36. Hook-first: hard rules become guards, preferences become delivered context; new hooks are one Python file (2026-10-03)
 
-**Principle.** A rule that matters goes in a hook, not in prose (§10) — and that applies to more than safety. But a hook guarantees two different things, and they must not be confused: *enforcement* (a deny always denies) and *delivery* (a piece of context always arrives, at the right moment, and survives compaction). Neither guarantees that the model *prefers* one tool over another. So: hard workflow and safety rules → hooks that deny or ask; preferences → hooks that inject context exactly when it matters (§33); judgment, tone and design principles → short prose. An inventory of ~75 prose instructions (2026-10-03) found about a dozen worth converting; this change converts the two with the clearest signal and the highest cost of violation, and leaves the rest (Stop-time verification and Sources gates, read-before-write, comment hygiene, session context) for later, ranked.
+**Principle.** A rule that matters goes in a hook, not in prose (§10) — and that applies to more than safety. But a hook guarantees two different things, and they must not be confused: *enforcement* (a deny always denies) and *delivery* (a piece of context always arrives, at the right moment, and survives compaction). Neither guarantees that the model *prefers* one tool over another. So: hard workflow and safety rules → hooks that deny or ask; preferences → hooks that inject context exactly when it matters (§34); judgment, tone and design principles → short prose. An inventory of ~75 prose instructions (2026-10-03) found about a dozen worth converting; this change converts the two with the clearest signal and the highest cost of violation, and leaves the rest (Stop-time verification and Sources gates, read-before-write, comment hygiene, session context) for later, ranked.
 
 **`guard-commit.py`.** Denies attribution trailers (lines, `-s`, `--signoff`, `--trailer`), emoji and Spanish messages; asks before `--amend`, commits on main, commits without the CHANGELOG entry, and `.sh`/`.ps1` pairs committed half. Trailers had two contradictory policies (workflow.md allowed one "if explicitly requested", CLAUDE.md said never); a guard needs one, so it is *deny, with a per-project opt-out* `allowCommitTrailers` in `settings.local.json` (the `allowPushToMain` pattern of §18) for projects that need DCO sign-off. Spanish detection is deliberately strong-signal only (two function words AND an accented letter): a false deny on an English commit would teach the model the hook is noise. It understands `git add` earlier in the same command and `-a`, because at PreToolUse time those have not run yet and `git add -A && git commit` is the most common shape.
 
@@ -558,9 +558,9 @@ The verb extractor in check.py and install.ps1 used to strip an optional `:` and
 
 **What the pre-merge review found, and the rule it left.** A skeptical review run against the finished branch found two Windows-only defects that every matrix passed: `guard-dependencies` checked `tool_name == "Bash"`, but on Windows the matcher (and the tool) is `PowerShell`, so it never fired; and `init.ps1` took the first `python3` on PATH — the Microsoft Store stub — so pruning silently did nothing. The `--pwsh` matrices only proved the *launch* form, never PowerShell *payloads*. Matrices now send PowerShell command text with the PowerShell tool name, and `shellwords` normalises the PowerShell syntax a command line uses (backtick escapes, here-strings). It also found ~20 bypasses in the first `guard-commit` (wrappers with valued flags, subshells, `bash -c`, abbreviated options, `$'...'`, heredoc bodies with quotes); all are matrix cases now, and they fail against the pre-review hook. Known gaps that stay: a message piped from another command (`printf … | git commit -F -`), a `✓` in a message counts as an emoji, and in headless `claude -p` an `ask` resolves to a deny.
 
-**Rejected:** blocking hooks for preferences (deny Grep when a graph exists) — wrong given §33's benchmark; a Stop gate in this change — it reverses "Things deliberately not included" and needs its own decision.
+**Rejected:** blocking hooks for preferences (deny Grep when a graph exists) — wrong given §34's benchmark; a Stop gate in this change — it reverses "Things deliberately not included" and needs its own decision.
 
-### 36. The output style is on by default (revises §22) (2026-10-03)
+### 37. The output style is on by default (revises §22) (2026-10-03)
 
 With the style enabled, its conventions loaded twice: once in the system prompt and again from `rules/ai-collaboration.md` on every session. The installers now set `"outputStyle": "dotclaude"` only when the key is absent — a user who picked another style, or none on purpose, keeps it (pinned in `tests/install-cases.py`). The rule's "Output style" section shrank to a three-line fallback for machines where the style is off. §22's reason for opt-in — a per-machine choice — still holds, it is simply the default now.
 

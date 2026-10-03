@@ -334,7 +334,7 @@ fi
 # --- codebase-memory-mcp (opt-in) ---------------------------------------------
 # A persistent code graph for structural questions. Opt-in, not default: its
 # authors' own benchmark scores it below plain file exploration on answer
-# quality (it wins on tokens) — DESIGN.md §33. Only the binary is a
+# quality (it wins on tokens) — DESIGN.md §34. Only the binary is a
 # prerequisite; dotclaude wires the server and permissions itself.
 if [ "$INSTALL_CODEBASE_MEMORY" = "true" ]; then
   if ! command -v codebase-memory-mcp >/dev/null 2>&1; then

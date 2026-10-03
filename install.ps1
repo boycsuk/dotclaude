@@ -189,7 +189,7 @@ function Convert-Rule($rule) {
     # suffix. A pattern that also ate a lone trailing `*` turned the wildcard
     # rule `Bash(mkfs.*)` into the verb `mkfs.` (unmapped), and the older
     # `Bash(mkfs.*:*)` spelling it replaced matched nothing at all on Unix:
-    # Claude Code reads `*` before `:*` literally (DESIGN.md §34).
+    # Claude Code reads `*` before `:*` literally (DESIGN.md §35).
     if ($rule -notmatch '^Bash\((.*?)(?::\*)?\)$') { return $rule }
     $verb = $Matches[1]
     if ($verbMap.ContainsKey($verb)) {
@@ -286,7 +286,7 @@ if (Test-Path $settingsPath) {
 }
 foreach ($k in $central.Keys) { $existing[$k] = $central[$k] }
 # Lockstep with install.sh: default the output style on, never override a
-# style the user chose (DESIGN.md §36).
+# style the user chose (DESIGN.md §37).
 if (-not $existing.Contains("outputStyle")) { $existing["outputStyle"] = "dotclaude" }
 # BOM-less on purpose: PS 5.1's Set-Content -Encoding UTF8 writes a BOM, which
 # strict JSON parsers reject — settings.json is read by more than PowerShell.

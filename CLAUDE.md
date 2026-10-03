@@ -72,7 +72,7 @@ If you're tempted to "fix" the skill so it runs `init.sh` automatically, **don't
 
 ### 2. One hook, one implementation: new hooks are Python; shell pairs stay in lockstep
 
-New hooks are a single `global/.claude/hooks/<name>.py` (shared helpers in `hooks/_lib/`), wired as `python3 "$HOME"/.claude/hooks/<name>.py`; `install.ps1` rewrites that to the Python it verified, so one file serves both platforms (DESIGN.md §35). Each declares `# hook-kind: guard|advisory|rewrite` on its first line — check.py derives the rules from it. Older hooks still ship twice, `foo.sh` and `foo.ps1` (`install.sh` strips `.ps1` on Unix, `install.ps1` strips `.sh` on Windows): **when you change one, change the other in the same commit**, or migrate the pair to `.py` while you are there. Diverging silently breaks Windows users (no CI catches this).
+New hooks are a single `global/.claude/hooks/<name>.py` (shared helpers in `hooks/_lib/`), wired as `python3 "$HOME"/.claude/hooks/<name>.py`; `install.ps1` rewrites that to the Python it verified, so one file serves both platforms (DESIGN.md §36). Each declares `# hook-kind: guard|advisory|rewrite` on its first line — check.py derives the rules from it. Older hooks still ship twice, `foo.sh` and `foo.ps1` (`install.sh` strips `.ps1` on Unix, `install.ps1` strips `.sh` on Windows): **when you change one, change the other in the same commit**, or migrate the pair to `.py` while you are there. Diverging silently breaks Windows users (no CI catches this).
 
 Same rule for `install.sh` ↔ `install.ps1` and `templates/project/init.sh` ↔ `init.ps1`.
 

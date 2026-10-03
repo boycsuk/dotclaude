@@ -146,7 +146,7 @@ def _():
     for rule in rules:
         # Claude Code reads a `*` placed before the `:*` prefix suffix
         # literally, so `Bash(mkfs.*:*)` matched only commands containing a
-        # literal `mkfs.*` — mkfs.ext4 ran unblocked (DESIGN.md §34).
+        # literal `mkfs.*` — mkfs.ext4 ran unblocked (DESIGN.md §35).
         if re.search(r"\*.*:\*\)$", rule):
             fail("install.ps1 derives from settings.json",
                  f"{rule} mixes a `*` wildcard with the `:*` prefix suffix — Claude Code "

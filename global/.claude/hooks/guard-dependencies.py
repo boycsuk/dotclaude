@@ -13,7 +13,7 @@ behind a wrapper. This hook asks the user whenever:
     composer.json, *.csproj).
 The reason names the packages, flags unpinned version specs, and gives the
 ecosystem's audit command. It never denies: adding a dependency is often
-right; it is the user's call (DESIGN.md §35).
+right; it is the user's call (DESIGN.md §36).
 """
 
 import json

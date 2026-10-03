@@ -119,7 +119,7 @@ for key in ("permissions", "hooks", "attribution"):
     if key in src:
         dst[key] = src[key]
 # The output style carries the tone/language conventions at system-prompt
-# level (DESIGN.md §36). Default it on, but never override a style the user
+# level (DESIGN.md §37). Default it on, but never override a style the user
 # chose — including one they set to something else on purpose.
 dst.setdefault("outputStyle", "dotclaude")
 with open(dst_path, "w") as f:

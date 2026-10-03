@@ -4,7 +4,7 @@
 The built-in Explore agent can already call the LSP tool and MCP tools, but it
 skips CLAUDE.md, so it never learns the project has them. SubagentStart
 context reaches it too, yet in a probe the prompt channel carried more weight
-when the two competed (DESIGN.md §33), so Explore gets the guidance in its
+when the two competed (DESIGN.md §34), so Explore gets the guidance in its
 prompt. Only `prompt` changes; every other input key is passed through.
 No permission decision is returned: the call still goes through the user's
 normal rules for Agent.
