@@ -1,15 +1,27 @@
 ---
 name: audit
-description: Audits code for vulnerabilities, dead code, duplication, comment/doc hygiene, test coverage, and (on web projects) duplicated styles and repeated markup that should be components. Asks WHICH categories, then how deep, then over what — nothing runs before those answers. Covers both uncommitted changes and code already in the repo. Use for a security review before committing, a whole-project audit, hunting dead or unused code or duplication, or checking what could become a component. For a quick bug-focused pass over the current diff use /code-review.
+description: Audits code in two modes. Defects — vulnerabilities, dead code, duplication, comment/doc hygiene, test coverage, and (on web projects) duplicated styles and repeated markup that should be components; covers uncommitted changes and code already in the repo. Improvements — what would make an existing feature or component better (new functionality, UX and accessibility, performance and scale, component API), each idea backed by a scenario and evidence, drawn from the project's code and docs, common patterns and optionally web research. Asks the mode, then WHICH categories, then how deep — nothing runs before those answers. Use for a security review before committing, a whole-project audit, hunting dead or unused code or duplication, checking what could become a component, or asking how a feature could be improved or what it is missing. For a quick bug-focused pass over the current diff use /code-review.
 effort: high
-allowed-tools: Bash(npm *) Bash(pnpm *) Bash(uv *) Bash(python3 *) Bash(pip *) Bash(cargo *) Bash(go *) Bash(git *) Bash(rg *) Bash(grep *) Bash(find *) Bash(wc *) Bash(ls *) Bash(gitleaks *) Bash(pip-audit *) Bash(govulncheck *) Glob Grep Read Task
+allowed-tools: Bash(npm *) Bash(pnpm *) Bash(uv *) Bash(python3 *) Bash(pip *) Bash(cargo *) Bash(go *) Bash(git *) Bash(rg *) Bash(grep *) Bash(find *) Bash(wc *) Bash(ls *) Bash(gitleaks *) Bash(pip-audit *) Bash(govulncheck *) Glob Grep Read Task WebSearch WebFetch
 ---
 
 # Audit
 
-One entry point for reviewing code quality and safety, whether the code was written five minutes ago or five months ago. It replaces the old `/security-review`: security is now one selectable category here, and "uncommitted changes" one selectable scope, so a pre-commit security pass is `/audit` → Security → Light → Uncommitted changes.
+One entry point for reviewing code, whether it was written five minutes ago or five months ago: for what is wrong with it, or for what would make it better. It replaces the old `/security-review`: security is now one selectable category here, and "uncommitted changes" one selectable scope, so a pre-commit security pass is `/audit` → Defects → Security → Light → Uncommitted changes.
 
 `/code-review` remains separate and complementary: it is a fast, bug-focused pass over the current diff. Reach for `/audit` when you want to choose *what kind* of problem to look for, or to look at code that is not in the diff at all.
+
+## Two modes: defects or improvements
+
+- **Find defects** — what is wrong: the flow in §1-§5 below.
+- **Propose improvements** — what is missing from something that already
+  works: new capabilities, better UX, headroom for scale, a cleaner
+  component API. Read `references/improve-mode.md` and follow it instead of
+  §1-§5. §0 applies to both.
+
+Take the mode from the request when it is clear ("audit for security", "how
+could this table be better"); otherwise ask it first, through
+AskUserQuestion, before any other question.
 
 ## 0. Audit and fix are two phases, and only the first one is expensive
 
@@ -27,7 +39,7 @@ The categories come first and on their own, because auditing everything at once 
 
 - **Security** — vulnerabilities, hardcoded secrets, injection, missing authorization, unsafe deserialization. (Replaces the old `/security-review`.)
 - **Dead code** — unreferenced exports, orphaned files, unused dependencies, unreachable branches, endpoints nobody calls.
-- **Duplication & improvements** — copy-pasted logic, near-duplicate functions, N+1 queries, deep nesting, swallowed errors.
+- **Duplication & simplification** — copy-pasted logic, near-duplicate functions, N+1 queries, deep nesting, swallowed errors. (New capabilities are the improve mode, not this category.)
 - **Comments & documentation** — comments that restate the code or narrate a past change, stale comments the code has outgrown, public APIs with no doc comment. Checks the project against `rules/code-quality.md`.
 - **Tests** — risky logic with no test, suites that only cover the happy path, and tests that exercise a different entry point than production does (see §4 — that divergence is often the most valuable finding in the whole run).
 - **Styles & components** *(web/UI projects only — omit this option entirely otherwise)* — repeated declaration blocks, hardcoded colours/spacing that should be tokens, dead selectors, and markup repeated 3+ times that wants to be a component.
@@ -107,7 +119,7 @@ A wide fan-out can hit a rate or usage limit partway through, and the agents tha
 
 **Dead code.** Unreferenced exports, unreachable branches, feature flags that are never false, commented-out blocks, orphaned files, dependencies nothing imports, endpoints no client calls, DB columns nothing reads. For each: state how you confirmed nothing references it, and say if the check was static-only.
 
-**Improvements / duplication.** Copy-pasted logic that should be one function, near-duplicate functions differing by a constant, deep nesting that early returns would flatten, N+1 queries, sync I/O in hot paths, missing indexes, error handling that swallows failures.
+**Duplication & simplification.** Copy-pasted logic that should be one function, near-duplicate functions differing by a constant, deep nesting that early returns would flatten, N+1 queries, sync I/O in hot paths, missing indexes, error handling that swallows failures.
 
 **Comments & documentation.** Judge against `~/.claude/rules/code-quality.md`, which is the standard this project holds itself to — read it rather than inventing criteria.
 - *Comments that should not exist*: paraphrases of the line below them; narration of a past change ("added X per request", "fixed the bug here"); decorative section banners; anything referencing a conversation instead of the code.

@@ -639,6 +639,17 @@ Designs are now made in Claude Code as Artifacts of the Design type: a `canvas.j
 
 **Rejected:** pointing the skill at the `artifact-design` skill. That skill is styling guidance for ordinary artifact pages; it does not make designs. Also rejected: leaving the canvas to a plain request to the Artifact tool. The first version did, and depended on the user remembering to ask for separate, parameterised components; the structure the spec needs belongs in the skill.
 
+### 41. `/audit` gains an improve mode (revises §28) (2026-10-04)
+
+`/audit` only looked for what is wrong. The missing half was what an existing feature lacks: a table that works but has no search, no filters, no export. That is a different question with a different failure mode, so it is a second mode of the same skill rather than another category.
+
+- **A mode, not a category.** Categories narrow a defect hunt; this mode changes the question, the inputs (what the feature is for, who uses it, what comparable tools offer) and the output (ideas with value and effort, not findings with severity). Its flow lives in `skills/audit/references/improve-mode.md`, so a defect run never loads it. The mode is taken from the request when clear and asked first otherwise.
+- **Built against the wishlist.** The way this kind of review fails is listing everything that kind of component ever had. Every idea must name its scenario and point to evidence it exists here (a user story, a caller working around the gap, a data volume the code allows, a spec item); "comparables have it" only counts alongside one of those. It must also be grepped for first, because proposing a feature the code already has is this mode's false positive. At most ten ideas reach the report.
+- **The target is focused.** Ideas need a subject; a whole-project request becomes a choice of feature first.
+- **Sources and types are chosen per run.** Project code and docs, patterns for the kind of piece, and web research (the costly one); new functionality, UX and accessibility, performance and scale, component API.
+- **Chosen ideas are routed, not built in place**: large or ambiguous to `/plan-feature`, UI changes to `/implement-ui` (design first when a `docs/design/` spec exists), small ones implemented here in series through `/commit`.
+- The defect category "Duplication & improvements" became "Duplication & simplification": with a mode called improvements, the old name invited the two to be confused.
+
 ## Things deliberately not included
 
 - **Pre-baked stack variants.** See decision 2.
