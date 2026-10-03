@@ -105,47 +105,59 @@ def _write(path, data):
 
 
 def remove_mcp(project, names):
-    """Delete `names` from .mcp.json and their mcp__<name> rules from the project settings."""
+    """Delete obsolete servers from .mcp.json and every settings reference to them.
+
+    The settings are cleaned for all `names`, not only the servers removed in
+    this run: a later run must still clear a leftover `mcp__serena__*` rule or
+    an `enabledMcpjsonServers` entry (the per-server approval Claude Code keeps
+    in settings.local.json) whose server is already gone.
+    """
     mcp_path = os.path.join(project, ".mcp.json")
     try:
         mcp = load(mcp_path)
-        servers = mcp.get("mcpServers")
-    except (OSError, ValueError, AttributeError):
+        servers = mcp.get("mcpServers") if isinstance(mcp, dict) else None
+    except (OSError, ValueError):
+        servers = None
+    gone = [n for n in names if isinstance(servers, dict) and n in servers]
+    if gone:
+        for name in gone:
+            del servers[name]
+        try:
+            _write(mcp_path, mcp)
+            print(f"  - removed obsolete MCP server(s) from .mcp.json: {', '.join(gone)}", file=sys.stderr)
+        except OSError as exc:
+            print(f"  ! could not write {mcp_path} ({exc}); remove {gone} by hand", file=sys.stderr)
+            return
+    if not names:
         return
-    if not isinstance(servers, dict):
-        return
-    gone = [n for n in names if n in servers]
-    if not gone:
-        return
-    for name in gone:
-        del servers[name]
-    try:
-        _write(mcp_path, mcp)
-    except OSError as exc:
-        print(f"  ! could not write {mcp_path} ({exc}); remove {gone} by hand", file=sys.stderr)
-        return
-    print(f"  - removed obsolete MCP server(s) from .mcp.json: {', '.join(gone)}", file=sys.stderr)
-    rule = re.compile(r"^mcp__(%s)(__.*)?$" % "|".join(re.escape(n) for n in gone))
-    for name in SETTINGS_FILES:
-        path = os.path.join(project, ".claude", name)
+    rule = re.compile(r"^mcp__(%s)(__.*)?$" % "|".join(re.escape(n) for n in names))
+    for settings_name in SETTINGS_FILES:
+        path = os.path.join(project, ".claude", settings_name)
         try:
             settings = load(path)
         except (OSError, ValueError):
             continue
-        perms = settings.get("permissions") if isinstance(settings, dict) else None
-        if not isinstance(perms, dict):
+        if not isinstance(settings, dict):
             continue
         dropped = []
-        for key in ("allow", "ask", "deny"):
-            rules = perms.get(key)
-            if isinstance(rules, list):
-                kept = [r for r in rules if not (isinstance(r, str) and rule.match(r))]
-                dropped += [r for r in rules if r not in kept]
-                perms[key] = kept
+        perms = settings.get("permissions")
+        if isinstance(perms, dict):
+            for key in ("allow", "ask", "deny"):
+                rules = perms.get(key)
+                if isinstance(rules, list):
+                    kept = [r for r in rules if not (isinstance(r, str) and rule.match(r))]
+                    dropped += [r for r in rules if r not in kept]
+                    perms[key] = kept
+        for key in ("enabledMcpjsonServers", "disabledMcpjsonServers"):
+            listed = settings.get(key)
+            if isinstance(listed, list):
+                kept = [n for n in listed if n not in names]
+                dropped += [f"{key}:{n}" for n in listed if n in names]
+                settings[key] = kept
         if dropped:
             try:
                 _write(path, settings)
-                print(f"  - removed their permission rules from {path}: {', '.join(dropped)}", file=sys.stderr)
+                print(f"  - removed references from {path}: {', '.join(dropped)}", file=sys.stderr)
             except OSError as exc:
                 print(f"  ! could not write {path} ({exc}); remove {dropped} by hand", file=sys.stderr)
 
