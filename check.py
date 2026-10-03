@@ -144,7 +144,14 @@ def _():
     rules = (settings["permissions"]["allow"] + settings["permissions"]["ask"]
              + settings["permissions"]["deny"])
     for rule in rules:
-        m = re.match(r"^Bash\((.*?):?\*?\)$", rule)
+        # Claude Code reads a `*` placed before the `:*` prefix suffix
+        # literally, so `Bash(mkfs.*:*)` matched only commands containing a
+        # literal `mkfs.*` — mkfs.ext4 ran unblocked (DESIGN.md §34).
+        if re.search(r"\*.*:\*\)$", rule):
+            fail("install.ps1 derives from settings.json",
+                 f"{rule} mixes a `*` wildcard with the `:*` prefix suffix — Claude Code "
+                 f"matches that `*` literally; write it as a pure wildcard rule")
+        m = re.match(r"^Bash\((.*?)(?::\*)?\)$", rule)
         if not m or rule == "Bash":
             continue
         verb = m.group(1)

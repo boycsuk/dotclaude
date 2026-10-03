@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Serena and Graphify: the `--serena` flag (now accepted and ignored with a warning; exit 4 retired), `mcp/serena.json`, `mcp/graphify.json`, `serena-hooks.json` and the project hooks-merge machinery in both init scripts, the `prefer-serena-bash` and `prefer-graphify` hooks, their guidance in rules, the CLAUDE.md template (`{{SERENA_BLOCK}}`), the researcher agent, `/plan-feature`, the init-project skill and READMEs. Existing projects lose the dead hook entries on their next deploy through `obsolete.json`; `/init-project --update` offers to remove the `serena`/`graphify` servers and `.serena/` / `graphify-out/` (DESIGN.md §32).
 - `check.py` no longer reads a code-extension list from a hook (check 6 compares the two path-scoped rules only).
 
+### Security
+- The central deny rule `Bash(mkfs.*:*)` blocked nothing on any platform: Claude Code reads a `*` placed before the `:*` suffix literally, so `mkfs.ext4` ran unblocked. It is now `Bash(mkfs.*)`; check.py and install.ps1 strip only a literal `:*` when deriving verbs, and check.py rejects rules that mix the two syntaxes (DESIGN.md §34).
+
 ## [0.1.0] - 2026-08-15
 
 ### Added

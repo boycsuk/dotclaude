@@ -42,7 +42,7 @@
       "Bash(mkfs:*)",
       "Bash(shred:*)",
       "Bash(truncate:*)",
-      "Bash(mkfs.*:*)",
+      "Bash(mkfs.*)",
       "Bash(eval:*)",
       "Read(//**/.env)",
       "Read(//**/.env.local)",

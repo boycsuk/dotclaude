@@ -534,6 +534,12 @@ Both read the project's `.mcp.json` and the merged user/project/local `enabledPl
 
 **Rejected:** a `prefer-graph` PreToolUse nudge on Grep/Glob (the `prefer-graphify` pattern; it did not change behaviour with Serena either); community LSP plugins; running the upstream installer with `--clients=claude-code`.
 
+### 34. `Bash(mkfs.*:*)` blocked nothing: wildcard and prefix syntax do not mix (2026-10-03)
+
+Claude Code 2.1.288 warns at startup that a rule mixing a `*` wildcard with the trailing `:*` prefix suffix "is matched as a literal prefix (the * is not expanded)". So `Bash(mkfs.*:*)` matched only commands containing the literal text `mkfs.*`, and — verified with a headless session that had Bash allowed — `mkfs.ext4 -V` ran unblocked under the central deny list (`Bash(mkfs:*)` does not cover it either: the prefix form stops at a word boundary). §29 had already found this rule vanishing on Windows; it was inert on Unix too. The rule is now `Bash(mkfs.*)` (pure wildcard), which the same probe showed blocked.
+
+The verb extractor in check.py and install.ps1 used to strip an optional `:` and an optional `*` separately, which turns `mkfs.*` into the verb `mkfs.`; both now strip only a literal `:*` (so `git commit *--amend*` is its own verb too). check.py rejects any rule mixing the two syntaxes, with a self-test injection.
+
 ## Things deliberately not included
 
 - **Pre-baked stack variants.** See decision 2.

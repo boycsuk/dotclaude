@@ -195,7 +195,13 @@ def py_hook_gains_shell_twin(repo):
         fh.write("#!/bin/sh\nexit 0\n")
 
 
+def mixed_wildcard_rule(repo):
+    """`Bash(mkfs.*:*)` matched nothing on Unix: the `*` before `:*` is literal."""
+    _replace(repo, "global/.claude/settings.json", '"Bash(mkfs.*)"', '"Bash(mkfs.*:*)"')
+
+
 REGRESSIONS = {
+    "mixed-wildcard-rule": mixed_wildcard_rule,
     "drop-py-hook-kind": drop_py_hook_kind,
     "rewrite-hook-without-matrix": rewrite_hook_without_matrix,
     "wire-py-hook-without-interpreter": wire_py_hook_without_interpreter,

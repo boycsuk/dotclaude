@@ -162,7 +162,7 @@ $verbMap = @{
     "eval"            = "Invoke-Expression *"
     "git push"        = "git push *"
     "git rebase"      = "git rebase *"
-    "git commit *--amend" = "git commit *--amend*"
+    "git commit *--amend*" = "git commit *--amend*"
     "git filter-branch"  = "git filter-branch *"
     "npm install"     = "npm install *"
     "pnpm install"    = "pnpm install *"
@@ -179,12 +179,12 @@ $unmapped = @()
 function Convert-Rule($rule) {
     # Non-Bash rules (Read(...), bare tool names) pass through untouched.
     if ($rule -eq "Bash") { return "PowerShell" }
-    # Non-greedy with the suffix absorbed into the pattern — byte-for-byte the
-    # regex check.py uses. The greedy form plus two -replace calls disagreed on
-    # `Bash(mkfs.*:*)`: check.py derived `mkfs.*` (mapped) while this side
-    # derived `mkfs.` (unmapped), so the deny silently vanished on Windows
-    # while check.py reported a clean pass.
-    if ($rule -notmatch '^Bash\((.*?):?\*?\)$') { return $rule }
+    # Byte-for-byte the regex check.py uses, and it strips ONLY a literal `:*`
+    # suffix. A pattern that also ate a lone trailing `*` turned the wildcard
+    # rule `Bash(mkfs.*)` into the verb `mkfs.` (unmapped), and the older
+    # `Bash(mkfs.*:*)` spelling it replaced matched nothing at all on Unix:
+    # Claude Code reads `*` before `:*` literally (DESIGN.md §34).
+    if ($rule -notmatch '^Bash\((.*?)(?::\*)?\)$') { return $rule }
     $verb = $Matches[1]
     if ($verbMap.ContainsKey($verb)) {
         if ($null -eq $verbMap[$verb]) { return $null }   # deliberately dropped
