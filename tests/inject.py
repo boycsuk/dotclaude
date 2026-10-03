@@ -385,7 +385,19 @@ def drop_ps1_exit_code(repo):
         fh.write(text.replace(fixed, '$command = "& `"$Target\\hooks\\$name.ps1`""'))
 
 
+def drop_fork_from_verify(repo):
+    """A skill that pins haiku without forking hands haiku the caller's turn."""
+    path = os.path.join(repo, "global/.claude/skills/verify/SKILL.md")
+    with open(path) as fh:
+        text = fh.read()
+    if "\ncontext: fork\n" not in text:
+        raise SystemExit("inject: verify/SKILL.md no longer declares context: fork")
+    with open(path, "w") as fh:
+        fh.write(text.replace("\ncontext: fork\n", "\n", 1))
+
+
 REGRESSIONS = {
+    "drop-fork-from-verify": drop_fork_from_verify,
     "drop-skill-from-readme": drop_skill_from_readme,
     "unwire-shell-hook": unwire_shell_hook,
     "reinject-to-stderr": reinject_to_stderr,

@@ -499,6 +499,14 @@ def _():
             fail("frontmatter validity",
                  f"{rel} pins model: {model} — §7 allows an override only for "
                  f"mechanical components ({', '.join(sorted(model_allowed))})")
+        # A skill's model applies to the rest of the caller's turn unless the
+        # skill forks (DESIGN.md §27): resume-context ran without the fork, so
+        # every session's first turn dropped to haiku after it.
+        if (path.endswith("SKILL.md") and model and model != "inherit"
+                and keys.get("context") != "fork"):
+            fail("frontmatter validity",
+                 f"{rel} pins model: {model} without `context: fork` — the model "
+                 f"would run the rest of the caller's turn")
 
 
 # --- 9b. Hook wiring: no prefix `if` gates, no dead advisory channel ---------

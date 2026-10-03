@@ -199,6 +199,10 @@ inject lsp-entry-without-binary
 expect_fail "LSP plugin catalog" "an LSP catalog entry loses its binary"
 
 setup
+inject drop-fork-from-verify
+expect_fail "frontmatter validity" "a skill pins haiku without context: fork"
+
+setup
 rm "$WORK/repo/templates/project/init.ps1"
 expect_fail "installer/deployer pairs" "the Windows deployer is deleted"
 

@@ -226,7 +226,7 @@ Components in this template that override:
 |---|---|---|
 | `skills/verify` | `haiku` + `context: fork` | Mechanical: runs commands and reports pass/fail. The fork is what keeps `haiku` from applying to the rest of the caller's turn. |
 | `skills/changes` | `haiku` + `context: fork` | Mechanical: summarize a diff into bullets; the fork also keeps the full diff out of the main context. |
-| `skills/resume-context` | `haiku` | Mechanical: read three files and structure them. |
+| `skills/resume-context` | `haiku` + `context: fork` | Mechanical: read three files and structure them. Without the fork, `haiku` ran the rest of the session's first turn. |
 
 Everything else uses `inherit`. Specifically, do NOT downgrade these to `haiku`:
 - `researcher` — synthesizing architecture and cross-module flow is reasoning, not lookup. Quick "where is X" lookups go to the built-in Explore agent instead (smaller context; it runs on the session model since Claude Code v2.1.198).

@@ -2,6 +2,7 @@
 name: resume-context
 description: Rebuilds project context at the start of a session by reading CLAUDE.md, recent CHANGELOG entries, and git log. Use when opening a new session on an ongoing project or returning after a break. For summarizing the current uncommitted diff specifically, use changes instead.
 model: haiku
+context: fork
 allowed-tools: Bash(git log:*) Bash(git status:*) Read
 ---
 
