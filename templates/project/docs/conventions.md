@@ -91,6 +91,12 @@
   reads of `.env`/`secrets/`/`credentials/`.
 - **Secure logs.** Never log sensitive data; sanitize inputs before logging
   (log injection via CRLF/escapes).
+- **Bash sandbox (opt-in hardening).** The deny rules stop Claude's own file
+  tools, not an arbitrary subprocess that opens `.env` itself. The OS-level
+  sandbox blocks every process, so it is strictly stronger. Off by default: it
+  needs a host prerequisite, has no native Windows support, and is incompatible
+  with Docker. Enable per machine with `{"sandbox": {"enabled": true}}` in
+  `~/.claude/settings.json` on a supported host.
 - **Limit resources.** Timeouts on external calls, input size limits, rate
   limiting where applicable.
 - **TOCTOU.** If a check and its action must be inseparable, use atomic ops or
@@ -145,6 +151,14 @@
   dimension (never one per file), save results as they arrive so an
   interruption does not discard them, and verify fixes with the project's own
   tests rather than a second sweep.
+- **An agent's findings are hypotheses, not facts.** A sweep returns a
+  confident synthesis whether or not it is right. Before a claim from an agent
+  becomes code, configuration, or an answer someone relies on, check it at the
+  source — the doc page, the file, the command's real output. Check first
+  anything that contradicts the code in front of you, any version, flag or
+  field name nobody has seen directly, and any recommendation whose reasoning
+  the report does not show. Delegating the reading does not delegate
+  responsibility for it.
 
 ---
 

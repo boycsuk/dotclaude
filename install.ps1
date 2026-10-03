@@ -7,9 +7,11 @@
 #
 # Also installs the per-project template and the /init-project skill.
 #
-# Re-running is safe: it overwrites the central artifacts (owned by this repo)
-# but never clobbers your personal CLAUDE.md, and MERGES the base settings into
-# $HOME\.claude\settings.json without dropping your own keys.
+# Re-running is safe: it refreshes the central artifacts it owns by removing only
+# the files it shipped last time (per the manifest), so your own skills/agents/
+# rules in those directories survive. It never clobbers your personal CLAUDE.md,
+# and MERGES the base settings into $HOME\.claude\settings.json without dropping
+# your own keys.
 #
 # This is the lockstep sibling of install.sh. On Windows the .ps1 hooks run
 # under PowerShell, so the central settings.json points at the .ps1 files with
@@ -48,6 +50,28 @@ foreach ($candidate in @(@("python3", ""), @("python", ""), @("py", "-3"))) {
 if (-not $PythonExe) {
     [Console]::Error.WriteLine("ERROR: no working Python found (tried python3, python, py -3) — the .py hooks run on it. Install Python and re-run.")
     exit 1
+}
+
+# --- Syntax pre-flight: never install a hook that cannot be parsed -----------
+# Lockstep with install.sh. A hook that fails to parse is a wall, not a degraded
+# hook: the central guards run on PreToolUse, so an unparseable one breaks every
+# session, and that state cannot be repaired from inside Claude Code (the broken
+# hook blocks the installer that would replace it). See DESIGN.md §32. Abort
+# before copying, leaving the previously installed working hooks in place.
+$hookDir = Join-Path $ScriptDir "global/.claude/hooks"
+if (Test-Path $hookDir) {
+    foreach ($hook in @(Get-ChildItem -Path $hookDir -Filter "*.ps1" -File)) {
+        $tokens = $null
+        $errors = $null
+        [System.Management.Automation.Language.Parser]::ParseFile(
+            $hook.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+        if ($errors -and $errors.Count -gt 0) {
+            [Console]::Error.WriteLine("  ! $($hook.Name) does not parse — aborting before anything is copied.")
+            [Console]::Error.WriteLine("    $($errors[0].Message)")
+            [Console]::Error.WriteLine("    Your currently installed hooks are untouched. Fix the source and re-run.")
+            exit 1
+        }
+    }
 }
 
 New-Item -ItemType Directory -Force -Path (Join-Path $Target "templates") | Out-Null
@@ -222,8 +246,14 @@ $central = [ordered]@{
         ask   = @(Convert-RuleList $srcSettings.permissions.ask)
         deny  = @(Convert-RuleList $srcSettings.permissions.deny) + $extraDeny
         disableBypassPermissionsMode = $srcSettings.permissions.disableBypassPermissionsMode
+        defaultMode = $srcSettings.permissions.defaultMode
     }
-    attribution = [ordered]@{ commit = ""; pr = "" }
+    # Derived, not hardcoded: every sibling above reads $srcSettings, and
+    # install.sh copies "attribution" straight from the source JSON. A literal
+    # pair here meant any future change to attribution in
+    # global/.claude/settings.json silently never reached Windows — exactly the
+    # drift CLAUDE.md requires install.ps1 to avoid by deriving its config.
+    attribution = $srcSettings.attribution
     hooks = [ordered]@{}
 }
 
@@ -244,11 +274,17 @@ foreach ($event in $srcSettings.hooks.PSObject.Properties) {
             $timeout = if ($h.timeout) { $h.timeout } else { 5 }
             $hooks += (New-Hook $name $timeout ($h.command -match '\.py"?$'))
         }
-        $groups += [ordered]@{ matcher = $group.matcher; hooks = $hooks }
+        # Events without matcher support (Stop, UserPromptSubmit, ...) carry no
+        # matcher in the source; emitting "matcher": null is not the same as
+        # omitting the key, so build the entry without it.
+        $entry = [ordered]@{}
+        if ($null -ne $group.matcher) { $entry["matcher"] = $group.matcher }
+        $entry["hooks"] = $hooks
+        $groups += $entry
     }
     # The Bash matcher is spelled PowerShell on Windows.
     foreach ($g in $groups) {
-        if ($g.matcher -eq "Bash") { $g.matcher = "PowerShell" }
+        if ($g.Contains("matcher") -and $g["matcher"] -eq "Bash") { $g["matcher"] = "PowerShell" }
     }
     $central.hooks[$event.Name] = $groups
 }
@@ -263,6 +299,26 @@ if ($unmapped.Count -gt 0) {
     exit 1
 }
 
+# Mirrors OWNED/SEEDED in install.sh; check.py asserts the three sites agree.
+# OWNED is overwritten every install (it is the deterministic guarantee);
+# SEEDED is written only when the key is absent, so a /config choice survives
+# a re-install.
+$owned  = @("permissions", "hooks", "attribution")
+$seeded = @("outputStyle", "fileCheckpointingEnabled", "statusLine")
+
+# statusLine is seeded verbatim from the source like every other seeded key,
+# but its `command` is the .sh form. Rewrite it the way the hooks tree is
+# rewritten, or Windows seeds a status line that invokes a bash script.
+if ($srcSettings.PSObject.Properties.Name -contains "statusLine" -and $srcSettings.statusLine.command) {
+    $slName = [System.IO.Path]::GetFileNameWithoutExtension($srcSettings.statusLine.command)
+    $srcSettings.statusLine.command = "& `"$Target\hooks\$slName.ps1`""
+    if (-not ($srcSettings.statusLine.PSObject.Properties.Name -contains "shell")) {
+        $srcSettings.statusLine | Add-Member -NotePropertyName shell -NotePropertyValue "powershell"
+    } else {
+        $srcSettings.statusLine.shell = "powershell"
+    }
+}
+
 $settingsPath = Join-Path $Target "settings.json"
 $existing = [ordered]@{}
 if (Test-Path $settingsPath) {
@@ -270,7 +326,7 @@ if (Test-Path $settingsPath) {
         $raw = Get-Content $settingsPath -Raw | ConvertFrom-Json
         # Copy existing keys we do NOT own, so the user's theme/effort/etc survive.
         foreach ($p in $raw.PSObject.Properties) {
-            if ($p.Name -notin @("permissions", "hooks", "attribution")) {
+            if ($p.Name -notin $owned) {
                 $existing[$p.Name] = $p.Value
             }
         }
@@ -284,14 +340,28 @@ if (Test-Path $settingsPath) {
         [Console]::Error.WriteLine("    A copy is saved at $backup — merge anything you need back by hand.")
     }
 }
-foreach ($k in $central.Keys) { $existing[$k] = $central[$k] }
-# Lockstep with install.sh: default the output style on, never override a
-# style the user chose (DESIGN.md §37).
-if (-not $existing.Contains("outputStyle")) { $existing["outputStyle"] = "dotclaude" }
+# Skip null-valued central keys: install.sh copies an owned key only `if key in
+# src`, so a key absent from the source JSON must be absent here too rather than
+# written as an explicit "attribution": null.
+foreach ($k in $central.Keys) {
+    if ($null -ne $central[$k]) { $existing[$k] = $central[$k] }
+}
+# Seed AFTER the user's keys were copied in, so an existing value wins.
+$seededNow = @()
+$srcKeys = @($srcSettings.PSObject.Properties.Name)
+foreach ($k in $seeded) {
+    # Absent from the source is not the same as present-and-null: test the
+    # property list, since $srcSettings.$k returns $null for both.
+    if ($srcKeys -contains $k -and -not $existing.Contains($k)) {
+        $existing[$k] = $srcSettings.$k
+        $seededNow += $k
+    }
+}
 # BOM-less on purpose: PS 5.1's Set-Content -Encoding UTF8 writes a BOM, which
 # strict JSON parsers reject — settings.json is read by more than PowerShell.
 [System.IO.File]::WriteAllText($settingsPath, ($existing | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))
-Write-Host "  - $settingsPath merged (PowerShell base permissions + hooks; your other keys kept)"
+$seedNote = if ($seededNow.Count -gt 0) { " seeded $($seededNow -join ', ');" } else { "" }
+Write-Host "  - $settingsPath merged (PowerShell base permissions + hooks;$seedNote your other keys kept)"
 
 # --- Per-project template and the /init-project skill ------------------------
 $templateDest = Join-Path $Target "templates\project"

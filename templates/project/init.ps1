@@ -282,18 +282,30 @@ if (Test-Path $DocsSrc) {
 $gi = ".\.gitignore"
 $giTpl = Join-Path $TemplateDir ".gitignore.template"
 if (Test-Path $gi) {
+    # Appends are accumulated and written once through Write-Utf8NoBom rather
+    # than with Add-Content: on PS 5.1 Add-Content defaults to ANSI and CRLF,
+    # which mangles a non-ASCII pattern and mixes line endings in a checkout
+    # shared with WSL. -ccontains matches the .sh sibling's `grep -qxF`, which
+    # is case-SENSITIVE: -contains would treat a user's `thumbs.db` as already
+    # covering the template's `Thumbs.db` and silently skip it.
     $existing = @(Get-Content $gi)
-    if ($existing -notcontains "# --- dotclaude template ---") {
-        Add-Content -Path $gi -Value ""
-        Add-Content -Path $gi -Value "# --- dotclaude template ---"
+    $appended = @()
+    if ($existing -cnotcontains "# --- dotclaude template ---") {
+        $appended += ""
+        $appended += "# --- dotclaude template ---"
         $existing += "# --- dotclaude template ---"
     }
     foreach ($line in (Get-Content $giTpl)) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        if ($existing -notcontains $line) {
-            Add-Content -Path $gi -Value $line
+        if ($existing -cnotcontains $line) {
+            $appended += $line
             $existing += $line
         }
+    }
+    if ($appended.Count -gt 0) {
+        $current = [System.IO.File]::ReadAllText((Join-Path (Get-Location) ".gitignore"))
+        if ($current -and -not $current.EndsWith("`n")) { $current += "`n" }
+        Write-Utf8NoBom $gi ($current + (($appended -join "`n") + "`n"))
     }
 } else {
     Copy-Item $giTpl $gi
@@ -304,10 +316,16 @@ if (Test-Path $gi) {
 # so this is not dead code there — but $IsMacOS is $false on Windows PowerShell 5.1
 # (the variable does not exist), which is exactly the host that must fail here.
 if ($InstallXcode) {
-    # MCP_FORCE_DARWIN lets tests/mcp-merge-cases.py exercise the merge logic on a
-    # non-Mac runner: $IsMacOS is an engine variable, so unlike init.sh's `uname`
-    # it cannot be stubbed through PATH. Never set in normal use.
-    if (-not $IsMacOS -and -not $env:MCP_FORCE_DARWIN) {
+    # $IsMacOS is an engine variable, so unlike init.sh's `uname` it cannot be
+    # stubbed through PATH. Two escape hatches let tests/mcp-merge-cases.py
+    # exercise BOTH verdicts from either kind of runner, and neither is ever set
+    # in normal use: MCP_FORCE_DARWIN reaches the merge logic from a non-Mac,
+    # and MCP_FORCE_NON_DARWIN reaches this abort from a Mac — without the
+    # latter, the exit-5 case silently passed on Linux and inverted on macOS.
+    $isMac = [bool]$IsMacOS
+    if ($env:MCP_FORCE_DARWIN) { $isMac = $true }
+    if ($env:MCP_FORCE_NON_DARWIN) { $isMac = $false }
+    if (-not $isMac) {
         [Console]::Error.WriteLine("ERROR: --xcode is macOS-only (Apple's mcpbridge ships with Xcode).")
         exit 5
     }

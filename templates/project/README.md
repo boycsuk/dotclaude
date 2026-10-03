@@ -2,7 +2,7 @@
 
 The PER-PROJECT half of the dotclaude setup, deployed with `/init-project`. The
 reusable core (hooks, agents, skills, rules, output-styles) is NOT here — it is
-central in `~/.claude/` (installed from the dotclaude repo's `.claude/`)
+central in `~/.claude/` (installed from the dotclaude repo's `global/.claude/`)
 and applies to every project automatically. See DESIGN.md §23.
 
 ## What `/init-project` deploys (per-project only)
@@ -26,10 +26,10 @@ and applies to every project automatically. See DESIGN.md §23.
 
 ## The central core (in `~/.claude/`, shared by every project)
 
-Installed from the dotclaude repo (`.claude/`) via `install.sh`; updated
+Installed from the dotclaude repo (`global/.claude/`) via `install.sh`; updated
 for all projects at once with `git pull && ./install.sh`:
 
-- **hooks/** — verify-on-edit, guard-destructive, guard-push-main, guard-commit (denies attribution trailers, emoji and non-English commit messages; asks before `--amend`, commits on main, a commit without its CHANGELOG entry, and a `.sh`/`.ps1` pair committed half), guard-dependencies (asks before any command or manifest edit that adds a dependency, naming unpinned versions and the audit command), detect-secrets, sync-mirror-docs, guard-central-config (blocks editing the central `~/.claude/` config from inside a project), reinject-rules (re-primes the non-negotiable conventions after a context compaction), code-intel-context (tells the session and every code-reading subagent which code-intelligence tools the project has — the LSP plugin, the codebase-memory graph — and when to use each; silent where there are none), explore-graph-prompt (appends the same guidance to every Explore delegation, since Explore skips CLAUDE.md).
+- **hooks/** — verify-on-edit, guard-destructive, guard-push-main, guard-commit (denies attribution trailers, emoji and non-English commit messages; asks before `--amend`, commits on main, a commit without its CHANGELOG entry, and a `.sh`/`.ps1` pair committed half), guard-dependencies (asks before any command or manifest edit that adds a dependency, naming unpinned versions and the audit command), detect-secrets, sync-mirror-docs, guard-central-config (blocks editing the central `~/.claude/` config from inside a project), reinject-rules (re-primes the non-negotiable conventions after a context compaction), code-intel-context (tells the session and every code-reading subagent which code-intelligence tools the project has — the LSP plugin, the codebase-memory graph — and when to use each; silent where there are none), explore-graph-prompt (appends the same guidance to every Explore delegation, since Explore skips CLAUDE.md), changelog-reminder (says so when a turn ends with code changed and CHANGELOG.md untouched — advisory, never blocks).
 - **agents/** — researcher, code-reviewer, debugger, db-inspector.
 - **skills/** — verify, commit, changes, plan-feature, compound, resume-context, update-docs, audit, readme, implement-ui (design reference → tokens in `docs/ui.md` → section-by-section build with a screenshot-vs-reference loop; pairs with the playwright MCP deployed by `init.sh --ui`).
 - **rules/** — code-quality, security, workflow, ai-collaboration.

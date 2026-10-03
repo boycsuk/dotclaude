@@ -84,6 +84,30 @@ printf 'not json' > "$WORK/repo/templates/project/.claude/settings.json"
 expect_fail "a shipped JSON file stops parsing"
 
 setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" heredoc-back-into-subshell
+expect_fail "a hook folds its heredoc back inside \$( )"
+
+setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" add-permissions-key
+expect_fail "a new permissions key never reaches install.ps1"
+
+setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" stop-hook-starts-blocking
+expect_fail "the Stop hook matrix stops asserting it never blocks"
+
+setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" diverge-seeded-lists
+expect_fail "the seeded key lists diverge between the installers"
+
+setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" own-a-seeded-key
+expect_fail "a seeded preference is also declared owned"
+
+setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" add-unclassified-key
+expect_fail "a top-level settings key is neither owned nor seeded"
+
+setup
 python3 "$SRC/tests/inject.py" "$WORK/repo" readd-if-gate
 expect_fail "a hook entry regains a prefix 'if' gate"
 

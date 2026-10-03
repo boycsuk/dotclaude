@@ -228,6 +228,103 @@ def unwire_py_hook(repo):
         json.dump(settings, fh, indent=2)
 
 
+def heredoc_back_into_subshell(repo):
+    """Fold the python heredoc back inside a $( ), the DESIGN.md §32 defect.
+
+    Bash mishandles a heredoc opened within a command substitution when the
+    command is followed by an operator: it stops treating the quoted body as
+    opaque and lexes it for parens, quotes and backticks while hunting the
+    closing paren. The Python body contains all three, so the script becomes
+    unparseable -- and since both guards are PreToolUse hooks on Bash, that
+    blocks every Bash call in every project. Looks tidier, which is exactly
+    why someone will try it again.
+    """
+    path = os.path.join(repo, "global/.claude/hooks/guard-destructive.sh")
+    with open(path) as fh:
+        text = fh.read()
+    marker = 'CMD="$CMD" python3 > "$_GD_OUT" 2>/dev/null <<\'PY\''
+    if marker not in text:
+        raise SystemExit("inject: guard-destructive.sh no longer writes python output to a temp file")
+    text = text.replace(marker, 'CMD=$(CMD="$CMD" python3 <<\'PY\' 2>/dev/null || printf \'%s\' "$CMD"')
+    with open(path, "w") as fh:
+        fh.write(text.replace('if [ -s "$_GD_OUT" ]; then\n  CMD=$(cat "$_GD_OUT")\nfi', ')'))
+
+
+def add_permissions_key(repo):
+    """A new scalar key under permissions must reach Windows too.
+
+    install.ps1 rebuilds `permissions` key by key instead of copying the
+    object, so a key added to the source silently applies on Unix only.
+    """
+    path = os.path.join(repo, "global/.claude/settings.json")
+    with open(path) as fh:
+        settings = json.load(fh)
+    settings["permissions"]["blockReadsOutsideWorkingDirectories"] = True
+    with open(path, "w") as fh:
+        json.dump(settings, fh, indent=2)
+
+
+def diverge_seeded_lists(repo):
+    """The SEEDED list is hand-written in both installers; a key added to one
+    only is silently never seeded on the other platform."""
+    import re
+    path = os.path.join(repo, "install.ps1")
+    with open(path) as fh:
+        text = fh.read()
+    # Match the declaration rather than its current contents: pinning the list
+    # verbatim made this regression rot the moment a key was added, and a
+    # regression that cannot apply reports a false NOT CAUGHT.
+    m = re.search(r'\$seeded\s*=\s*@\((.*?)\)', text)
+    if not m:
+        raise SystemExit("inject: install.ps1 no longer declares $seeded as expected")
+    keys = re.findall(r'"([^"]+)"', m.group(1))
+    if len(keys) < 2:
+        raise SystemExit("inject: $seeded has too few keys to drop one")
+    dropped = '$seeded = @(%s)' % ", ".join('"%s"' % k for k in keys[:-1])
+    with open(path, "w") as fh:
+        fh.write(text[:m.start()] + dropped + text[m.end():])
+
+
+def own_a_seeded_key(repo):
+    """Owning a user-facing preference makes every re-install revert a /config
+    choice — the contract violation the three classes exist to prevent."""
+    path = os.path.join(repo, "install.sh")
+    with open(path) as fh:
+        text = fh.read()
+    old = 'OWNED = ("permissions", "hooks", "attribution")'
+    if old not in text:
+        raise SystemExit("inject: install.sh no longer declares OWNED as expected")
+    with open(path, "w") as fh:
+        fh.write(text.replace(old, 'OWNED = ("permissions", "hooks", "attribution", "outputStyle")'))
+
+
+def stop_hook_starts_blocking(repo):
+    """A Stop hook that emits `decision` resumes the turn on every fire.
+
+    On Stop, decision/exit 2/additionalContext all continue the conversation,
+    and the hook cannot tell a finished task from a half-done one. The matrix
+    asserts none of those appear; dropping the assertion must not pass green.
+    """
+    path = os.path.join(repo, "tests/changelog-reminder-cases.py")
+    with open(path) as fh:
+        text = fh.read()
+    if '"decision"' not in text:
+        raise SystemExit("inject: changelog-reminder matrix no longer asserts on `decision`")
+    # Strip every mention, the way a rewrite that stops caring would.
+    with open(path, "w") as fh:
+        fh.write(text.replace('"decision"', '"_dropped"'))
+
+
+def add_unclassified_key(repo):
+    """A top-level key in neither class never reaches ~/.claude at all."""
+    path = os.path.join(repo, "global/.claude/settings.json")
+    with open(path) as fh:
+        settings = json.load(fh)
+    settings["alwaysThinkingEnabled"] = True
+    with open(path, "w") as fh:
+        json.dump(settings, fh, indent=2)
+
+
 REGRESSIONS = {
     "obsolete-broad-match": obsolete_broad_match,
     "unwire-py-hook": unwire_py_hook,
@@ -239,6 +336,12 @@ REGRESSIONS = {
     "py-hook-gains-shell-twin": py_hook_gains_shell_twin,
     "obsolete-hits-shipped-hook": obsolete_hits_shipped_hook,
     "lsp-entry-without-binary": lsp_entry_without_binary,
+    "stop-hook-starts-blocking": stop_hook_starts_blocking,
+    "diverge-seeded-lists": diverge_seeded_lists,
+    "own-a-seeded-key": own_a_seeded_key,
+    "add-unclassified-key": add_unclassified_key,
+    "add-permissions-key": add_permissions_key,
+    "heredoc-back-into-subshell": heredoc_back_into_subshell,
     "drop-hook-matrix": drop_hook_matrix,
     "delete-central-agent": delete_central_agent,
     "break-frontmatter": break_frontmatter,

@@ -160,15 +160,15 @@ foreach ($seg in $segments) {
     # be judged, since it targets the checked-out branch.
     $pushArgs = Get-PushArgs $seg
     if ($null -eq $pushArgs) { continue }
-    $args = @($pushArgs)
+    $pushArgList = @($pushArgs)
 
     # --- Force, by flag, by --mirror, or by a leading '+' on a refspec -------
-    foreach ($a in $args) {
+    foreach ($a in $pushArgList) {
         if ($a -eq "-f" -or $a.StartsWith("--force")) { $verdict = "FORCE_FLAG"; break }
     }
     if ($verdict) { break }
-    if ($args -contains "--mirror") { $verdict = "MIRROR"; break }
-    foreach ($a in $args) {
+    if ($pushArgList -contains "--mirror") { $verdict = "MIRROR"; break }
+    foreach ($a in $pushArgList) {
         if (-not $a.StartsWith("-") -and $a.StartsWith("+")) { $verdict = "FORCE_REFSPEC"; break }
     }
     if ($verdict) { break }
@@ -176,8 +176,8 @@ foreach ($seg in $segments) {
     # --- Which branch would this land on? -----------------------------------
     $cleaned = @()
     $j = 0
-    while ($j -lt $args.Count) {
-        $a = $args[$j]
+    while ($j -lt $pushArgList.Count) {
+        $a = $pushArgList[$j]
         if ($a.StartsWith("-")) {
             $j += if ($VALUED_PUSH -contains $a) { 2 } else { 1 }
             continue
@@ -189,8 +189,8 @@ foreach ($seg in $segments) {
     # single-element slice would be iterated character by character.
     $refspecs = @(if ($cleaned.Count -gt 1) { $cleaned[1..($cleaned.Count - 1)] } else { @() })
 
-    $deleteMode = ($args -contains "--delete") -or ($args -contains "-d")
-    $allMode = ($args -contains "--all") -or ($args -contains "--branches")
+    $deleteMode = ($pushArgList -contains "--delete") -or ($pushArgList -contains "-d")
+    $allMode = ($pushArgList -contains "--all") -or ($pushArgList -contains "--branches")
 
     $targets = @()
     foreach ($spec in $refspecs) {
@@ -217,9 +217,32 @@ foreach ($seg in $segments) {
     foreach ($t in $targets) { if ($t -in @("HEAD", "@", "")) { $needsHead = $true } }
     if ($needsHead) {
         $targets = @($targets | Where-Object { $_ -notin @("HEAD", "@", "") })
+        # Bounded like the .sh sibling's subprocess.run(timeout=2). A bare `&`
+        # has no wall-clock bound: a hung git (network FS, lock contention)
+        # blows the 5s hook budget in settings.json, the harness cancels the
+        # hook, and "harness cancellation drops all output" (see
+        # verify-on-edit.ps1) — the verdict is discarded and the push to main
+        # proceeds UNJUDGED. Fail closed on timeout: no branch, no fallback.
         try {
-            $branch = & git symbolic-ref --quiet --short HEAD 2>$null
-            if ($LASTEXITCODE -eq 0 -and $branch) { $targets += $branch.Trim() }
+            $git = Get-Command git -ErrorAction SilentlyContinue
+            if ($git) {
+                $psi = New-Object System.Diagnostics.ProcessStartInfo
+                $psi.FileName = $git.Source
+                $psi.Arguments = "symbolic-ref --quiet --short HEAD"
+                $psi.RedirectStandardOutput = $true
+                $psi.RedirectStandardError = $true
+                $psi.UseShellExecute = $false
+                $p = [System.Diagnostics.Process]::Start($psi)
+                $outTask = $p.StandardOutput.ReadToEndAsync()
+                if ($p.WaitForExit(2000)) {
+                    if ($p.ExitCode -eq 0) {
+                        $branch = $outTask.Result.Trim()
+                        if ($branch) { $targets += $branch }
+                    }
+                } else {
+                    try { $p.Kill($true) } catch { try { $p.Kill() } catch { } }
+                }
+            }
         } catch { }
     }
 

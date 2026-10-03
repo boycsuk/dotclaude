@@ -92,12 +92,16 @@ def run(tmp, args, pwsh=None, omit=(), uname_out="Darwin", xcrun_fail=False,
     env["PATH"] = bindir + os.pathsep + tail
     if pwsh:
         # $IsMacOS is an engine variable, not a PATH lookup, so the uname stub
-        # cannot reach it — the script exposes this escape hatch for the matrix.
-        # A case simulating a non-Mac host simply leaves it unset.
+        # cannot reach it — the script exposes two escape hatches so either
+        # verdict is reachable from either runner. Leaving them unset was not
+        # enough: on a real Mac $IsMacOS is true, so the exit-5 "non-mac host"
+        # case inverted and passed only because CI happened to run on Linux.
+        env.pop("MCP_FORCE_DARWIN", None)
+        env.pop("MCP_FORCE_NON_DARWIN", None)
         if uname_out == "Darwin":
             env["MCP_FORCE_DARWIN"] = "1"
         else:
-            env.pop("MCP_FORCE_DARWIN", None)
+            env["MCP_FORCE_NON_DARWIN"] = "1"
         cmd = [pwsh, "-NoProfile", "-File", PS1] + args
     else:
         cmd = ["bash", SH] + args

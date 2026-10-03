@@ -9,10 +9,11 @@
 #
 # Also installs the per-project template and the /init-project skill.
 #
-# Re-running is safe: it overwrites the central artifacts (they are owned by
-# this repo) but never clobbers your personal ~/.claude/CLAUDE.md, and it
-# MERGES the base settings into ~/.claude/settings.json without dropping your
-# own keys (theme, effortLevel, etc.).
+# Re-running is safe: it refreshes the central artifacts it owns by removing
+# only the files it shipped last time (see the manifest below), so your own
+# skills/agents/rules in those directories survive. It never clobbers your
+# personal ~/.claude/CLAUDE.md, and it MERGES the base settings into
+# ~/.claude/settings.json without dropping your own keys (theme, etc.).
 
 set -euo pipefail
 
@@ -29,6 +30,26 @@ if ! command -v python3 >/dev/null 2>&1; then
   echo "    and this installer merges settings with it. Install python3 (e.g. apt install python3) and re-run." >&2
   exit 1
 fi
+
+# --- Syntax pre-flight: never install a hook that cannot be parsed -----------
+# A hook that fails to parse is not a degraded hook, it is a wall: the central
+# guards run on PreToolUse for Bash, so an unparseable one makes EVERY Bash call
+# in EVERY project fail. That state is also unrecoverable from inside Claude
+# Code — the broken hook blocks the `install.sh` that would replace it, and
+# guard-central-config blocks editing the installed copy (DESIGN.md §32). So
+# check before copying: abort with the source tree untouched and the previously
+# installed (working) hooks still in place.
+for hook in "$SCRIPT_DIR"/global/.claude/hooks/*.sh; do
+  [ -f "$hook" ] || continue
+  if ! bash -n "$hook" 2>/tmp/dotclaude-parse.$$; then
+    echo "  ! $(basename "$hook") does not parse — aborting before anything is copied." >&2
+    sed 's/^/    /' /tmp/dotclaude-parse.$$ >&2
+    rm -f /tmp/dotclaude-parse.$$
+    echo "    Your currently installed hooks are untouched. Fix the source and re-run." >&2
+    exit 1
+  fi
+  rm -f /tmp/dotclaude-parse.$$
+done
 
 mkdir -p "$TARGET/templates" "$TARGET/skills"
 
@@ -87,14 +108,24 @@ done
 echo "  - central hooks/agents/skills/rules/output-styles installed (.sh + .py hooks)"
 
 # --- Central settings.json: MERGE into the user's, do not clobber ------------
-# We own permissions/hooks/attribution; the user may have their own keys
-# (theme, effortLevel, model, ...). Merge ours in, keep theirs.
+# Three classes of key, and the distinction is the whole point:
+#   OWNED  - the deterministic guarantees (permissions/hooks/attribution).
+#            Overwritten on every install; a user edit to these is drift.
+#   SEEDED - defaults worth having on a fresh machine but which the user may
+#            legitimately change (outputStyle, /rewind snapshots). Written ONLY
+#            when absent, so `git pull && ./install.sh` never reverts a choice
+#            made with /config. Owning them would violate the installer's
+#            contract that it never touches user content (CLAUDE.md §3).
+#   everything else - the user's, preserved untouched.
+# install.ps1 rebuilds this object key by key, so both lists live there too;
+# check.py asserts all three sites agree.
 python3 - "$SCRIPT_DIR/global/.claude/settings.json" "$TARGET/settings.json" <<'PY'
 import json, os, sys
 src_path, dst_path = sys.argv[1], sys.argv[2]
 with open(src_path) as f:
     src = json.load(f)
-src.pop("_comment", None)
+for k in [k for k in src if k.startswith("_")]:
+    src.pop(k)
 dst = {}
 if os.path.exists(dst_path):
     try:
@@ -113,19 +144,21 @@ if os.path.exists(dst_path):
             "    A copy is saved at %s — merge anything you need back by hand.\n"
             % (dst_path, backup))
         dst = {}
-# Repo owns these top-level keys outright (central config). Everything else in
-# the user's settings is preserved untouched.
-for key in ("permissions", "hooks", "attribution"):
+OWNED = ("permissions", "hooks", "attribution")
+SEEDED = ("outputStyle", "fileCheckpointingEnabled", "statusLine")
+for key in OWNED:
     if key in src:
         dst[key] = src[key]
-# The output style carries the tone/language conventions at system-prompt
-# level (DESIGN.md §37). Default it on, but never override a style the user
-# chose — including one they set to something else on purpose.
-dst.setdefault("outputStyle", "dotclaude")
+# After an unparseable settings.json dst is empty, so everything seeds — the
+# user's old values are unrecoverable anyway and the backup holds them.
+seeded = [k for k in SEEDED if k in src and k not in dst]
+for key in seeded:
+    dst[key] = src[key]
 with open(dst_path, "w") as f:
     json.dump(dst, f, indent=2)
     f.write("\n")
-print("  - ~/.claude/settings.json merged (base permissions + hooks; your other keys kept)")
+note = " seeded %s;" % ", ".join(seeded) if seeded else ""
+print("  - ~/.claude/settings.json merged (base permissions + hooks;%s your other keys kept)" % note)
 PY
 
 # --- Per-project template and the /init-project skill ------------------------

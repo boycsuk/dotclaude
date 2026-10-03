@@ -24,7 +24,18 @@ CMD=$(printf '%s' "$INPUT" | python3 -c "import sys, json; d=json.load(sys.stdin
 # pipe, no command substitution, no chaining, no interpreter anywhere on it.
 # Anything else keeps its body in the scanned text and is matched as before —
 # unknown shapes fail CLOSED.
-CMD=$(CMD="$CMD" python3 <<'PY' 2>/dev/null || printf '%s' "$CMD"
+# The heredoc is NOT opened inside $( ): bash's parser mishandles a heredoc
+# within a command substitution when the command is followed by an operator
+# (pipe, ||, &&). It stops treating the body as opaque data and lexes it for
+# parens, quotes and backticks while hunting the closing paren, so a regex or
+# comment in the Python body can make the whole script unparseable -- which,
+# for a PreToolUse hook on Bash, blocks every Bash call in every project.
+# Known bash bug, 4.x onward: https://lists.gnu.org/archive/html/bug-bash/2010-07/msg00043.html
+# Writing to a temp file and reading it back keeps the heredoc at top level,
+# where a quoted delimiter really is opaque. Do not fold this back into $( ).
+_GD_OUT="$(mktemp -t guard-destructive.XXXXXX)"
+trap 'rm -f "$_GD_OUT"' EXIT
+CMD="$CMD" python3 > "$_GD_OUT" 2>/dev/null <<'PY'
 import os, re, sys
 
 cmd = os.environ["CMD"]
@@ -40,7 +51,7 @@ WRITER = re.compile(r"""
       |cat\s*>{1,2}\s*[^\s|;&<>()]+\s*)
     \s*<<-?\s*["']?[A-Za-z_][A-Za-z0-9_]*["']?\s*$
 """, re.X)
-UNSAFE = re.compile(r"[|`]|\$\(|;|&&|\|\||\bsh\b|\bbash\b|\bzsh\b|\bssh\b|\bdocker\b"
+UNSAFE = re.compile(r"[|\x60]|\$\x28|;|&&|\|\||\bsh\b|\bbash\b|\bzsh\b|\bssh\b|\bdocker\b"
                     r"|\bkubectl\b|\beval\b|\bpython[0-9.]*\b|\bnode\b|\bperl\b|\bruby\b")
 
 out, i = [], 0
@@ -66,7 +77,11 @@ while i < len(lines):
     i = j + 1
 sys.stdout.write("\n".join(out))
 PY
-)
+# Fall back to the raw command if python failed or wrote nothing: an empty CMD
+# would silently disable every rule below, which fails OPEN on a safety hook.
+if [ -s "$_GD_OUT" ]; then
+  CMD=$(cat "$_GD_OUT")
+fi
 
 # Match recursive rm only on truly dangerous paths:
 #   /, /*, /etc..., /home..., /usr..., /var..., /opt..., /root, /boot

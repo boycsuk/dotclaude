@@ -4,6 +4,11 @@
 # Plan files generated during plan mode
 .claude/plans/
 
+# Subagent memory, local scope (`memory: local` in an agent's frontmatter).
+# The `project` scope writes to .claude/agent-memory/ and IS meant to be
+# committed — that is the difference between the two scopes.
+.claude/agent-memory-local/
+
 # Editor / OS noise
 .DS_Store
 Thumbs.db

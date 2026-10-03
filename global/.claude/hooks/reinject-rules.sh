@@ -22,6 +22,7 @@ POST-COMPACTION REMINDER — non-negotiable conventions still in force:
 - Use AskUserQuestion for any decision point instead of asking in prose; batch several pending decisions into one call.
 - Explain plainly: lead with the outcome, short sentences, keep every fact/name/path exactly; no filler.
 - Challenge assumptions; never agree just to be agreeable.
+- A subagent's findings are hypotheses: verify a claim at the source before it becomes code, config, or an answer.
 EOF
 
 exit 0

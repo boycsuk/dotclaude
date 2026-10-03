@@ -160,6 +160,69 @@ def _():
                  f"Bash({verb}) has no entry in install.ps1's $verbMap — it would "
                  f"be silently dropped on Windows")
 
+    # install.ps1 rebuilds `permissions` key by key rather than copying the
+    # object, so a NEW scalar key in the source reaches Unix and silently
+    # vanishes on Windows. defaultMode was added that way and was caught here.
+    for key in settings["permissions"]:
+        if key in ("allow", "ask", "deny"):
+            continue                      # handled by Convert-RuleList above
+        if key not in ps1:
+            fail("install.ps1 derives from settings.json",
+                 f"permissions.{key} is in settings.json but never read by "
+                 f"install.ps1 — it would be dropped on Windows")
+
+
+# --- 4b. OWNED/SEEDED key classes agree across all three sites ---------------
+# The same two lists are written by hand in install.sh and install.ps1, and a
+# top-level key in settings.json that is in neither list never reaches
+# ~/.claude at all. Nothing caught that: the `permissions` scalar-key check
+# above covers only keys NESTED under permissions.
+@check("settings key classes")
+def _():
+    NAME = "settings key classes"
+    sh, ps1 = read("install.sh"), read("install.ps1")
+
+    def lists(text, pat):
+        m = re.search(pat, text)
+        return set(re.findall(r'"([^"]+)"', m.group(1))) if m else None
+
+    sh_owned = lists(sh, r"OWNED\s*=\s*\((.*?)\)")
+    sh_seeded = lists(sh, r"SEEDED\s*=\s*\((.*?)\)")
+    ps_owned = lists(ps1, r"\$owned\s*=\s*@\((.*?)\)")
+    ps_seeded = lists(ps1, r"\$seeded\s*=\s*@\((.*?)\)")
+    for label, got in (("OWNED", sh_owned), ("SEEDED", sh_seeded),
+                       ("$owned", ps_owned), ("$seeded", ps_seeded)):
+        if got is None:
+            fail(NAME, f"could not find the {label} list — fix this check "
+                       f"before trusting a pass")
+            return
+
+    if sh_owned != ps_owned:
+        fail(NAME, f"owned keys differ: install.sh {sorted(sh_owned)} vs "
+                   f"install.ps1 {sorted(ps_owned)}")
+    if sh_seeded != ps_seeded:
+        fail(NAME, f"seeded keys differ: install.sh {sorted(sh_seeded)} vs "
+                   f"install.ps1 {sorted(ps_seeded)}")
+    if sh_owned & sh_seeded:
+        fail(NAME, f"{sorted(sh_owned & sh_seeded)} is both owned and seeded — "
+                   f"owned overwrites every install, seeded must not")
+
+    # Every non-comment top-level key in the source must be classified, or the
+    # installers simply drop it.
+    settings = json.loads(read("global/.claude/settings.json"))
+    for key in settings:
+        if key.startswith("_"):
+            continue
+        if key not in sh_owned and key not in sh_seeded:
+            fail(NAME, f"top-level key '{key}' in settings.json is neither "
+                       f"owned nor seeded — it never reaches ~/.claude")
+
+    # Seeded keys are the ones a re-install must not revert.
+    for key in sh_seeded:
+        if key not in settings:
+            fail(NAME, f"'{key}' is listed as seeded but is absent from "
+                       f"settings.json — nothing would be seeded")
+
 
 # --- 5. Doc inventories match the artifacts on disk --------------------------
 @check("doc inventories")
@@ -170,6 +233,13 @@ def _():
                     for p in glob.glob(os.path.join(REPO, "global/.claude/agents/*.md")))
     skills = sorted(os.path.basename(os.path.dirname(p))
                     for p in glob.glob(os.path.join(REPO, "global/.claude/skills/*/SKILL.md")))
+
+    # `statusline` lives in hooks/ for the .sh/.ps1 install machinery but is NOT
+    # a hook — it is the statusLine command, wired through its own settings key
+    # and firing on a different lifecycle — so the hook inventories do not
+    # describe it.
+    not_hooks = {"statusline"}
+    hooks = [h for h in hooks if h not in not_hooks]
 
     inventories = {
         "CLAUDE.md": read("CLAUDE.md"),
@@ -230,21 +300,65 @@ def _():
 
 
 # --- 8. Every safety hook that has a case matrix keeps it ---------------------
-@check("safety hooks have case matrices")
+@check("hooks have case matrices")
 def _():
     # Each of these hooks shipped a real defect that reading them did not
     # reveal (DESIGN.md §18, §26, §27). Their matrices are the regression net;
     # a hook silently losing its matrix would be invisible in a passing run.
+    #
+    # The four advisory hooks share ONE matrix: their failure mode is silence,
+    # not a wrong verdict, so nothing else would notice them breaking — which
+    # is how three of them sat on a dead delivery channel for months (§17).
+    advisory = "tests/advisory-hooks-cases.py"
     for hook, matrix in (("guard-push-main", "tests/guard-push-main-cases.py"),
                          ("guard-destructive", "tests/guard-destructive-cases.py"),
                          ("detect-secrets", "tests/detect-secrets-cases.py"),
                          ("guard-central-config", "tests/guard-central-config-cases.py"),
                          ("verify-on-edit", "tests/verify-on-edit-cases.py"),
                          ("guard-commit", "tests/guard-commit-cases.py"),
-                         ("guard-dependencies", "tests/guard-dependencies-cases.py")):
+                         ("guard-dependencies", "tests/guard-dependencies-cases.py"),
+                         ("reinject-rules", advisory),
+                         ("sync-mirror-docs", advisory),
+                         ("changelog-reminder", "tests/changelog-reminder-cases.py"),
+                         # Not a hook, but the same lockstep .sh/.ps1 pair, and
+                         # its failure mode is worse than silence: whatever it
+                         # emits lands in the status bar, so a traceback becomes
+                         # permanent UI noise.
+                         ("statusline", "tests/statusline-cases.py")):
         if not os.path.exists(os.path.join(REPO, matrix)):
-            fail("safety hooks have case matrices",
+            fail("hooks have case matrices",
                  f"{hook} has no case matrix at {matrix}")
+
+    # changelog-reminder fires on Stop, where `decision: "block"`, exit 2 AND
+    # hookSpecificOutput.additionalContext all CONTINUE the turn. Its matrix is
+    # only a net if it asserts the hook emits none of them — "it printed
+    # something" would pass on a version that silently resumes every turn.
+    stop_matrix = "tests/changelog-reminder-cases.py"
+    if os.path.exists(os.path.join(REPO, stop_matrix)):
+        # Strip docstrings and comments first: the field names appear in this
+        # matrix's own prose explaining why they must not be emitted, so a
+        # whole-file substring test passes on a matrix that stopped asserting
+        # anything — the false pass the $verbMap block-parse already avoids.
+        body = read(stop_matrix)
+        body = re.sub(r'""".*?"""', "", body, flags=re.S)
+        body = re.sub(r"^\s*#.*$", "", body, flags=re.M)
+        for needle in ("systemMessage", "decision", "hookSpecificOutput"):
+            if f'"{needle}"' not in body:
+                fail("hooks have case matrices",
+                     f'{stop_matrix} has no executable assertion on "{needle}" — '
+                     f"it cannot tell an advisory Stop hook from one that "
+                     f"resumes the turn")
+
+    # The advisory matrix is only a net if it asserts the DELIVERY channel.
+    # Asserting "something was printed" would pass on the stderr form that was
+    # inert, so pin the two strings that make the assertion real.
+    if os.path.exists(os.path.join(REPO, advisory)):
+        body = read(advisory)
+        for needle in ("additionalContext", "hookEventName"):
+            if needle not in body:
+                fail("hooks have case matrices",
+                     f"{advisory} does not assert {needle} — it would pass on "
+                     f"the dead stderr channel (DESIGN.md §17)")
 
 
 # --- 9. The guard-push-main matrix still covers the known bypasses -----------
@@ -538,6 +652,69 @@ def _():
         for field in ("languages", "binary", "install"):
             if not entry.get(field):
                 fail("LSP plugin catalog", f"{name} has no {field!r}")
+# --- 12. Every shipped script actually parses ---------------------------------
+@check("script syntax")
+def _():
+    # Every other check reads these files as TEXT: it globs names, greps for
+    # markers, compares inventories. None of them would notice a script that
+    # cannot be parsed at all. That is not hypothetical: a literal backtick
+    # inside a Python heredoc opened inside $( ) made guard-destructive.sh and
+    # guard-push-main.sh unparseable (bash scans the heredoc body for backtick
+    # substitutions while hunting the closing paren, and quoting the delimiter
+    # does not stop it). Both are PreToolUse hooks on Bash, so EVERY Bash call
+    # in EVERY project failed — while this validator reported a clean pass.
+    #
+    # The case matrices would have caught it (they pipe real JSON through the
+    # real script), but they need a working shell to run, and the hook had
+    # already broken the shell. So the cheap syntax gate belongs here, in the
+    # thing CLAUDE.md says to run before every commit.
+    #
+    # pwsh is optional (absent on most Unix dev machines); skip rather than
+    # fail, since CLAUDE.md is explicit that a .ps1 parse pass proves nothing
+    # about whether it RUNS — the matrices remain the behavioural net.
+    import shutil
+    import subprocess
+
+    roots = ["global/.claude/hooks", "templates/project", "tests"]
+    scripts = sorted(walk_files(roots, ".sh")) + [
+        os.path.join(REPO, n) for n in ("install.sh",)
+        if os.path.exists(os.path.join(REPO, n))]
+    for path in scripts:
+        rel = os.path.relpath(path, REPO)
+        try:
+            proc = subprocess.run(["bash", "-n", path], capture_output=True,
+                                  text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError) as exc:
+            fail("script syntax", f"could not parse-check {rel}: {exc}")
+            continue
+        if proc.returncode != 0:
+            detail = (proc.stderr or "").strip().splitlines()
+            fail("script syntax",
+                 f"{rel} does not parse: {detail[0] if detail else 'bash -n failed'}")
+
+    if not shutil.which("pwsh"):
+        return
+    ps_scripts = sorted(walk_files(roots, ".ps1")) + [
+        os.path.join(REPO, n) for n in ("install.ps1",)
+        if os.path.exists(os.path.join(REPO, n))]
+    for path in ps_scripts:
+        rel = os.path.relpath(path, REPO)
+        # Parse without executing: the AST parser reports syntax errors only.
+        probe = ("$ErrorActionPreference='Stop';"
+                 "$t=$null;$e=$null;"
+                 "[System.Management.Automation.Language.Parser]::ParseFile("
+                 f"'{path}',[ref]$t,[ref]$e)|Out-Null;"
+                 "if($e.Count){$e[0].Message;exit 1};exit 0")
+        try:
+            proc = subprocess.run(["pwsh", "-NoProfile", "-Command", probe],
+                                  capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError) as exc:
+            fail("script syntax", f"could not parse-check {rel}: {exc}")
+            continue
+        if proc.returncode != 0:
+            detail = (proc.stdout or proc.stderr or "").strip().splitlines()
+            fail("script syntax",
+                 f"{rel} does not parse: {detail[0] if detail else 'parse failed'}")
 
 
 def main():
