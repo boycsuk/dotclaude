@@ -1,5 +1,5 @@
 {
-  "_comment": "Artifacts dotclaude once deployed into projects and no longer ships. scripts/prune-obsolete.py (run by init.sh/init.ps1 on every deploy) removes the matching hook entries from the project's .claude/settings*.json; gitHooks blocks (the tool's own start/end markers) are cut out of .git/hooks and an emptied hook is deleted; mcpServers and files are only REPORTED, because deleting a server or a directory the user may still rely on is their call. 'match' is a substring of the hook command; each hook has a / and a \\ entry so both the POSIX form and the PowerShell & \"<abs>\\name.ps1\" form are caught. check.py fails if an entry names a hook or MCP fragment dotclaude still ships, or matches a live central hook command.",
+  "_comment": "Artifacts dotclaude once deployed into projects and no longer ships. scripts/prune-obsolete.py (run by init.sh/init.ps1 on every deploy) removes the matching hook entries from the project's .claude/settings*.json; gitHooks blocks (the tool's own start/end markers) are cut out of .git/hooks and an emptied hook is deleted; permissions lists exact permissions.allow rules that are removed (never from deny); mcpServers and files are only REPORTED, because deleting a server or a directory the user may still rely on is their call. 'match' is a substring of the hook command; each hook has a / and a \\ entry so both the POSIX form and the PowerShell & \"<abs>\\name.ps1\" form are caught. check.py fails if an entry names a hook or MCP fragment dotclaude still ships, or matches a live central hook command.",
   "hooks": [
     {"match": "hooks/prefer-graphify.", "reason": "Graphify was removed from dotclaude"},
     {"match": "hooks\\prefer-graphify.", "reason": "Graphify was removed from dotclaude"},
@@ -14,6 +14,9 @@
   "mcpServers": [
     {"name": "serena", "reason": "Serena was removed from dotclaude; the LSP plugin covers symbol navigation"},
     {"name": "graphify", "reason": "Graphify was removed from dotclaude; --codebase-memory is the optional code graph"}
+  ],
+  "permissions": [
+    {"rule": "mcp__playwright__*", "reason": "the wildcard also allowed browser_evaluate, browser_run_code_unsafe and browser_file_upload; --ui now grants the safe tools by name"}
   ],
   "files": [
     {"path": ".serena", "reason": "Serena's per-project cache"},

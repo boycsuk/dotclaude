@@ -693,6 +693,16 @@ def _():
             if match in command:
                 fail("obsolete manifest",
                      f"match {match!r} also matches the live central hook command {command!r}")
+    granted = set()
+    for frag in glob.glob(os.path.join(REPO, "templates/project/permissions/*.json")):
+        with open(frag) as fh:
+            granted |= set(json.load(fh).get("allow", []))
+    for entry in manifest.get("permissions", []):
+        if not entry.get("rule") or not entry.get("reason"):
+            fail("obsolete manifest", f"permission entry {entry} needs a non-empty rule and reason")
+        elif entry["rule"] in granted:
+            fail("obsolete manifest",
+                 f"permission {entry['rule']!r} is listed as obsolete but a permissions/ fragment still grants it")
     for entry in manifest.get("mcpServers", []):
         name = entry.get("name", "")
         if os.path.exists(os.path.join(REPO, "templates/project/mcp", f"{name}.json")):

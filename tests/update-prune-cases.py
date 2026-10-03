@@ -60,6 +60,11 @@ def read_json(path):
         return json.load(fh)
 
 
+def read_json_sig(path):
+    with open(path, encoding="utf-8-sig") as fh:
+        return json.load(fh)
+
+
 def clean_path():
     """PATH without any serena-hooks binary, so 'is Serena still installed?'
     depends on the case, not on the machine running the matrix."""
@@ -117,6 +122,50 @@ def case_prunes_settings_local(project, pwsh):
         return "personal opt-out was lost"
     if all_commands(data) != [USER_HOOK["command"]]:
         return f"settings.local.json not pruned: {all_commands(data)}"
+    return None
+
+
+def case_obsolete_allow_rule_removed(project, pwsh):
+    # The playwright wildcard granted tools that must stay on ask; a deploy
+    # removes it from allow, and never touches a deny the user wrote.
+    path = os.path.join(project, ".claude/settings.json")
+    write(path, {"permissions": {"allow": ["mcp__playwright__*", "Bash(make:*)"],
+                                 "deny": ["mcp__playwright__*"]}})
+    if run_init(project, pwsh).returncode != 0:
+        return "init exited non-zero"
+    perms = read_json(path)["permissions"]
+    if perms["allow"] != ["Bash(make:*)"]:
+        return f"allow not pruned as expected: {perms['allow']}"
+    if perms["deny"] != ["mcp__playwright__*"]:
+        return f"a user deny rule was touched: {perms['deny']}"
+    return None
+
+
+def case_bom_settings_are_pruned(project, pwsh):
+    # utf-8-sig: settings saved by Notepad or PowerShell 5.1 start with a BOM.
+    path = os.path.join(project, ".claude/settings.json")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8-sig") as fh:
+        json.dump({"hooks": LEGACY_SH}, fh)
+    if run_init(project, pwsh).returncode != 0:
+        return "init exited non-zero"
+    return None if all_commands(read_json_sig(path)) == [USER_HOOK["command"]] else "a BOM file was not pruned"
+
+
+def case_remove_mcp_is_exact(project, pwsh):
+    # Removing the `serena` server must not strip rules of a server whose name
+    # merely starts the same way.
+    write(os.path.join(project, ".mcp.json"), {"mcpServers": {"serena": {}, "serenade": {}}})
+    path = os.path.join(project, ".claude/settings.json")
+    write(path, {"permissions": {"allow": ["mcp__serena__find", "mcp__serenade__run"]}})
+    env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=clean_path())
+    cmd = ([pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]) + ["--update", "--remove-obsolete-mcp"]
+    if subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True).returncode != 0:
+        return "init exited non-zero"
+    allow = read_json(path)["permissions"]["allow"]
+    servers = read_json(os.path.join(project, ".mcp.json"))["mcpServers"]
+    if allow != ["mcp__serenade__run"] or set(servers) != {"serenade"}:
+        return f"removal was not exact: allow={allow}, servers={sorted(servers)}"
     return None
 
 
@@ -260,6 +309,9 @@ CASES = [
     ("PowerShell-form obsolete hooks pruned", case_prunes_powershell_form),
     ("settings.local.json pruned, opt-outs kept", case_prunes_settings_local),
     ("second run is a no-op", case_idempotent),
+    ("an obsolete allow rule is removed, a deny kept", case_obsolete_allow_rule_removed),
+    ("a BOM-prefixed settings file is pruned too", case_bom_settings_are_pruned),
+    ("--remove-obsolete-mcp removes exactly the named server", case_remove_mcp_is_exact),
     ("clean stub is byte-identical after deploy", case_clean_stub_untouched),
     ("unparseable settings: warn, never touch", case_unparseable_is_left_alone),
     ("servers and directories are reported, not removed", case_servers_and_files_only_reported),

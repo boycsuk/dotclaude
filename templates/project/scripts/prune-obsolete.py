@@ -127,6 +127,30 @@ def prune_settings_file(path, matches):
         print(f"  - pruned obsolete hook from {path}: {command}", file=sys.stderr)
 
 
+def prune_allow_rules(path, rules):
+    """Drop exact `rules` from a settings file's permissions.allow (never from deny)."""
+    try:
+        settings = load(path)
+    except (OSError, ValueError):
+        return
+    perms = settings.get("permissions") if isinstance(settings, dict) else None
+    allow = perms.get("allow") if isinstance(perms, dict) else None
+    if not isinstance(allow, list):
+        return
+    kept = [r for r in allow if r not in rules]
+    if len(kept) == len(allow):
+        return
+    perms["allow"] = kept
+    try:
+        _write(path, settings)
+    except OSError as exc:
+        print(f"  ! could not write {path} ({exc}); remove {sorted(set(allow) - set(kept))} by hand",
+              file=sys.stderr)
+        return
+    for rule in sorted(set(allow) - set(kept)):
+        print(f"  - removed obsolete permission from {path}: {rule}", file=sys.stderr)
+
+
 def _write(path, data):
     # Never through a symlink: it can point outside the project, and
     # --recursive deploys into every project under a directory.
@@ -265,9 +289,12 @@ def main():
         return 0
 
     matches = hook_matches(manifest)
+    rules = [p["rule"] for p in manifest.get("permissions", []) if isinstance(p, dict) and p.get("rule")]
     prune_git_hooks(project, manifest.get("gitHooks", []))
     for name in SETTINGS_FILES:
         prune_settings_file(os.path.join(project, ".claude", name), matches)
+        if rules:
+            prune_allow_rules(os.path.join(project, ".claude", name), rules)
 
     names = [s["name"] for s in manifest.get("mcpServers", [])]
     if "--remove-mcp" in sys.argv[1:]:

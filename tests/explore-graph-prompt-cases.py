@@ -140,8 +140,37 @@ def check_graph_added_with_claude_mcp_add(tmp, pwsh):
     return None if "trace_path" in context(out) else f"local-scope server not detected: {out}"
 
 
+def check_user_scope_plugin(tmp, pwsh):
+    """An LSP plugin enabled in the user's own ~/.claude/settings.json counts."""
+    proj = project(tmp)
+    user = os.path.join(os.environ["HOME"], ".claude")
+    os.makedirs(user, exist_ok=True)
+    with open(os.path.join(user, "settings.json"), "w") as fh:
+        json.dump({"enabledPlugins": {"rust-analyzer-lsp@claude-plugins-official": True}}, fh)
+    try:
+        code, out, _ = pyhook.run("code-intel-context", {"hook_event_name": "SessionStart"}, cwd=proj, pwsh=pwsh)
+    finally:
+        os.remove(os.path.join(user, "settings.json"))
+    return None if "rust-analyzer-lsp" in context(out) else f"user-scope plugin not detected: {out}"
+
+
+def check_user_scope_server(tmp, pwsh):
+    """A server added with `claude mcp add --scope user` sits at the top of ~/.claude.json."""
+    proj = project(tmp)
+    state = os.path.join(os.environ["HOME"], ".claude.json")
+    with open(state, "w") as fh:
+        json.dump({"mcpServers": {"codebase-memory-mcp": {"command": "x"}}}, fh)
+    try:
+        code, out, _ = pyhook.run("code-intel-context", {"hook_event_name": "SessionStart"}, cwd=proj, pwsh=pwsh)
+    finally:
+        os.remove(state)
+    return None if "trace_path" in context(out) else f"user-scope server not detected: {out}"
+
+
 CASES = [
     ("graph server added with claude mcp add is detected", check_graph_added_with_claude_mcp_add),
+    ("a user-scope LSP plugin is detected", check_user_scope_plugin),
+    ("a user-scope graph server is detected", check_user_scope_server),
     ("Explore prompt gains graph guidance, other keys intact", check_rewrite_with_graph),
     ("LSP-only project: LSP guidance, no graph tools", check_rewrite_lsp_only),
     ("no tools: silent", check_silent_without_tools),
@@ -162,6 +191,9 @@ def main():
     # A HOME without settings, so the user's own enabledPlugins cannot leak in.
     home = tempfile.mkdtemp(prefix="codeintel-home-")
     os.environ["HOME"] = home
+    # The developer's own CLAUDE_CONFIG_DIR would point the hooks at real
+    # settings and decide verdicts by machine.
+    os.environ.pop("CLAUDE_CONFIG_DIR", None)
     try:
         for label, pwsh in pyhook.runners(args.pwsh):
             for name, fn in CASES:

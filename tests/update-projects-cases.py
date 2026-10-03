@@ -69,6 +69,7 @@ def build_tree(root):
     write(os.path.join(root, "plain", ".claude/settings.json"), "{}")                     # no dotclaude marker
     shutil.copytree(TEMPLATE_DIR, os.path.join(root, "clone", "templates", "project"))    # the template itself
     write(os.path.join(root, "deep/1/2/3/4/proj/.claude/settings.json"), stub_with())      # beyond depth 4
+    write(os.path.join(root, ".hidden/hiddenproj/.claude/settings.json"), stub_with())     # hidden dirs are not walked
     return a, b
 
 
@@ -122,6 +123,8 @@ def check(tmp, pwsh):
                       ("plain", False), ("proj", False), ("templates/project", False)):
         if (f"\n  {rel}\n" in listed or f"\n  a/{rel}\n" in listed or f"/{rel}\n" in listed) != want:
             problems.append(f"--dry-run {'missed' if want else 'listed'} {rel!r}")
+    if "hiddenproj" in listed:
+        problems.append("the walk descended into a hidden directory")
     if "\n  .\n" not in listed:
         problems.append("the root itself (a deployed folder) was not listed")
     if "--update --ui" not in listed:
@@ -144,7 +147,9 @@ def check(tmp, pwsh):
     if "hooks" in settings_a:
         problems.append(f"project a: obsolete hooks survived: {settings_a['hooks']}")
     allow = settings_a.get("permissions", {}).get("allow", [])
-    if allow != ["mcp__playwright__*", "Bash(make:*)"]:
+    with open(os.path.join(TEMPLATE_DIR, "permissions", "playwright.json")) as fh:
+        named = json.load(fh)["allow"]
+    if allow != ["Bash(make:*)"] + named:
         problems.append(f"project a: permissions wrong after removal: {allow}")
     local_a = load(os.path.join(a, ".claude/settings.local.json"))
     if local_a != {"enabledMcpjsonServers": ["playwright"], "allowPushToMain": True}:
@@ -166,6 +171,33 @@ def check(tmp, pwsh):
     return problems
 
 
+def check_failure_exit(tmp, pwsh):
+    """A project whose deploy fails must make the whole run exit 10 and say so.
+
+    `return 1 if failed` once reported a failed project with the code the
+    skill reads as "template missing"; a run that always returned 0 also passed.
+    """
+    root = os.path.join(tmp, "root")
+    write(os.path.join(root, "p", ".claude/settings.json"), stub_with())
+    write(os.path.join(root, "p", ".mcp.json"), {"mcpServers": {"playwright": OLD_PLAYWRIGHT}})
+    bindir = os.path.join(tmp, "bin")
+    os.makedirs(bindir)
+    for tool in ("bash", "sh", "python3", "git", "cp", "mkdir", "grep", "cmp", "dirname", "basename",
+                 "cat", "sed", "chmod", "env", "printf", "tr", "tail", "head", "sort", "mktemp", "rm",
+                 "uname", "ls"):
+        src = shutil.which(tool)
+        if src:
+            os.symlink(src, os.path.join(bindir, tool))
+    env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=bindir)    # no npx: --ui exits 7
+    cmd = ([pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]) + ["--update", "--recursive", root, "--yes"]
+    proc = subprocess.run(cmd, cwd=root, env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    if proc.returncode != 10:
+        return [f"a failed project made the run exit {proc.returncode}, want 10: {proc.stdout[-300:]!r}"]
+    if "FAILED" not in proc.stdout or "1 failed" not in proc.stdout:
+        return ["the failed project was not reported"]
+    return []
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pwsh", help="path to pwsh, to run init.ps1 too")
@@ -175,6 +207,11 @@ def main():
         tmp = tempfile.mkdtemp(prefix="update-projects-")
         try:
             problems = check(tmp, pwsh)
+            failure_tmp = tempfile.mkdtemp(prefix="update-projects-fail-")
+            try:
+                problems += check_failure_exit(failure_tmp, pwsh)
+            finally:
+                shutil.rmtree(failure_tmp, ignore_errors=True)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         bad += len(problems)

@@ -454,6 +454,32 @@ def case_broken_hook_aborts_before_copying(home, pwsh):
     return None
 
 
+def case_installed_template_deploys(home, pwsh):
+    # Every deployer matrix points TEMPLATE_DIR at the repo, so none of them
+    # ran the template from where install puts it, the way users do.
+    if run_install(home, pwsh) != 0:
+        return "installer exited non-zero"
+    for rel in ("skills/init-project/SKILL.md", "skills/init-project/scripts/detect-drift.py",
+                "templates/project/init.sh" if not pwsh else "templates/project/init.ps1"):
+        if not os.path.exists(claude(home, rel)):
+            return f"{rel} was not installed"
+    project = tempfile.mkdtemp(prefix="install-project-")
+    try:
+        env = {k: v for k, v in os.environ.items() if k != "TEMPLATE_DIR"}
+        env["HOME"] = home
+        if pwsh:
+            cmd = [pwsh, "-NoProfile", "-File", claude(home, "templates", "project", "init.ps1")]
+        else:
+            cmd = ["bash", claude(home, "templates", "project", "init.sh")]
+        proc = subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True,
+                              stdin=subprocess.DEVNULL)
+        if proc.returncode != 0 or not os.path.exists(os.path.join(project, "CLAUDE.md")):
+            return f"the installed template did not deploy (exit {proc.returncode}): {proc.stderr[-200:]}"
+    finally:
+        shutil.rmtree(project, ignore_errors=True)
+    return None
+
+
 def case_output_style_defaults_on(home, pwsh):
     if run_install(home, pwsh) != 0:
         return "installer exited non-zero"
@@ -483,6 +509,7 @@ CASES = [
     ("replaced owned keys are backed up and reported", case_replaced_owned_keys_are_backed_up),
     ("the manifest cannot delete outside ~/.claude", case_manifest_cannot_escape_claude_dir),
     ("a broken hook aborts before anything is copied", case_broken_hook_aborts_before_copying),
+    ("the installed template deploys a project", case_installed_template_deploys),
     ("shell guards and rules cover both Bash and PowerShell", case_shell_guards_cover_both_tools),
     ("the status line runs under any shell, a broken seed is repaired", case_statusline_runs_under_any_shell),
     ("fresh install: settings, hooks, manifest", case_fresh_install),

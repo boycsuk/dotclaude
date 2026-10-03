@@ -124,6 +124,13 @@ STATE_CASES = [
     ("git commit -s -m 'feat: x'", ALLOW, {"local": {"allowCommitTrailers": True}}, "trailers opted out"),
     ("git commit -m 'feat: x ✨'", DENY, {"local": {"allowCommitTrailers": True}}, "the trailer opt-out does not allow emoji"),
     ("git commit --amend -m 'x' -m 'Co-Authored-By: a'", DENY, {}, "deny wins over ask"),
+    # Each of these was a mutation the matrix let through (2026-10-03 audit).
+    ("git commit -m 'feat: x'", ASK, {"branch": "master"}, "commit on master, not only main"),
+    ("git commit -m 'feat: x'", ASK, {"staged": ["hooks/x.ps1", "CHANGELOG.md"], "modified": ["hooks/x.ps1", "CHANGELOG.md"]},
+     ".ps1 committed without its .sh twin"),
+    ("git commit --all -m 'feat: x'", ALLOW, {"staged": [], "modified": ["app.py", "CHANGELOG.md"]},
+     "--all picks up CHANGELOG like -a"),
+    ("git commit --file=msg.txt", DENY, {}, "--file= reads the message file like -F"),
 ]
 
 
@@ -181,6 +188,7 @@ def main():
     args = ap.parse_args()
     repo = make_repo()
     git(repo, "branch", "-q", "main-copy")
+    git(repo, "branch", "-q", "master", "main")
     failures = total = 0
     try:
         for label, pwsh in pyhook.runners(args.pwsh):

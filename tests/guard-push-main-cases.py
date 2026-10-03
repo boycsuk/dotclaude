@@ -114,6 +114,10 @@ ON_FEATURE = [
     ("git push --signed origin HEAD:main",       BLOCK, "--signed is boolean — must not swallow the remote"),
     ("git push --all origin",                    BLOCK, "--all pushes every branch, main included"),
     ("git push --mirror origin",                 BLOCK, "--mirror can rewrite/delete remote refs"),
+    ("git push --branches origin",               BLOCK, "--branches is --all's new name"),
+    ("git push --recurse-submodules check origin main", BLOCK, "a valued option must not swallow the remote"),
+    ("git push --recurse-submodules check origin feature/z", ALLOW, "same option, feature branch"),
+    ("tee notes.md <<'EOF'\ngit push origin main\nEOF", ALLOW, "a tee heredoc only writes"),
     ("git push -uf origin feature/z",            BLOCK, "bundled short flags hide -f"),
     ("git push -fu origin feature/z",            BLOCK, "bundled short flags, other order"),
     ("git push --mirro origin",                  BLOCK, "git accepts an unambiguous prefix of --mirror"),
@@ -245,6 +249,7 @@ def main():
         (f"git -C {other} push", BLOCK, "bare push resolves HEAD in the -C repo (main), not the session's"),
         (f"cd {other} && git push", BLOCK, "cd into another repo, then a bare push"),
         (f"cd {other} && git push origin feature/x", ALLOW, "feature branch in another repo"),
+        (f"pushd {other} && git push", BLOCK, "pushd into another repo, then a bare push"),
         ("git push", ALLOW, "the session repo itself is on a feature branch"),
     ]
     for cmd, want, why in cross:

@@ -142,6 +142,15 @@ def case_sync_mirror(runner):
     ctx, _ = delivered_context(proc.stdout)
     check(f"[{runner}] ai-collaboration.md names the output style",
           bool(ctx) and "output-styles" in ctx, repr(ctx))
+    # ai-collaboration also feeds the digest; dropping that arm passed before.
+    check(f"[{runner}] ai-collaboration.md also names reinject-rules",
+          bool(ctx) and "reinject-rules" in ctx, repr(ctx))
+    security = os.path.join(cwd, ".claude/rules/security.md")
+    proc = run(runner, "sync-mirror-docs",
+               {"tool_name": "Edit", "tool_input": {"file_path": security}}, cwd)
+    ctx, _ = delivered_context(proc.stdout)
+    check(f"[{runner}] security.md names the mirror but not the digest",
+          bool(ctx) and "conventions.md" in ctx and "reinject-rules" not in ctx, repr(ctx))
 
 
 def main():

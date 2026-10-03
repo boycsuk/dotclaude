@@ -63,6 +63,7 @@ BASH_CASES = [
     ("uv add fastapi", ASK, "uv add"),
     ("uv pip install fastapi", ASK, "uv pip install"),
     ("poetry add django", ASK, "poetry add"),
+    ("pdm add httpx", ASK, "pdm add"),
     ("cargo add serde --features derive", ASK, "cargo add with a valued flag"),
     ("go get github.com/pkg/errors@v0.9.1", ASK, "go get"),
     ("gem install rails", ASK, "gem install"),
@@ -125,6 +126,17 @@ def edit_cases(tmp):
     write(cargo, CARGO)
     write(reqs, "pytest==8.3.3\n")
     write(readme, "# app\n")
+    gomod = os.path.join(tmp, "go.mod")
+    gemfile = os.path.join(tmp, "Gemfile")
+    composer = os.path.join(tmp, "composer.json")
+    csproj = os.path.join(tmp, "App.csproj")
+    poetry = os.path.join(tmp, "poetry", "pyproject.toml")
+    write(gomod, "module app\n\ngo 1.22\n\nrequire (\n\tgithub.com/a/b v1.0.0\n)\n")
+    write(gemfile, "source 'https://rubygems.org'\ngem 'rails', '7.1.0'\n")
+    write(composer, json.dumps({"require": {"php": ">=8.2"}}, indent=2))
+    write(csproj, '<Project>\n  <ItemGroup>\n  </ItemGroup>\n</Project>\n')
+    os.makedirs(os.path.dirname(poetry))
+    write(poetry, '[tool.poetry.dependencies]\npython = "^3.12"\n')
     added = dict(PACKAGE_JSON, dependencies={"react": "18.3.1", "lodash": "^4.17.21"})
     bumped = dict(PACKAGE_JSON, dependencies={"react": "18.3.2"})
     return [
@@ -147,6 +159,23 @@ def edit_cases(tmp):
         ("Write", {"file_path": readme, "content": "npm install lodash\n"}, ALLOW, "not a manifest"),
         ("Write", {"file_path": os.path.join(tmp, "new", "package.json"),
                    "content": json.dumps(PACKAGE_JSON)}, ASK, "new manifest with dependencies"),
+        # One per manifest type and section, each a mutation that used to pass.
+        ("Edit", {"file_path": gomod, "old_string": "\tgithub.com/a/b v1.0.0\n",
+                  "new_string": "\tgithub.com/a/b v1.0.0\n\tgithub.com/c/d v2.1.0\n"}, ASK, "go.mod gains a module"),
+        ("Edit", {"file_path": gemfile, "old_string": "gem 'rails', '7.1.0'\n",
+                  "new_string": "gem 'rails', '7.1.0'\ngem 'devise'\n"}, ASK, "Gemfile gains a gem"),
+        ("Edit", {"file_path": composer, "old_string": '"php": ">=8.2"',
+                  "new_string": '"php": ">=8.2",\n    "guzzlehttp/guzzle": "^7.0"'}, ASK, "composer.json gains a package"),
+        ("Edit", {"file_path": csproj, "old_string": "  <ItemGroup>\n",
+                  "new_string": '  <ItemGroup>\n    <PackageReference Include="Serilog" Version="3.1.1" />\n'},
+         ASK, "a .csproj gains a PackageReference"),
+        ("Edit", {"file_path": poetry, "old_string": 'python = "^3.12"\n',
+                  "new_string": 'python = "^3.12"\nrequests = "^2.32"\n'}, ASK, "a poetry table gains a package"),
+        ("Edit", {"file_path": pyproj, "old_string": "]\n",
+                  "new_string": ']\n\n[project.optional-dependencies]\ndev = ["pytest==8.3.3"]\n'},
+         ASK, "an optional-dependencies group"),
+        ("Edit", {"file_path": cargo, "old_string": 'serde = "1"', "new_string": 'serde = "1"\nrand = "0.8"',
+                  "replace_all": True}, ASK, "replace_all still adds the crate"),
     ]
 
 
