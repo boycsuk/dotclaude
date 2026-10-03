@@ -164,17 +164,12 @@ def _():
     skills = sorted(os.path.basename(os.path.dirname(p))
                     for p in glob.glob(os.path.join(REPO, "global/.claude/skills/*/SKILL.md")))
 
-    # Hooks that are opt-in (merged only by --serena) are not part of the
-    # always-on inventory those docs describe.
-    optional_hooks = {"prefer-serena-bash", "prefer-graphify"}
-    core_hooks = [h for h in hooks if h not in optional_hooks]
-
     inventories = {
         "CLAUDE.md": read("CLAUDE.md"),
         "templates/project/README.md": read("templates/project/README.md"),
     }
     for doc, text in inventories.items():
-        for hook in core_hooks:
+        for hook in hooks:
             if hook not in text:
                 fail("doc inventories", f"{doc} never mentions the '{hook}' hook")
         for agent in agents:
@@ -187,7 +182,7 @@ def _():
                  f"templates/project/README.md never mentions the '{skill}' skill")
 
 
-# --- 6. The code-extension lists agree across rules and hooks ----------------
+# --- 6. The code-extension lists agree across the path-scoped rules ----------
 @check("code extension lists")
 def _():
     def exts_from_rule(path):
@@ -195,37 +190,18 @@ def _():
         m = re.search(r"paths:\s*(.+)", head)
         return set(re.findall(r"\w+", m.group(1).split("{")[-1])) if m else set()
 
-    def exts_from_hook(path):
-        # The hook's list lives inside a grep -qE '\.(ts|tsx|...)' alternation.
-        # Anchor on that shape rather than on specific extensions, so reordering
-        # the list cannot make this silently return nothing.
-        m = re.search(r"\\\.\(([a-z0-9|]+)\)", read(path))
-        return set(m.group(1).split("|")) if m else set()
-
     rule_exts = exts_from_rule("global/.claude/rules/code-quality.md")
     sec_exts = exts_from_rule("global/.claude/rules/security.md")
-    if rule_exts != sec_exts:
-        diff = rule_exts.symmetric_difference(sec_exts)
-        fail("code extension lists",
-             f"code-quality.md and security.md disagree on: {sorted(diff)}")
-
-    hook_exts = exts_from_hook("global/.claude/hooks/prefer-serena-bash.sh")
-    # A check that silently no-ops is worse than no check: if either list came
-    # back empty the extraction broke, and that is itself the finding.
-    if not hook_exts:
-        fail("code extension lists",
-             "could not extract the extension list from prefer-serena-bash.sh — "
-             "fix this check rather than trusting its pass")
+    # A check that silently no-ops is worse than no check: an empty list means
+    # the extraction broke, and that is itself the finding.
     if not rule_exts:
         fail("code extension lists",
              "could not extract the paths: glob from code-quality.md — "
              "fix this check rather than trusting its pass")
-    if hook_exts and rule_exts:
-        missing = hook_exts - rule_exts
-        if missing:
-            fail("code extension lists",
-                 f"prefer-serena-bash.sh treats {sorted(missing)} as code but the "
-                 f"rules' paths: glob does not, so no rule loads for those files")
+    if rule_exts != sec_exts:
+        diff = rule_exts.symmetric_difference(sec_exts)
+        fail("code extension lists",
+             f"code-quality.md and security.md disagree on: {sorted(diff)}")
 
 
 # --- 7. Skills never use inline interpreters (guard-destructive blocks them) --
@@ -364,7 +340,7 @@ def _():
     # An advisory hook must deliver via hookSpecificOutput.additionalContext on
     # stdout: with exit 0, stderr reaches the debug log only, so three hooks
     # were inert for months (DESIGN.md §17, 2026-08-15).
-    for name in ("prefer-serena-bash", "prefer-graphify", "sync-mirror-docs"):
+    for name in ("sync-mirror-docs",):
         for ext in ("sh", "ps1"):
             body = read(f"global/.claude/hooks/{name}.{ext}")
             if "additionalContext" not in body:
@@ -447,7 +423,7 @@ def _():
         for p in glob.glob(os.path.join(REPO, "templates/project/mcp/*.json")))
     for rel in ["global/.claude/settings.json",
                 "templates/project/.claude/settings.json",
-                "templates/project/.claude/serena-hooks.json",
+                "templates/project/obsolete.json",
                 "templates/project/.claude/settings.local.json.example",
                 ] + fragments:
         path = os.path.join(REPO, rel)
@@ -457,6 +433,31 @@ def _():
             json.loads(read(rel))
         except json.JSONDecodeError as exc:
             fail("JSON validity", f"{rel} does not parse: {exc}")
+
+
+# --- 12. obsolete.json names only what dotclaude really stopped shipping -----
+@check("obsolete manifest")
+def _():
+    # prune-obsolete.py deletes every project hook entry whose command contains
+    # a listed match. A match that also hits a hook still shipped would strip
+    # a live hook from every project on its next deploy.
+    manifest = json.loads(read("templates/project/obsolete.json"))
+    shipped_hooks = [f"hooks/{n}" for n in os.listdir(os.path.join(REPO, "global/.claude/hooks"))]
+    for entry in manifest.get("hooks", []):
+        match = entry.get("match", "")
+        if not match or not entry.get("reason"):
+            fail("obsolete manifest", f"hook entry {entry} needs a non-empty match and reason")
+            continue
+        for hook in shipped_hooks:
+            if match in hook or match.replace("\\", "/") in hook:
+                fail("obsolete manifest",
+                     f"match {match!r} hits {hook}, which dotclaude still ships — "
+                     f"every project would lose it on the next deploy")
+    for entry in manifest.get("mcpServers", []):
+        name = entry.get("name", "")
+        if os.path.exists(os.path.join(REPO, "templates/project/mcp", f"{name}.json")):
+            fail("obsolete manifest",
+                 f"MCP server {name!r} is listed as obsolete but mcp/{name}.json still ships")
 
 
 def main():

@@ -17,8 +17,8 @@ This skill plans and personalizes a `.claude/` deployment, but **does not execut
 > `references/*.md` and are NOT in context until you read them. Read a
 > reference file with the `Read` tool only when the flow reaches that branch:
 > - `references/update-mode.md` — re-run path (§1b/§1c/§1d/§1e). Read only if step 1
->   finds an existing `.claude/`. §1e offers Serena/Graphify improvements to
->   projects that opted into Serena before the template added them.
+>   finds an existing `.claude/`. §1e reconciles artifacts dotclaude stopped
+>   shipping (obsolete MCP servers, directories).
 > - `references/stack-interview.md` — stack / Docker / deployment / version
 >   pinning (§2/§2b/§2c/§2d). Read on a first-time deploy or the Reconfigure path.
 > - `references/mcp-and-db.md` — MCP authorization and SQL-stack detection
@@ -47,7 +47,7 @@ Ask for a short description: what the product does, who uses it, which pieces it
 - **Docker**: "self-hosted / VPS / homelab" → bias toward Docker Compose; "Vercel / serverless / Cloudflare Workers" → advise against Compose.
 - **Deployment**: "SaaS for customers" → VPS or container platform; "tool that runs on my machine" → No deployment; mentions HTTPS / own domains → Caddy + Let's Encrypt.
 - **Versions**: explicit constraints ("the client's Ubuntu 20.04") narrow the options (Node 20 LTS, not 22).
-- **MCPs**: "scraping / E2E tests / web UI" → playwright; "tickets / Linear / Asana" → their MCP; "monorepo / semantic navigation" → serena; "iOS / macOS / Swift app" → xcode (only on a macOS host).
+- **MCPs**: "scraping / E2E tests / web UI" → playwright; "tickets / Linear / Asana" → their MCP; "iOS / macOS / Swift app" → xcode (only on a macOS host).
 - **DB**: "catalogs / users / transactions" → PostgreSQL; "cache / sessions / queues" → Redis; "documents / flexible JSON" → Mongo; "embedded / single machine / edge" → SQLite.
 
 **The bias is a suggestion, not a decision.** The user can always pick "Other" or a different option. **If they contradict the description** (said "daily scraper" but picks "Frontend"), don't push back: accept the change and keep biasing with the combined information.
@@ -89,8 +89,7 @@ Based on steps 1-4, choose the right flags. **Show the user this block verbatim*
 
 | Flag | When to include |
 |---|---|
-| `--serena` | User selected Serena MCP in §3. Deploys the serena + graphify `.mcp.json` bundle AND merges Serena's drift-prevention hooks into the project `settings.json` (makes the model deterministically prefer Serena's tools — see `references/mcp-and-db.md`). |
-| `--xcode` | User selected the Xcode MCP in §3. **macOS + Apple-platform projects only** (`*.xcodeproj` / `*.xcworkspace` / `Package.swift`) — never offer it otherwise. Merges Apple's `xcode` server (`xcrun mcpbridge`, Xcode 26.3+) into `.mcp.json`; combines with `--serena` in either order. See `references/mcp-and-db.md`. |
+| `--xcode` | User selected the Xcode MCP in §3. **macOS + Apple-platform projects only** (`*.xcodeproj` / `*.xcworkspace` / `Package.swift`) — never offer it otherwise. Merges Apple's `xcode` server (`xcrun mcpbridge`, Xcode 26.3+) into `.mcp.json`; combines with the other MCP flags in any order. See `references/mcp-and-db.md`. |
 | `--ui` | User selected the Playwright MCP in §3 — recommend it whenever the project has a web UI. Merges the `playwright` browser server (`npx @playwright/mcp`) into `.mcp.json`: the model can navigate, resize and screenshot the running app, which is what the central `/implement-ui` skill uses to verify UI work against a design reference. Combines with the other MCP flags in any order. See `references/mcp-and-db.md`. |
 | `--update` | Re-run path (see `references/update-mode.md`). Never on a first-time deploy. |
 | `--db` | Optional, no-op (kept for compatibility). The db-inspector agent is central now; a SQL stack only affects which client permission you add to the project `settings.json` stub in step 6, not a flag. |
@@ -118,11 +117,11 @@ bash ~/.claude/templates/project/init.sh --fullstack --runtime=node --compose --
 
 (A SQL stack adds `Bash(psql:*)` / `Bash(docker compose exec*:*)` to the project's `settings.json` stub in step 6 — no flag needed; the db-inspector agent is already central.)
 
-**Existing Python API project re-running with Serena:**
+**Existing Python API project re-running:**
 
 ```
 cd <path from step 1>
-bash ~/.claude/templates/project/init.sh --update --serena
+bash ~/.claude/templates/project/init.sh --update
 ```
 
 **CLI tool, no Docker, no deployment:**
@@ -145,7 +144,7 @@ Tell the user to run the command, then come back to this session and confirm whe
 If the script fails:
 - Exit 1: template missing — `cd ~/projects/dotclaude && ./install.sh` to refresh.
 - Exit 3: retired. `.mcp.json` is composed per-server now, so there is no whole-file conflict to abort on. A project still running an older `init.sh` can emit it — tell that user to re-run `./install.sh` from the dotclaude clone.
-- Exit 4: `serena` binary missing. Install it (see `references/mcp-and-db.md`) and re-run.
+- Exit 4: retired (was: `serena` missing). Serena was removed; an older `init.sh` can still emit it — tell the user to re-run `./install.sh` from the dotclaude clone.
 - Exit 5: `--xcode` on a non-macOS host. Drop the flag — Apple's mcpbridge ships with Xcode.
 - Exit 6: `xcrun mcpbridge` unavailable. Needs Xcode 26.3+; check `xcode-select -p` points at it, then enable MCP in Xcode > Settings > Intelligence.
 - Exit 7: `npx` missing (`--ui` needs it to launch the playwright server). Install Node.js — it ships npx — and re-run.
@@ -179,7 +178,6 @@ Replace, using detected or interviewed values:
 - `{{LANGUAGE}}`, `{{LANGUAGE_VERSION}}`, `{{FRAMEWORK_OR_KEY_LIBS}}`, `{{RUNTIME_OR_TOOLING}}`, `{{DATABASE_OR_NONE}}`.
 - `{{INSTALL_CMD}}`, `{{DEV_CMD}}`, `{{BUILD_CMD}}`, `{{TEST_CMD}}`, `{{LINT_CMD}}`, `{{TYPECHECK_CMD}}`, `{{FORMAT_CMD}}`.
 - `{{MCP_SECTION}}` → bulleted list of selected MCPs with their purpose, or `<none configured>`.
-- `{{SERENA_BLOCK}}` → **if the project uses Serena** (the deploy ran with `--serena`), paste the "When to prefer Serena tools" + "Graphify" sections that follow it in the template, as PLAIN TEXT outside any comment, and delete the commented source block. **Otherwise**, delete both the placeholder line and the commented source block. This matters: block-level HTML comments are stripped before CLAUDE.md reaches the model, so guidance left inside one is invisible in every deploy — Serena or not.
 
 For any command that does not apply, write `<not configured>` with an HTML comment `<!-- TODO: configure ... -->`.
 
@@ -188,7 +186,7 @@ For any command that does not apply, write `<not configured>` with an HTML comme
 One placeholder to fill, since this file is copied verbatim by the deployer:
 - `{{WORKING_LANGUAGE}}` → the language the user actually works in (ask if it is not obvious from the conversation; the conventions themselves are language-neutral, only this line is per-user).
 
-**Leave the remaining `<!-- ... -->` blocks intact** — they are guides for the user to fill in WHY and Don't manually. (The `{{SERENA_BLOCK}}` source block above is the one exception: it is either promoted to plain text or removed.)
+**Leave the remaining `<!-- ... -->` blocks intact** — they are guides for the user to fill in WHY and Don't manually.
 
 **`## WHAT — Structure` section:**
 - If the project is **Fullstack** (or the user opted into the convention), replace the example comment block with the `backend/` / `clients/{web,ios,android,…}/` / `deploy.sh` / `scripts/` / `.env` layout documented in `references/stack-interview.md` ("Fullstack layout convention").
@@ -212,10 +210,8 @@ base config and there is no `{{SCRIPT_EXT}}` placeholder anymore.
 Only edit the project stub if this project needs something project-specific:
 
 - **MCP tool permissions:** add `mcp__<server>__*` to `permissions.allow` for
-  each MCP the user selected. Note: selecting Serena deploys a **two-server
-  bundle** (Serena + Graphify), so add **both** `mcp__serena__*` and
-  `mcp__graphify__*` when Serena was chosen. Selecting the Xcode MCP adds
-  `mcp__xcode__*`; selecting Playwright (`--ui`) adds `mcp__playwright__*`.
+  each MCP the user selected. Selecting the Xcode MCP adds `mcp__xcode__*`;
+  selecting Playwright (`--ui`) adds `mcp__playwright__*`.
 - **SQL client (if a SQL stack was detected):** add `Bash(psql:*)` and/or
   `Bash(sqlite3:*)` to `permissions.allow` (on Windows the user is on the
   central PowerShell config, so add `PowerShell(psql *)` / `PowerShell(sqlite3 *)`).
@@ -223,10 +219,6 @@ Only edit the project stub if this project needs something project-specific:
 If the project needs nothing project-specific, leave the stub's empty
 `allow`/`ask`/`deny` arrays as they are. Do NOT copy the central hooks or the
 base permission rules into it by hand — they already apply from `~/.claude/`.
-(The **one** hook block that legitimately lives in the project stub is Serena's
-drift-prevention hooks, but you never write those by hand either —
-`init.sh --serena` merges them automatically when Serena is deployed. See
-`references/mcp-and-db.md`.)
 
 > The OS split (`.sh` vs `.ps1` hooks, the PowerShell mirror of the permission
 > rules) is handled once by `install.sh`/`install.ps1` when they write
@@ -282,9 +274,5 @@ Tell the user literally:
 4. **Use `/compound`** when I make a systematic mistake — it codifies the fix (central artifacts update every project via `git pull && ./install.sh`).
 5. **Use `/resume-context`** at the start of each new session on this project.
 6. **(Optional) Enable the `dotclaude` output style** via `/config` → Output style → `dotclaude` to apply the tone/language conventions at the system-prompt level. Per-machine choice; the same conventions already apply as an always-on rule without it.
-
-**If Serena/Graphify was deployed (`--serena`)**, also tell the user:
-- Serena's drift-prevention hooks AND Graphify's graph-first nudge (`prefer-graphify`) are already merged into `.claude/settings.json` (init did this) — nothing to run.
-- `init.sh --serena` also ran `graphify hook install` for you (git post-commit auto-rebuild). The **one** step left is to build the graph once: run `/graphify .` in the project (the `graphify` MCP server stays unavailable until then). Do NOT run `graphify install` — see `references/mcp-and-db.md` §3. (If `graphify` was missing from PATH at deploy, `uv tool install graphifyy` first.)
 
 `/init-project` only deploys the per-project base; the reusable core is central. Add project-specific skills, agents, rules over time in the project's own `.claude/` (they ADD to the central ones). See `~/.claude/templates/project/README.md`.

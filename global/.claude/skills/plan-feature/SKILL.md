@@ -26,7 +26,7 @@ Do not proceed until you have clear answers. If the user does not know, surface 
 
 ## 2. Explore the codebase
 
-Before planning, ground the plan in what exists: read the candidate files you would touch. For a feature crossing modules, dispatch the built-in **Explore** agent (fast lookups) or the `researcher` agent (an end-to-end map), and if the project has a Graphify graph, use `get_pr_impact` / `query_graph` for the blast radius.
+Before planning, ground the plan in what exists: read the candidate files you would touch. For a feature crossing modules, dispatch the built-in **Explore** agent (fast lookups) or the `researcher` agent (an end-to-end map), and if the project has a codebase-memory-mcp graph, use `trace_path` / `detect_changes` for the blast radius.
 
 Every entry in "Files to touch" below must come from this evidence, not from a guess about the layout.
 

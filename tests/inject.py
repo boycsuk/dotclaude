@@ -87,7 +87,7 @@ def readd_if_gate(repo):
 
 def revert_advisory_to_stderr(repo):
     """An advisory hook back on stderr+exit 0 is invisible to the model."""
-    path = os.path.join(repo, "global/.claude/hooks/prefer-graphify.sh")
+    path = os.path.join(repo, "global/.claude/hooks/sync-mirror-docs.sh")
     with open(path) as fh:
         text = fh.read()
     with open(path, "w") as fh:
@@ -141,7 +141,19 @@ def delete_central_skill(repo):
     shutil.rmtree(os.path.join(repo, "global/.claude/skills/implement-ui"))
 
 
+def obsolete_hits_shipped_hook(repo):
+    """An obsolete.json match that also hits a live hook would strip it from
+    every project on the next deploy."""
+    path = os.path.join(repo, "templates/project/obsolete.json")
+    with open(path) as fh:
+        manifest = json.load(fh)
+    manifest["hooks"].append({"match": "hooks/guard-destructive.", "reason": "x"})
+    with open(path, "w") as fh:
+        json.dump(manifest, fh, indent=2)
+
+
 REGRESSIONS = {
+    "obsolete-hits-shipped-hook": obsolete_hits_shipped_hook,
     "drop-hook-matrix": drop_hook_matrix,
     "delete-central-agent": delete_central_agent,
     "break-frontmatter": break_frontmatter,

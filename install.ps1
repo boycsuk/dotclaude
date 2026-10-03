@@ -98,7 +98,15 @@ foreach ($dir in @("skills", "agents", "rules", "output-styles", "hooks")) {
         Where-Object { -not (Get-ChildItem -Path $_.FullName -Force -ErrorAction SilentlyContinue) } |
         Remove-Item -Force -ErrorAction SilentlyContinue
 }
+$oldManifest = if (Test-Path $manifestPath) { @(Get-Content $manifestPath) } else { @() }
 $manifest | Set-Content -Path $manifestPath -Encoding UTF8
+# A hook this repo stopped shipping is still wired in every project deployed
+# with it; its entry now points at a deleted script. Say how to clean that up.
+$retired = @($oldManifest | Where-Object { $_ -match '^hooks/[^/]+$' -and $manifest -notcontains $_ })
+if ($retired.Count -gt 0) {
+    Write-Host "  ! retired hooks removed: $(($retired | ForEach-Object { $_ -replace '^hooks/', '' }) -join ' ')"
+    Write-Host "    Projects that wired them: run /init-project --update (or init.ps1) to prune the entries."
+}
 Write-Host "  - central hooks/agents/skills/rules/output-styles installed (.ps1 + .py hooks)"
 
 # --- Central settings.json: build the PowerShell form and MERGE into user's --

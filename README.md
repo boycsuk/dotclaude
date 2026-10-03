@@ -39,7 +39,7 @@ Re-running the installer is safe and idempotent: it owns only the files it shipp
 `/init-project` runs an interview (project type, framework, Docker, deployment, MCP servers, database), then prints a command like:
 
 ```bash
-bash ~/.claude/templates/project/init.sh --serena
+bash ~/.claude/templates/project/init.sh --ui
 ```
 
 Running it deploys only the project-specific surface:
@@ -47,7 +47,7 @@ Running it deploys only the project-specific surface:
 - `CLAUDE.md` and `CHANGELOG.md` starters with the interview answers filled in
 - `docs/` — contract docs (backend, UI, user stories, conventions) maintained by `/update-docs`
 - `.claude/settings.json` stub for project-level additions
-- `.mcp.json` composed from fragments: `--serena` adds Serena and Graphify, `--xcode` adds the Xcode server, `--ui` adds Playwright
+- `.mcp.json` composed from fragments: `--xcode` adds the Xcode server, `--ui` adds Playwright
 - Optional infra scaffolds (Dockerfile, docker-compose, Caddyfile, deploy script, `.env.example`)
 
 The hooks, agents, skills and rules are not copied into the project — they already apply from `~/.claude/`.

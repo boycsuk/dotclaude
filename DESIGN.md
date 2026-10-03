@@ -149,6 +149,8 @@ The goal of this repo: turn that guide into a concrete, portable, reusable setup
 
 ### 13. Serena MCP as an opt-in symbol-level layer
 
+> **Superseded by §32 (2026-10-03).** Serena and Graphify were removed. The reasoning below is kept as history: it explains what old projects still carry and why `obsolete.json` lists it.
+
 **Considered:** (a) baking Serena into the default template so every project gets it; (b) leaving it as a third-party tool the user wires up manually; (c) opt-in via `/init-project` with a pre-built `.mcp.json` template.
 
 **Chosen:** option (c). The skill offers Serena in the MCP multi-select; when selected, it merges the `serena` + `graphify` fragments from `templates/project/mcp/` into the project's `.mcp.json`, adds `mcp__serena__*` to `permissions.allow`, gitignores `.serena/project.local.yml` and `.serena/cache/`, and includes a Serena block in CLAUDE.md explaining when to prefer its tools.
@@ -502,6 +504,18 @@ The recurring failure in design-to-code work was handing the model a whole HTML 
 - `--ui` OWNS the `playwright` key in `.mcp.json`: a hand-added entry is adopted (updated), not duplicated — pinned in `tests/mcp-merge-cases.py`.
 
 **Rejected:** user-scope installation (`claude mcp add --scope user`) as the default recommendation. It works, but leaves nothing versioned in the project, so a second machine or collaborator silently loses the browser loop the skill's verification gate depends on.
+
+### 32. Serena and Graphify removed; retired artifacts are pruned, not left dangling (2026-10-03)
+
+**Why remove them.** Claude Code now ships native LSP navigation and post-edit diagnostics through the official `*-lsp` plugins (the `LSP` tool, since v2.0.74), which covers what Serena was for in day-to-day work. Serena only paid off on large multi-file refactors, and the model kept ignoring its tools even with the drift-prevention hooks of §13 — the hooks guaranteed the reminder, not the behaviour. Graphify's strengths (docs, PDFs, mixed corpora) do not match a code-only workflow, and its advertised token savings did not hold up in practice. `--serena` is now accepted and ignored with a warning (an older `/init-project` may still print it); exit 4 is retired like exit 3.
+
+**The migration problem.** Deploy merges only ever *add* hook entries. Removing `prefer-graphify` / `prefer-serena-bash` from `global/.claude/hooks/` makes `install.sh` delete the scripts, but every project deployed with `--serena` still wires them in `.claude/settings.json` — so each matching tool call reports a hook error (non-blocking: exit 127 is not exit 2, but noise on every Bash/Read).
+
+**Chosen: a data-driven manifest, applied on every deploy.** `templates/project/obsolete.json` lists retired hooks (by command substring, in POSIX and PowerShell forms), MCP servers and directories. `scripts/prune-obsolete.py` — one Python implementation called by both `init.sh` and `init.ps1`, so the pruning rules cannot drift between them — removes the matching hook entries from `settings.json` and `settings.local.json`. Servers and directories are only *reported* (`OBSOLETE_MCP` / `OBSOLETE_FILES` from `detect-drift.py`), and `/init-project --update` asks before removing them (update-mode.md §1e): pruning an entry that points at a deleted script is housekeeping, deleting a server or a directory the user might still use is their call. The installers print a one-line notice whenever a re-install removes a hook file, so the user knows to re-run the deploy.
+
+**Guard rails.** check.py fails if an `obsolete.json` match also hits a hook dotclaude still ships (that would strip a live hook from every project on its next deploy), or if a listed server still has an `mcp/` fragment. `tests/update-prune-cases.py` pins the contract through both init scripts. This is the first rule set of a general drift mechanism: retiring any artifact from now on means adding it to the manifest.
+
+**Rejected:** keeping no-op stub hooks for a release (leaves dead files and entries forever, and hides the problem instead of fixing it); pruning inside `install.sh` (the installer does not know where the user's projects are).
 
 ## Things deliberately not included
 

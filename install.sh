@@ -64,8 +64,19 @@ done
 # Only hooks/ is filtered: a .ps1 anywhere else IS written, so it must stay in
 # the manifest or it becomes an unmanaged orphan when the repo stops shipping it.
 rm -f "$TARGET/hooks/"*.ps1
+[ -f "$MANIFEST" ] && cp "$MANIFEST" "$MANIFEST.old"
 grep -v '^hooks/.*\.ps1$' "$MANIFEST.tmp" > "$MANIFEST" || true
 rm -f "$MANIFEST.tmp"
+# A hook this repo stopped shipping is still wired in every project deployed
+# with it; its entry now points at a deleted script. Say how to clean that up.
+if [ -f "$MANIFEST.old" ]; then
+  retired=$(grep '^hooks/[^/]*$' "$MANIFEST.old" | grep -vxF -f "$MANIFEST" || true)
+  rm -f "$MANIFEST.old"
+  if [ -n "$retired" ]; then
+    echo "  ! retired hooks removed: $(echo "$retired" | sed 's|^hooks/||' | tr '\n' ' ')"
+    echo "    Projects that wired them: run /init-project --update (or init.sh) to prune the entries."
+  fi
+fi
 chmod +x "$TARGET/hooks/"*.sh 2>/dev/null || true
 # Removing a skill's files leaves its directory behind, and an empty
 # ~/.claude/skills/<name>/ still shows up in the skill listing as a phantom.

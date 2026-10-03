@@ -53,24 +53,6 @@ This setup ships four central sub-agents (in `~/.claude/agents/`, available in e
 
 Use them proactively even when not explicitly requested — they isolate work in a separate context window, keeping the main conversation clean.
 
-The built-in **Explore** agent (Haiku, skips CLAUDE.md and git status) is the fast/cheap choice for "where is X defined / what imports Y" lookups; reach for the custom `researcher` only when you need a *synthesized* answer (end-to-end flow, cross-module dependencies, architectural layers) that requires reading and relating several files.
+The built-in **Explore** agent (skips CLAUDE.md and git status, so it starts with a small context; since Claude Code v2.1.198 it runs on the session model, not Haiku) is the fast/cheap choice for "where is X defined / what imports Y" lookups; reach for the custom `researcher` only when you need a *synthesized* answer (end-to-end flow, cross-module dependencies, architectural layers) that requires reading and relating several files.
 
 **Fan out to investigate; apply in series.** Parallel subagents are what make broad work possible and are also where essentially all the token cost goes — a wide sweep can burn over a million tokens in one run. Applying the results afterwards, in the main thread, is comparatively free. So: sweep once and wide, then work through the findings sequentially, and never re-run the sweep to check your own work — verify with the project's tools and tests instead. Group agents by module or dimension (single digits), never one per file: findings are usually cross-file anyway. Persist each agent's result to a scratch file as it returns, so a run cut short by a usage limit keeps the expensive part, and resume the missing units rather than restarting.
-
-## Prefer Serena tools when available
-If the project has Serena MCP active (check `.mcp.json` for a `serena` entry), prefer its symbol-level tools over text-level alternatives for non-trivial code work:
-- `find_symbol` / `find_referencing_symbols` instead of `Grep` for locating definitions or references.
-- `replace_symbol_body` instead of `Edit` for rewriting a function body — it preserves surrounding structure correctly.
-- `get_symbols_overview` instead of reading a whole file when you only need its shape.
-
-Skip Serena for: plain text/markdown files, one-off reads of a known path, edits where line-level precision matters more than symbol semantics. See the Serena block in CLAUDE.md for the full guidance.
-
-**This preference is also enforced deterministically, not just by this prose.** A project deployed with `--serena` gets Serena's own drift-prevention hooks merged into its `.claude/settings.json` (`serena-hooks activate` at SessionStart, `serena-hooks remind` at PreToolUse). The `remind` hook injects a reminder *only* when you over-rely on Grep/Read without a recent Serena call — silent when you comply — which is why advisory prose alone is not relied upon: it decays under context compaction, the hook does not. When you see such a reminder, switch to the Serena tool it names; don't rationalize the built-in.
-
-**Graphify (Serena's companion, same `.mcp.json`).** Where Serena works at the *symbol* level, Graphify works at the *graph* level — a queryable knowledge graph of how the whole codebase (code + docs + schema) relates. Reach for Graphify when the question is about **structure or ripple effects** rather than a single symbol: "what depends on this module", "what breaks if I change X" (impact analysis via `get_pr_impact` / `shortest_path`), or building a mental map of an unfamiliar area (`query_graph` / `get_neighbors`). The natural workflow is **graph first, then Serena**: query the graph to see the shape and blast radius, then act precisely on the symbols involved with Serena.
-
-Two ways to reach the graph, both reading the same pre-built `graphify-out/graph.json`:
-- **MCP tools** (`query_graph`, `get_neighbors`, `shortest_path`, `get_pr_impact`) — for impact analysis and neighborhood queries mid-task.
-- **CLI** (cheaper for focused lookups): `graphify query "<question>"` returns a scoped subgraph usually far smaller than grepping raw files; `graphify path "<A>" "<B>"` traces relationships; `graphify explain "<concept>"` focuses one concept. Prefer `graphify-out/wiki/index.md` for broad navigation, and read `graphify-out/GRAPH_REPORT.md` only for whole-architecture review when query/path/explain don't surface enough. After editing code, `graphify update .` refreshes the graph (AST-only, no API cost).
-
-Graphify's tools only work after the graph is built — run `/graphify .` once first. If no `graphify` entry is in `.mcp.json` or the graph was never built, fall back to Serena + the `researcher` agent. Like Serena, the preference is also enforced deterministically: the `prefer-graphify.{sh,ps1}` PreToolUse hook (shipped centrally, merged by `--serena`, gated on `graphify-out/graph.json`) nudges you toward `graphify query` when you reach for grep/find or read a code file one at a time while a graph exists. Heed that nudge; the graph answers structure questions faster than scanning files.

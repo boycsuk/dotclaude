@@ -29,40 +29,6 @@
 ## WHAT — External integrations (MCP)
 {{MCP_SECTION}}
 
-{{SERENA_BLOCK}}
-
-<!-- The block below is the SOURCE for {{SERENA_BLOCK}} above: /init-project
-     pastes it in (without these comment markers) when the project uses Serena,
-     and deletes the marker otherwise. It must stay inside a comment here
-     because block-level HTML comments are stripped before CLAUDE.md reaches
-     the model — which is exactly why the guidance cannot LIVE in one.
-### When to prefer Serena tools over native Claude Code tools
-
-Serena operates at the **symbol level** (LSP-backed), not the text level. Prefer it for:
-- **Locating a symbol's definition** → `find_symbol` instead of `Grep` + `Read`.
-- **Finding all references to a function/class** → `find_referencing_symbols` instead of `Grep`.
-- **Renaming or rewriting a function body** → `replace_symbol_body` instead of `Edit` (it preserves siblings and indentation correctly).
-- **Inserting code adjacent to a symbol** → `insert_after_symbol` / `insert_before_symbol`.
-- **Getting a structural overview of a file** → `get_symbols_overview` instead of reading the whole file.
-
-Keep using native tools for:
-- Plain text files, configs, markdown (no LSP gain).
-- One-off reads of a known path (`Read` is faster).
-- Edits where line-level precision matters more than symbol semantics.
-
-Serena writes onboarding summaries to `.serena/memories/*.md` — these ARE committed (team-wide context). `.serena/project.local.yml` is gitignored (personal overrides).
-
-### Graphify (graph-level companion, same `.mcp.json` as Serena)
-
-Where Serena works at the symbol level, Graphify answers **structural / ripple-effect** questions over a knowledge graph of the whole codebase: "what depends on this", "what breaks if I change X" (`get_pr_impact`, `shortest_path`), or mapping an unfamiliar area (`query_graph`, `get_neighbors`). Workflow: **graph first, then Serena** — query the graph for shape and blast radius, then act on the symbols with Serena.
-
-Reach the graph two ways over the same `graphify-out/graph.json`:
-- **MCP tools** (`query_graph`, `get_neighbors`, `shortest_path`, `get_pr_impact`) for impact analysis mid-task.
-- **CLI** for focused lookups: `graphify query "<question>"` (scoped subgraph, cheaper than grepping), `graphify path "<A>" "<B>"` (relationships), `graphify explain "<concept>"`. Use `graphify-out/wiki/index.md` for broad navigation; read `graphify-out/GRAPH_REPORT.md` only for whole-architecture review. After editing code, `graphify update .` refreshes it (AST-only, no API cost).
-
-One-time setup — run `/graphify .` once to build `graphify-out/graph.json` (the MCP server stays unavailable until then). You do NOT need to run `graphify install`: the graph-first `PreToolUse` nudge ships centrally as `prefer-graphify.{sh,ps1}` and is merged into this project's hooks by `--serena` (gated on the graph existing, so it's silent until you build it). Heed the nudge when you see it: the graph answers structure questions faster than scanning files. `graphify-out/` is gitignored build output.
--->
-
 ## WHY — Architectural decisions
 <!-- Document ONLY non-obvious decisions and their reason:
 - "We use X instead of Y because Z"

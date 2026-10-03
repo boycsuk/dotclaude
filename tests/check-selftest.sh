@@ -116,6 +116,10 @@ python3 "$SRC/tests/inject.py" "$WORK/repo" delete-central-skill
 expect_fail "a central skill directory is deleted outright"
 
 setup
+python3 "$SRC/tests/inject.py" "$WORK/repo" obsolete-hits-shipped-hook
+expect_fail "obsolete.json names a hook dotclaude still ships"
+
+setup
 if python3 "$WORK/repo/check.py" >/dev/null 2>&1; then
   echo "  caught:     (control) pristine repo passes"
   pass=$((pass + 1))

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Detect per-project drift for /init-project --update (SKILL.md §1e gaps).
+"""Detect per-project drift for /init-project --update (update-mode.md §1e).
 
 Lives in a FILE, not an inline `python3 -c`, because the central
 guard-destructive hook blocks inline interpreters (DESIGN.md §5 justifies
@@ -25,58 +25,6 @@ def load_json(path):
             return json.load(fh)
     except Exception:
         return None
-
-
-def check_serena_hooks():
-    """Gap 1: the project's settings.json should wire `serena-hooks remind`."""
-    settings = load_json(os.path.join(".claude", "settings.json"))
-    if settings is None:
-        return "UNKNOWN"
-    for event in settings.get("hooks", {}).values():
-        for group in event:
-            for hook in group.get("hooks", []):
-                if "serena-hooks" in str(hook.get("command", "")):
-                    return "HAS_HOOKS"
-    return "NO_HOOKS"
-
-
-def check_mcp():
-    """Gap 2: graphify launched via the broken `python -m`, or serena's
-    dashboard left on. Two independent sub-checks."""
-    mcp = load_json(".mcp.json")
-    if mcp is None:
-        return "UNKNOWN", "UNKNOWN"
-    servers = mcp.get("mcpServers", {})
-    graphify = "GRAPHIFY_BROKEN" if servers.get("graphify", {}).get("command") == "python" else "GRAPHIFY_OK"
-    serena_args = servers.get("serena", {}).get("args", [])
-    dashboard = "DASH_OFF" if "--open-web-dashboard" in serena_args else "DASH_ON"
-    return graphify, dashboard
-
-
-def check_graphify_integrated():
-    """Gap 3: Serena present but Graphify never set up — no graphify-out/ AND
-    no `## graphify` block in CLAUDE.md.
-
-    The shell one-liner this replaces (`test -d graphify-out || grep -q ... &&
-    echo A || echo B`) happened to produce the right answer in all four
-    boundary cases despite its unparenthesised `||`/`&&` chain. It is spelled
-    out here because the intent should not depend on that coincidence.
-    """
-    has_dir = os.path.isdir("graphify-out")
-    has_block = False
-    try:
-        with open("CLAUDE.md") as fh:
-            text = fh.read().lower()
-        # The template writes "### Graphify (graph-level companion…)"; the old
-        # marker looked for "## graphify" exactly, which the template never
-        # emits — so this returned GRAPHIFY_ABSENT forever, re-offering an
-        # already-closed gap on every --update. Both spellings are accepted:
-        # the H3 heading dotclaude ships, and the H2 block `graphify install`
-        # appends in projects that ran it directly.
-        has_block = "### graphify" in text or "## graphify" in text
-    except Exception:
-        pass
-    return "GRAPHIFY_PRESENT" if (has_dir or has_block) else "GRAPHIFY_ABSENT"
 
 
 def check_obsolete():
@@ -115,16 +63,11 @@ def check_allow_push_main():
 
 
 def main():
-    graphify_mcp, dashboard = check_mcp()
     obsolete_hooks, obsolete_mcp, obsolete_files = check_obsolete()
     for key, value in (
         ("OBSOLETE_HOOKS", obsolete_hooks),
         ("OBSOLETE_MCP", obsolete_mcp),
         ("OBSOLETE_FILES", obsolete_files),
-        ("SERENA_HOOKS", check_serena_hooks()),
-        ("GRAPHIFY_MCP", graphify_mcp),
-        ("SERENA_DASHBOARD", dashboard),
-        ("GRAPHIFY_INTEGRATED", check_graphify_integrated()),
         ("ALLOW_PUSH_MAIN", check_allow_push_main()),
     ):
         print(f"{key}={value}")

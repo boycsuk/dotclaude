@@ -19,9 +19,5 @@ Thumbs.db
 secrets/
 credentials/
 
-# Serena MCP local config (project.yml and memories/ ARE committed; only the personal override is not)
-.serena/project.local.yml
-.serena/cache/
-
-# Graphify knowledge-graph build output (rebuilt by /graphify .; commit only if sharing the graph)
-graphify-out/
+# codebase-memory-mcp repo snapshot (only written with its persistence: true; the index lives in ~/.cache)
+.codebase-memory/

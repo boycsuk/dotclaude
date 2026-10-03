@@ -36,7 +36,11 @@ def run_install(home, pwsh=None, repo=REPO):
     else:
         cmd = ["bash", os.path.join(repo, "install.sh")]
     p = subprocess.run(cmd, cwd=repo, env=env, capture_output=True, text=True)
+    LAST_OUTPUT[0] = p.stdout + p.stderr
     return p.returncode
+
+
+LAST_OUTPUT = [""]
 
 
 def claude(home, *parts):
@@ -117,6 +121,8 @@ def case_stopped_shipping_is_cleaned(home, pwsh):
         return "re-install failed"
     if os.path.exists(ghost):
         return "a file the repo stopped shipping survived the re-install"
+    if f"retired hooks removed: ghost.{ext}" not in LAST_OUTPUT[0]:
+        return "no notice that a retired hook may still be wired in projects"
     return None
 
 

@@ -39,13 +39,14 @@ dotclaude/
     ├── CLAUDE.md.template       # per-project CLAUDE.md with {{placeholders}}
     ├── CHANGELOG.md.template    # Keep-a-Changelog starter
     ├── .gitignore.template
-    ├── mcp/                     # one fragment per MCP server (serena, graphify, xcode, playwright);
+    ├── obsolete.json            # artifacts dotclaude stopped shipping; init prunes their hook entries
+    ├── scripts/prune-obsolete.py  # the pruning, shared by init.sh and init.ps1
+    ├── mcp/                     # one fragment per MCP server (xcode, playwright);
     │                            # ./.mcp.json is COMPOSED from these, never copied
     ├── scaffolds/               # infra templates (Dockerfile, compose, deploy.sh, …)
     ├── docs/                    # portable contract docs (backend.md, ui.md, user-stories.md, conventions.md, README.md)
     └── .claude/
         ├── settings.json        # per-project STUB (base config is central; this only ADDS, e.g. MCP perms)
-        ├── serena-hooks.json     # Serena drift-prevention hooks — MERGED into settings.json on --serena (not a standalone deployed file)
         └── settings.local.json.example  # personal overrides (gitignored once renamed)
 ```
 
@@ -55,7 +56,7 @@ dotclaude/
 
 ### 1. The skill plans, the user executes — do not merge them back
 
-`skills/init-project/SKILL.md` deliberately does NOT run `init.sh` itself. It detects the stack, runs the interview, then **prints** the exact `bash …/init.sh [--serena]` command for the user to run from a normal terminal. After the user confirms `deploy OK`, the skill resumes with `Edit` to fill placeholders.
+`skills/init-project/SKILL.md` deliberately does NOT run `init.sh` itself. It detects the stack, runs the interview, then **prints** the exact `bash …/init.sh [--xcode] [--ui]` command for the user to run from a normal terminal. After the user confirms `deploy OK`, the skill resumes with `Edit` to fill placeholders.
 
 The temptation to "just run the script from the skill" via a `!`-prefixed shell block is real and was tried — it fails reliably for reasons that are not in our control:
 
@@ -96,15 +97,15 @@ When `/compound` (a skill inside the template) suggests promoting a project-loca
    - Detects stack from `package.json` / `pyproject.toml` / `Cargo.toml` / `go.mod` etc., or interviews via AskUserQuestion if empty.
    - Asks which MCPs to authorize (multiSelect).
    - Detects SQL stack for the `db-inspector` agent.
-   - Prints the exact terminal command (`bash ~/.claude/templates/project/init.sh [--serena] [--xcode] [--ui]`) for the user to run.
+   - Prints the exact terminal command (`bash ~/.claude/templates/project/init.sh [--xcode] [--ui]`) for the user to run.
 
-3. **User executes.** From a normal terminal (not from inside Claude Code), the user runs the printed command. `init.sh` copies only the per-project files (CLAUDE.md, CHANGELOG.md, docs/, the settings.json stub, .gitignore), composes `.mcp.json` from the `mcp/` fragments the flags select (`--serena` → serena + graphify, `--xcode` → xcode, `--ui` → playwright), writes any requested scaffolds, and prints `init.sh: deploy OK`. The central hooks/agents/skills/rules/output-styles are NOT copied — they already live in `~/.claude/`. See decision 15 in DESIGN.md for why this is split from the skill.
+3. **User executes.** From a normal terminal (not from inside Claude Code), the user runs the printed command. `init.sh` copies only the per-project files (CLAUDE.md, CHANGELOG.md, docs/, the settings.json stub, .gitignore), composes `.mcp.json` from the `mcp/` fragments the flags select (`--xcode` → xcode, `--ui` → playwright), prunes hook entries for artifacts listed in `obsolete.json`, writes any requested scaffolds, and prints `init.sh: deploy OK`. The central hooks/agents/skills/rules/output-styles are NOT copied — they already live in `~/.claude/`. See decision 15 in DESIGN.md for why this is split from the skill.
 
 4. **Per-project personalize.** The user returns to Claude Code and confirms. The skill resumes and fills `{{placeholders}}` in the deployed `CLAUDE.md` and `settings.json` using the `Edit` tool, then verifies the deploy.
 
 5. **In the deployed project.** The hooks, agents, skills, rules, and output-styles come from `~/.claude/` (central) and apply automatically — they are NOT in the project. Claude Code merges the project's `.claude/settings.json` stub (MCP perms, project overrides) on top of the central `~/.claude/settings.json` (base permissions + hooks). The central hooks (verify-on-edit, guard-destructive, guard-push-main, detect-secrets, sync-mirror-docs, guard-central-config, reinject-rules) and permissions therefore apply in every project; `guard-push-main` blocks force push always and direct push to main/master unless `"allowPushToMain": true` is set in `.claude/settings.local.json` (see DESIGN.md §18). `guard-central-config` blocks editing the installed `~/.claude/` config from inside a project — edit the source in `global/.claude/` and re-run `./install.sh` (see §23).
 
-6. **Re-runs.** To pick up master-repo improvements to the central artifacts, the user runs `git pull && ./install.sh` in the dotclaude clone — that updates `~/.claude/` for every project at once. `/init-project --update` inside a project only re-seeds missing per-project files and drift-reports `settings.local.json.example`; it no longer refreshes hooks/agents/skills/rules (those are central). The skill still offers new `CLAUDE.md.template` bullets for the user to opt into (§1d) and, for projects with Serena, reconciles missing Serena/Graphify improvements (§1e). See DESIGN.md §19, §23.
+6. **Re-runs.** To pick up master-repo improvements to the central artifacts, the user runs `git pull && ./install.sh` in the dotclaude clone — that updates `~/.claude/` for every project at once. `/init-project --update` inside a project only re-seeds missing per-project files and drift-reports `settings.local.json.example`; it no longer refreshes hooks/agents/skills/rules (those are central). The skill still offers new `CLAUDE.md.template` bullets for the user to opt into (§1d) and offers to remove obsolete MCP servers and directories reported by `detect-drift.py` (§1e). See DESIGN.md §19, §23.
 
 ## When to update what
 
@@ -131,7 +132,7 @@ DESIGN.md captures the reasoning behind every structural choice — read it befo
 - §7: model selection — `inherit` everywhere except mechanical components (verify, changes, resume-context) which override to Haiku. `researcher` inherits (architectural synthesis is reasoning; quick lookups go to the built-in Explore agent). Do NOT downgrade reasoning-heavy agents. Reasoning agents (`researcher`, `debugger`, `code-reviewer`) also pin `effort: high` in frontmatter; `db-inspector` inherits both model and effort. **A skill's `model:` applies to the rest of the caller's turn unless it also sets `context: fork`** — that is why `verify` and `changes` fork (DESIGN.md §27).
 - §9: Bash runs allow-by-default (`allow: ["Bash", …]`); the `deny` list + the `guard-destructive` hook (matches ALL Bash, blocks RCE/inline interpreters) are the safety net. `ask` still gates impactful ops (push, dep installs, chmod). Revised 2026-07-09 — see the §9 note before touching permissions.
 - §10: hooks are deterministic guarantees, not advisory. If safety is non-negotiable, it goes in a hook, not in `CLAUDE.md`.
-- §13: Serena is opt-in (`--serena` flag), not default. Reason: requires `uv tool install` as a host prerequisite that the template cannot guarantee. `--serena` also merges Serena's drift-prevention hooks (`serena-hooks.json`) into the project `settings.json` — the *deterministic* layer that keeps the model preferring Serena's tools over Grep/Edit (advisory prose alone decays under compaction). Hooks live in the project stub (not central) because they invoke the `serena-hooks` binary, which only exists where Serena was installed.
+- §13 (superseded): Serena and Graphify were removed; `--serena` only warns now and exit 4 is retired. Their hook entries in old projects are pruned through `templates/project/obsolete.json` on every deploy — when you retire any artifact, add it there (check.py fails if an entry still names something shipped).
 - §14: `db-inspector` is an agent (not a skill, not only the MCP) and is read-only by allow/denylist enforced in its prompt.
 - §17: portable `docs/` seeded for every project (backend.md + ui.md + user-stories.md + conventions.md + README.md) and maintained via `/update-docs`; each doc is self-maintained for editors without skills. `conventions.md` is the repo-versioned copy of the coding conventions — present in every clone, unlike the personal `~/.claude/rules/` — so non-Claude-Code tools follow the same conventions. Coverage-over-depth: every capability listed, even briefly.
 - §18: `guard-push-main` is opt-out via `"allowPushToMain": true` in `.claude/settings.local.json` (gitignored). Force push stays blocked regardless.
@@ -141,7 +142,7 @@ DESIGN.md captures the reasoning behind every structural choice — read it befo
 
 - **Run `python3 check.py` before every commit.** It is the closest thing this repo has to a test suite: twelve checks over the duplications the architecture requires (`.sh`/`.ps1` pairs, `install.ps1` deriving its rules from `settings.json`, doc inventories, shared extension globs, no inline interpreters in skills, hook wiring — no `if` gates and advisory hooks still emitting `additionalContext` — the safety-hook matrices and their known-bypass cases, DESIGN.md's structural headings, JSON validity). It exists because prose asking for lockstep did not hold — four of five spot-checked duplications had already diverged. See DESIGN.md §25.
 - **After touching a safety hook, run its case matrix** — `tests/guard-push-main-cases.py` (61 cases), `tests/guard-destructive-cases.py` (48), `tests/detect-secrets-cases.py` (39), `tests/guard-central-config-cases.py` (17), `tests/verify-on-edit-cases.py` (11). Add `--pwsh <path>` to verify the PowerShell sibling agrees on every case. Every one of these hooks shipped defects that reading them did not reveal, so a newly discovered case goes in the matrix *before* the fix. See DESIGN.md §18, §26 and §27.
-- **After touching a deployer or installer, run their matrices** — `tests/mcp-merge-cases.py` (composition, prerequisite exit codes, the serena-hooks settings merge) and `tests/install-cases.py` (settings merge preserves personal keys, manifest add/remove cycle, unparseable-settings backup). Both take `--pwsh <path>`.
+- **After touching a deployer or installer, run their matrices** — `tests/mcp-merge-cases.py` (composition, prerequisite exit codes), `tests/update-prune-cases.py` (obsolete hook pruning through both init scripts) and `tests/install-cases.py` (settings merge preserves personal keys, manifest add/remove cycle, unparseable-settings backup). Both take `--pwsh <path>`.
 - **Hook entries in `settings.json` carry no `if:` gates, on purpose.** An `if` pattern is prefix-anchored, so it reopens exactly the wrapped-form bypasses the hooks' own parsers close (`"if": "Bash(git push *)"` let `git -C /repo push origin main` through unjudged, while the matrix passed because it invokes the hook directly). Every hook self-gates and exits 0 fast on non-matches. DESIGN.md §27(b).
 - **An advisory hook must deliver through `hookSpecificOutput.additionalContext` on stdout, never stderr.** With exit 0, stderr goes to the debug log only — three hooks were inert for months that way. DESIGN.md §17 (2026-08-15 revision).
 - **After touching `check.py`, run `bash tests/check-selftest.sh`** — it injects each regression check.py claims to catch and asserts it fails, plus a control run on a pristine copy. A validator nobody tests passes on a broken repo: this one shipped blind to every central skill (a `glob("**/*.md")` that silently skips dot-directories) and the self-test is what found it.
