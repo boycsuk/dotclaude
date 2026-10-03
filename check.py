@@ -61,10 +61,21 @@ def check(name):
     return wrap
 
 
-# --- 1. Every hook ships as a .sh + .ps1 pair --------------------------------
+def py_hooks():
+    """Names of the single-file Python hooks (no .sh/.ps1 twin by design)."""
+    return sorted(os.path.basename(p)[:-3]
+                  for p in glob.glob(os.path.join(REPO, "global/.claude/hooks/*.py")))
+
+
+# --- 1. Every shell hook ships as a .sh + .ps1 pair --------------------------
 @check("hook .sh/.ps1 pairs")
 def _():
     hooks = os.path.join(REPO, "global/.claude/hooks")
+    for name in py_hooks():
+        for ext in (".sh", ".ps1"):
+            if os.path.exists(os.path.join(hooks, name + ext)):
+                fail("hook .sh/.ps1 pairs",
+                     f"{name}.py also has a {name}{ext} — one hook, one implementation")
     sh = {os.path.basename(p)[:-3] for p in glob.glob(os.path.join(hooks, "*.sh"))}
     ps = {os.path.basename(p)[:-4] for p in glob.glob(os.path.join(hooks, "*.ps1"))}
     for only in sorted(sh - ps):
@@ -90,7 +101,18 @@ def _():
     for event, groups in settings["hooks"].items():
         for group in groups:
             for hook in group["hooks"]:
-                name = os.path.basename(hook["command"]).replace(".sh", "")
+                command = hook["command"].rstrip('"')
+                if command.endswith(".py"):
+                    name = os.path.basename(command)
+                    if not command.startswith("python3 "):
+                        fail("settings.json hook wiring",
+                             f"{event} wires {name} without `python3 ` — install.ps1 "
+                             f"only rewrites that form to the verified interpreter")
+                    if not os.path.exists(os.path.join(REPO, "global/.claude/hooks", name)):
+                        fail("settings.json hook wiring",
+                             f"{event} wires '{name}' but it does not exist")
+                    continue
+                name = os.path.basename(command).replace(".sh", "")
                 for ext in (".sh", ".ps1"):
                     path = os.path.join(REPO, "global/.claude/hooks", name + ext)
                     if not os.path.exists(path):
@@ -136,7 +158,7 @@ def _():
 @check("doc inventories")
 def _():
     hooks = sorted(os.path.basename(p)[:-3]
-                   for p in glob.glob(os.path.join(REPO, "global/.claude/hooks/*.sh")))
+                   for p in glob.glob(os.path.join(REPO, "global/.claude/hooks/*.sh"))) + py_hooks()
     agents = sorted(os.path.basename(p)[:-3]
                     for p in glob.glob(os.path.join(REPO, "global/.claude/agents/*.md")))
     skills = sorted(os.path.basename(os.path.dirname(p))
@@ -349,6 +371,24 @@ def _():
                 fail("hook wiring",
                      f"{name}.{ext} does not emit additionalContext — an advisory "
                      f"written to stderr with exit 0 never reaches the model")
+
+    # Python hooks declare their kind instead of being listed here by hand, so
+    # a new hook cannot dodge this check by never being added to a tuple.
+    for name in py_hooks():
+        body = read(f"global/.claude/hooks/{name}.py")
+        m = re.search(r"^# hook-kind: (guard|advisory)\s*$", body, re.M)
+        if not m:
+            fail("hook wiring",
+                 f"{name}.py has no `# hook-kind: guard|advisory` header line")
+        elif m.group(1) == "advisory" and "hookio.context(" not in body:
+            fail("hook wiring",
+                 f"{name}.py is advisory but never calls hookio.context() — its "
+                 f"text would not reach the model")
+        elif m.group(1) == "guard" and not os.path.exists(
+                os.path.join(REPO, "tests", f"{name}-cases.py")):
+            fail("hook wiring",
+                 f"{name}.py is a guard with no tests/{name}-cases.py matrix — "
+                 f"every guard hook shipped defects reading did not reveal")
 
 
 # --- 10. DESIGN.md structural headings survive edits -------------------------

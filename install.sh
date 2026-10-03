@@ -22,10 +22,10 @@ TARGET="${HOME}/.claude"
 echo "==> Installing dotclaude into $TARGET"
 
 if ! command -v python3 >/dev/null 2>&1; then
-  # python3 is required: the .sh hooks parse Claude Code's JSON input with it
-  # (DESIGN.md §5), and the settings merge below uses it. Without it the central
-  # guard hooks fail silently and the deny-first safety layer is lost.
-  echo "  ! python3 not found — it is required: the .sh hooks parse hook input with it," >&2
+  # python3 is required: the .py hooks are Python, the .sh hooks parse Claude
+  # Code's JSON input with it (DESIGN.md §5), and the settings merge below uses
+  # it. Without it the central guard hooks fail silently.
+  echo "  ! python3 not found — it is required: the hooks run on it or parse hook input with it," >&2
   echo "    and this installer merges settings with it. Install python3 (e.g. apt install python3) and re-run." >&2
   exit 1
 fi
@@ -52,10 +52,12 @@ for dir in hooks agents skills rules output-styles; do
   src="$SCRIPT_DIR/global/.claude/$dir"
   [ -d "$src" ] || continue
   mkdir -p "$TARGET/$dir"
-  cp -r "$src/." "$TARGET/$dir/"
+  # A dev checkout that ran the Python hooks or tests holds __pycache__ dirs;
+  # shipping them would leave unmanaged files in a repo-owned tree.
+  (cd "$src" && tar -cf - --exclude=__pycache__ .) | (cd "$TARGET/$dir" && tar -xf -)
   # POSIX find only: -printf is GNU-specific and BSD find (macOS) errors on it,
   # aborting the install mid-run under set -e — after the manifest cleanup.
-  (cd "$src" && find . -type f | sed "s|^\./|$dir/|") >> "$MANIFEST.tmp"
+  (cd "$src" && find . -type f ! -path '*/__pycache__/*' | sed "s|^\./|$dir/|") >> "$MANIFEST.tmp"
 done
 # Unix uses the .sh hooks; drop the Windows .ps1 siblings (and keep them out of
 # the manifest, so a later install does not try to remove files never written).
@@ -71,7 +73,7 @@ chmod +x "$TARGET/hooks/"*.sh 2>/dev/null || true
 for dir in skills agents rules output-styles hooks; do
   [ -d "$TARGET/$dir" ] && find "$TARGET/$dir" -mindepth 1 -type d -empty -delete 2>/dev/null || true
 done
-echo "  - central hooks/agents/skills/rules/output-styles installed (.sh hooks)"
+echo "  - central hooks/agents/skills/rules/output-styles installed (.sh + .py hooks)"
 
 # --- Central settings.json: MERGE into the user's, do not clobber ------------
 # We own permissions/hooks/attribution; the user may have their own keys
