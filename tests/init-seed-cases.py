@@ -20,15 +20,18 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import stubs  # noqa: E402
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = os.path.join(REPO, "templates/project")
 SH = os.path.join(TEMPLATE_DIR, "init.sh")
 PS1 = os.path.join(TEMPLATE_DIR, "init.ps1")
 
 
-def write(path, text, newline=None):
+def write(path, text, newline=""):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", newline=newline) as fh:
+    with open(path, "w", encoding="utf-8", newline=newline) as fh:
         fh.write(text)
 
 
@@ -40,7 +43,7 @@ def read(path):
 def run(project, pwsh, *args):
     cmd = ([pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]) + list(args)
     env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR)
-    return subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True,
+    return subprocess.run(cmd, cwd=project, env=env, capture_output=True, encoding="utf-8", errors="replace",
                           stdin=subprocess.DEVNULL)
 
 
@@ -111,8 +114,11 @@ def case_symlinks_are_not_written_through(project, pwsh):
     try:
         target = os.path.join(outside, "rcfile")
         write(target, "export X=1\n")
-        os.symlink(target, os.path.join(project, ".gitignore"))
-        os.symlink(os.path.join(outside, "missing.md"), os.path.join(project, "CLAUDE.md"))
+        try:
+            os.symlink(target, os.path.join(project, ".gitignore"))
+            os.symlink(os.path.join(outside, "missing.md"), os.path.join(project, "CLAUDE.md"))
+        except OSError:            # Windows without Developer Mode cannot create one
+            return None
         proc = run(project, pwsh)
         if proc.returncode != 0:
             return f"init exited {proc.returncode} on a dangling symlink: {proc.stderr[-200:]}"
@@ -123,6 +129,17 @@ def case_symlinks_are_not_written_through(project, pwsh):
     finally:
         shutil.rmtree(outside, ignore_errors=True)
     return None
+
+
+def case_crlf_example_is_not_drift(project, pwsh):
+    # The same text with CRLF line endings (a Windows checkout) is no edit.
+    with open(os.path.join(TEMPLATE_DIR, ".claude", "settings.local.json.example"), encoding="utf-8", newline="") as fh:
+        text = fh.read().replace("\r\n", "\n").replace("\n", "\r\n")
+    write(os.path.join(project, ".claude", "settings.local.json.example"), text, newline="")
+    proc = run(project, pwsh, "--update")
+    if proc.returncode != 0:
+        return "init exited non-zero"
+    return "a CRLF copy of the example was reported as drift" if "DRIFT:" in proc.stderr else None
 
 
 def case_edited_example_is_kept(project, pwsh):
@@ -140,23 +157,21 @@ def case_permissions_merge_keeps_user_rules(project, pwsh):
     settings = os.path.join(project, ".claude", "settings.json")
     write(settings, json.dumps({"permissions": {"allow": ["Bash(make:*)"], "deny": ["Read(./x)"]}}))
     stub = os.path.join(project, "bin")
-    os.makedirs(stub)
-    write(os.path.join(stub, "codebase-memory-mcp"), "#!/bin/sh\nexit 0\n")
-    os.chmod(os.path.join(stub, "codebase-memory-mcp"), 0o755)
+    stubs.write_stub(stub, "codebase-memory-mcp")
     env_path = stub + os.pathsep + os.environ["PATH"]
     cmd = ([pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]) + ["--codebase-memory"]
-    proc = subprocess.run(cmd, cwd=project, capture_output=True, text=True,
+    proc = subprocess.run(cmd, cwd=project, capture_output=True, encoding="utf-8", errors="replace",
                           env=dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=env_path))
     if proc.returncode != 0:
         return f"init --codebase-memory exited {proc.returncode}: {proc.stderr[-200:]}"
-    with open(settings) as fh:
+    with open(settings, encoding="utf-8") as fh:
         perms = json.load(fh)["permissions"]
     if perms["allow"][:1] != ["Bash(make:*)"] or perms.get("deny") != ["Read(./x)"]:
         return f"the user's own rules were reordered or dropped: {perms}"
     if not any(r.startswith("mcp__codebase-memory-mcp__") for r in perms["allow"]):
         return "the read-only tool permissions were not added"
     write(settings, "{not json")
-    cmd_again = subprocess.run(cmd, cwd=project, capture_output=True, text=True,
+    cmd_again = subprocess.run(cmd, cwd=project, capture_output=True, encoding="utf-8", errors="replace",
                                env=dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=env_path))
     if cmd_again.returncode != 0 or read(settings) != b"{not json":
         return "an unreadable settings.json was overwritten (or broke the deploy)"
@@ -190,16 +205,14 @@ def case_scaffolds(project, pwsh):
 
 def case_ui_permissions_are_named(project, pwsh):
     stub = os.path.join(project, "bin")
-    os.makedirs(stub)
-    write(os.path.join(stub, "npx"), "#!/bin/sh\nexit 0\n")
-    os.chmod(os.path.join(stub, "npx"), 0o755)
+    stubs.write_stub(stub, "npx")
     cmd = ([pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]) + ["--ui"]
-    proc = subprocess.run(cmd, cwd=project, capture_output=True, text=True,
+    proc = subprocess.run(cmd, cwd=project, capture_output=True, encoding="utf-8", errors="replace",
                           env=dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR,
                                    PATH=stub + os.pathsep + os.environ["PATH"]))
     if proc.returncode != 0:
         return f"init --ui exited {proc.returncode}: {proc.stderr[-200:]}"
-    with open(os.path.join(project, ".claude", "settings.json")) as fh:
+    with open(os.path.join(project, ".claude", "settings.json"), encoding="utf-8") as fh:
         allow = json.load(fh).get("permissions", {}).get("allow", [])
     if "mcp__playwright__browser_navigate" not in allow:
         return f"--ui did not merge the browser tool permissions: {allow}"
@@ -217,6 +230,7 @@ CASES = [
     ("--dry-run/--yes/--depth without --recursive deploy nothing", case_recursive_flags_alone_deploy_nothing),
     ("symlinks in the project are not written through", case_symlinks_are_not_written_through),
     ("an edited settings.local.json.example is kept and reported", case_edited_example_is_kept),
+    ("a CRLF copy of the example is not drift", case_crlf_example_is_not_drift),
     ("the permission merge keeps the user's rules", case_permissions_merge_keeps_user_rules),
     ("scaffolds land once and never overwrite", case_scaffolds),
 ]
@@ -227,7 +241,7 @@ def main():
     ap.add_argument("--pwsh", help="path to pwsh, to run init.ps1 too")
     args = ap.parse_args()
     total = bad = 0
-    for label, pwsh in (("sh", None),) + ((("ps1", args.pwsh),) if args.pwsh else ()):
+    for pwsh, label in stubs.shell_targets(args.pwsh):
         for name, fn in CASES:
             project = tempfile.mkdtemp(prefix="init-seed-")
             try:

@@ -21,6 +21,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import stubs  # noqa: E402
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = os.path.join(REPO, "templates/project")
 SH = os.path.join(TEMPLATE_DIR, "init.sh")
@@ -37,12 +40,12 @@ MINE = {"command": "my-mcp", "args": [], "env": {}}
 
 def write(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         fh.write(data if isinstance(data, str) else json.dumps(data, indent=2))
 
 
 def stub_with(**extra):
-    with open(STUB) as fh:
+    with open(STUB, encoding="utf-8") as fh:
         data = json.load(fh)
     data.update(extra)
     return data
@@ -89,20 +92,18 @@ def env_for(tmp):
     # serena-hooks on PATH on purpose: the plan once said "pruned" for
     # Serena's hooks while the deploy kept them because the binary existed.
     for tool in ("npx", "serena-hooks"):
-        path = os.path.join(bindir, tool)
-        write(path, "#!/bin/sh\nexit 0\n")
-        os.chmod(path, 0o755)
+        stubs.write_stub(bindir, tool)
     return dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=bindir + os.pathsep + os.environ["PATH"])
 
 
 def run(tmp, root, args, pwsh):
     cmd = ([pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]) + args
-    return subprocess.run(cmd, cwd=root, env=env_for(tmp), capture_output=True, text=True,
+    return subprocess.run(cmd, cwd=root, env=env_for(tmp), capture_output=True, encoding="utf-8", errors="replace",
                           stdin=subprocess.DEVNULL)
 
 
 def load(path):
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
 
@@ -147,7 +148,7 @@ def check(tmp, pwsh):
     if "hooks" in settings_a:
         problems.append(f"project a: obsolete hooks survived: {settings_a['hooks']}")
     allow = settings_a.get("permissions", {}).get("allow", [])
-    with open(os.path.join(TEMPLATE_DIR, "permissions", "playwright.json")) as fh:
+    with open(os.path.join(TEMPLATE_DIR, "permissions", "playwright.json"), encoding="utf-8") as fh:
         named = json.load(fh)["allow"]
     if allow != ["Bash(make:*)"] + named:
         problems.append(f"project a: permissions wrong after removal: {allow}")
@@ -180,17 +181,13 @@ def check_failure_exit(tmp, pwsh):
     root = os.path.join(tmp, "root")
     write(os.path.join(root, "p", ".claude/settings.json"), stub_with())
     write(os.path.join(root, "p", ".mcp.json"), {"mcpServers": {"playwright": OLD_PLAYWRIGHT}})
-    bindir = os.path.join(tmp, "bin")
-    os.makedirs(bindir)
-    for tool in ("bash", "sh", "python3", "git", "cp", "mkdir", "grep", "cmp", "dirname", "basename",
-                 "cat", "sed", "chmod", "env", "printf", "tr", "tail", "head", "sort", "mktemp", "rm",
-                 "uname", "ls"):
-        src = shutil.which(tool)
-        if src:
-            os.symlink(src, os.path.join(bindir, tool))
-    env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=bindir)    # no npx: --ui exits 7
+    path = stubs.minimal_path(os.path.join(tmp, "bin"),
+                              ("bash", "sh", "python3", "git", "cp", "mkdir", "grep", "cmp", "dirname",
+                               "basename", "cat", "sed", "chmod", "env", "printf", "tr", "tail", "head",
+                               "sort", "mktemp", "rm", "uname", "ls"))
+    env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=path)    # no npx: --ui exits 7
     cmd = ([pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]) + ["--update", "--recursive", root, "--yes"]
-    proc = subprocess.run(cmd, cwd=root, env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    proc = subprocess.run(cmd, cwd=root, env=env, capture_output=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
     if proc.returncode != 10:
         return [f"a failed project made the run exit {proc.returncode}, want 10: {proc.stdout[-300:]!r}"]
     if "FAILED" not in proc.stdout or "1 failed" not in proc.stdout:
@@ -203,7 +200,7 @@ def main():
     ap.add_argument("--pwsh", help="path to pwsh, to run init.ps1 too")
     args = ap.parse_args()
     bad = 0
-    for label, pwsh in (("sh", None),) + ((("ps1", args.pwsh),) if args.pwsh else ()):
+    for pwsh, label in stubs.shell_targets(args.pwsh):
         tmp = tempfile.mkdtemp(prefix="update-projects-")
         try:
             problems = check(tmp, pwsh)

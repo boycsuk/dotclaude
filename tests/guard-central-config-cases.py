@@ -67,7 +67,7 @@ CASES = [
 def invoke(pwsh, home, tool_input, tool="Edit"):
     payload = {"tool_name": tool, "tool_input": tool_input, "cwd": home}
     code, out, err = pyhook.run("guard-central-config", payload, cwd=home, pwsh=pwsh,
-                                env={"HOME": home, "USERPROFILE": home})
+                                env=pyhook.home_env(home))
     if code != 0 or err.strip():
         return f"CRASH(rc={code}, {err.strip()[-120:]!r})"
     return BLOCK if pyhook.decision(out) == "deny" else ALLOW
@@ -83,12 +83,19 @@ def main():
     with open(os.path.join(home, ".claude", "settings.json"), "w") as fh:
         fh.write("{}")
     link = os.path.join(home, "link-to-settings.json")
-    os.symlink(os.path.join(home, ".claude", "settings.json"), link)
     linked_dir = os.path.join(home, "elsewhere")
-    os.symlink(os.path.join(home, ".claude", "hooks"), linked_dir)
+    try:
+        os.symlink(os.path.join(home, ".claude", "settings.json"), link)
+        os.symlink(os.path.join(home, ".claude", "hooks"), linked_dir, target_is_directory=True)
+        skipped = set()
+    except OSError:                    # Windows without Developer Mode cannot create one
+        skipped = {"SYMLINK", "SYMLINKED_DIR"}
+        print("  (symlink cases skipped: this account cannot create symlinks)")
 
     failures = 0
     for path, want, why in CASES:
+        if path in skipped:
+            continue
         tool = "Edit"
         if path == "SYMLINK":
             tool_input = {"file_path": link}

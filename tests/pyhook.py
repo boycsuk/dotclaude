@@ -33,6 +33,17 @@ def powershell_hook(pwsh, command):
             f"{command}; exit $LASTEXITCODE"]
 
 
+def home_env(path):
+    """Environment that makes `path` the home directory for Python, PowerShell and git on any OS.
+
+    Setting HOME alone isolates nothing on Windows: Python's expanduser reads
+    USERPROFILE there and PowerShell's $HOME comes from USERPROFILE or
+    HOMEDRIVE+HOMEPATH, so a test would read (or install into) the real profile.
+    """
+    drive, rest = os.path.splitdrive(path)
+    return {"HOME": path, "USERPROFILE": path, "HOMEDRIVE": drive, "HOMEPATH": rest or path}
+
+
 def ps_quote(text):
     """A PowerShell single-quoted literal: no `$` expansion, `'` doubled."""
     return "'" + text.replace("'", "''") + "'"

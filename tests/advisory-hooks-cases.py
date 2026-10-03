@@ -45,7 +45,7 @@ def scratch():
 def run(runner, hook, payload, cwd):
     """Run the hook as production does; return an object with returncode, out (parsed) and stderr."""
     code, out, err = pyhook.run(hook, payload, cwd=cwd, pwsh=PWSH if runner == "ps1" else None,
-                                env={"HOME": scratch()})
+                                env=pyhook.home_env(scratch()))
     return SimpleNamespace(returncode=code, out=out, stderr=err)
 
 

@@ -215,7 +215,9 @@ if [ -f "$SRC_CLAUDE/settings.local.json.example" ]; then
   ex_dst="$DST_CLAUDE/settings.local.json.example"
   if [ ! -f "$ex_dst" ]; then
     cp "$SRC_CLAUDE/settings.local.json.example" "$ex_dst"
-  elif ! cmp -s "$SRC_CLAUDE/settings.local.json.example" "$ex_dst"; then
+  # Line endings do not count as an edit: a Windows checkout (autocrlf) holds
+  # the same text with CRLF.
+  elif [ "$(tr -d '\r' < "$SRC_CLAUDE/settings.local.json.example")" != "$(tr -d '\r' < "$ex_dst")" ]; then
     echo "DRIFT: .claude/settings.local.json.example (template updated; your edits kept)" >&2
   fi
 fi

@@ -244,12 +244,15 @@ def main():
     subprocess.run(["git", "-C", session, "checkout", "-q", "-B", "feature/s"], check=True)
     set_optout(session, True)                   # ...lives on main by choice
     other = make_repo()                         # target: on main, no opt-out
+    # As typed into Git Bash on Windows: an unquoted backslash is an escape
+    # there, so a real command spells C:/Users/..., never C:\Users\...
+    other_sh = other.replace("\\", "/")
     cross = [
-        (f"git -C {other} push origin main", BLOCK, "session opt-out must not cover another repo"),
-        (f"git -C {other} push", BLOCK, "bare push resolves HEAD in the -C repo (main), not the session's"),
-        (f"cd {other} && git push", BLOCK, "cd into another repo, then a bare push"),
-        (f"cd {other} && git push origin feature/x", ALLOW, "feature branch in another repo"),
-        (f"pushd {other} && git push", BLOCK, "pushd into another repo, then a bare push"),
+        (f"git -C {other_sh} push origin main", BLOCK, "session opt-out must not cover another repo"),
+        (f"git -C {other_sh} push", BLOCK, "bare push resolves HEAD in the -C repo (main), not the session's"),
+        (f"cd {other_sh} && git push", BLOCK, "cd into another repo, then a bare push"),
+        (f"cd {other_sh} && git push origin feature/x", ALLOW, "feature branch in another repo"),
+        (f"pushd {other_sh} && git push", BLOCK, "pushd into another repo, then a bare push"),
         ("git push", ALLOW, "the session repo itself is on a feature branch"),
     ]
     for cmd, want, why in cross:
@@ -260,8 +263,8 @@ def main():
                 print(f"  FAIL want {want} got {got} ({name}) | {cmd}   ({why})")
     set_optout(session, False)
     set_optout(other, True)
-    for cmd, want, why in ((f"git -C {other} push origin main", ALLOW, "the target repo's own opt-out applies"),
-                           (f"cd {other}/.claude && git push origin main", ALLOW, "opt-out found from a subdirectory")):
+    for cmd, want, why in ((f"git -C {other_sh} push origin main", ALLOW, "the target repo's own opt-out applies"),
+                           (f"cd {other_sh}/.claude && git push origin main", ALLOW, "opt-out found from a subdirectory")):
         for name, runner in runners:
             got = invoke(runner, cmd, session)
             if got != want:

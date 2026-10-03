@@ -848,6 +848,20 @@ def _():
             fail("script syntax",
                  f"{rel} does not parse: {detail[0] if detail else 'bash -n failed'}")
 
+    # Windows PowerShell 5.1 reads a BOM-less script in the ANSI code page: an
+    # em dash (E2 80 94) becomes `â€”`, and 0x94 is a curly quote PowerShell
+    # accepts as a string delimiter. install.ps1 and init.ps1 never parsed on
+    # 5.1 for that reason; only pwsh 7 (UTF-8 by default) was ever tested.
+    for path in sorted(walk_files(["templates/project"], ".ps1")) + sorted(
+            walk_files(["templates/project"], ".ps1.template")) + [os.path.join(REPO, "install.ps1")]:
+        rel = os.path.relpath(path, REPO)
+        for i, line in enumerate(read(rel).splitlines(), 1):
+            if any(ord(c) > 127 for c in line):
+                fail("script syntax",
+                     f"{rel}:{i} has a non-ASCII character — Windows PowerShell 5.1 reads it "
+                     f"in the ANSI code page and can fail to parse the whole script")
+                break
+
     # Python is now the standard hook form, and a .py hook that fails to
     # compile exits 1 — a non-blocking error, so the guard is silently off.
     # A broken _lib/hookio.py takes every .py hook down with it.

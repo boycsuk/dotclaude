@@ -37,32 +37,23 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import stubs  # noqa: E402
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SH = os.path.join(REPO, "templates/project/init.sh")
 PS1 = os.path.join(REPO, "templates/project/init.ps1")
 TEMPLATE_DIR = os.path.join(REPO, "templates/project")
 
-def write_stub(bindir, name, body):
-    path = os.path.join(bindir, name)
-    with open(path, "w") as fh:
-        fh.write(body)
-    os.chmod(path, 0o755)
-
-
 def make_bin(tmp, omit=(), uname_out="Darwin", xcrun_fail=False):
     """Stub the host probes so a Linux CI box can act like a Mac (or fail
     like a host missing a prerequisite)."""
     bindir = os.path.join(tmp, "bin")
-    os.makedirs(bindir, exist_ok=True)
-    stubs = {
-        "uname": "#!/bin/sh\necho %s\n" % uname_out,
-        "xcrun": "#!/bin/sh\nexit 1\n" if xcrun_fail else "#!/bin/sh\nexit 0\n",
-        "npx": "#!/bin/sh\nexit 0\n",
-        "codebase-memory-mcp": "#!/bin/sh\nexit 0\n",
-    }
-    for name, body in stubs.items():
+    if "uname" not in omit:
+        stubs.write_stub(bindir, "uname", uname_out + "\n")
+    for name, code in (("xcrun", 1 if xcrun_fail else 0), ("npx", 0), ("codebase-memory-mcp", 0)):
         if name not in omit:
-            write_stub(bindir, name, body)
+            stubs.write_stub(bindir, name, code=code)
     return bindir
 
 
@@ -77,11 +68,9 @@ def syspath():
     if _SYSPATH is None:
         _SYSPATH = tempfile.mkdtemp(prefix="mcp-syspath-")
         atexit.register(shutil.rmtree, _SYSPATH, True)
-        for tool in ("bash", "sh", "python3", "cp", "mkdir", "grep", "cmp",
-                     "dirname", "basename", "cat", "sed", "chmod", "env"):
-            src = shutil.which(tool)
-            if src:
-                os.symlink(src, os.path.join(_SYSPATH, tool))
+        _SYSPATH = stubs.minimal_path(_SYSPATH, ("bash", "sh", "python3", "cp", "mkdir", "grep", "cmp",
+                                                 "dirname", "basename", "cat", "sed", "chmod", "env", "tr",
+                                                 "tail", "git"))
     return _SYSPATH
 
 
@@ -108,7 +97,7 @@ def run(tmp, args, pwsh=None, omit=(), uname_out="Darwin", xcrun_fail=False,
     else:
         cmd = ["bash", SH] + args
     p = subprocess.run(cmd, cwd=tmp, env=env,
-                       capture_output=True, text=True)
+                       capture_output=True, encoding="utf-8", errors="replace")
     return p.returncode
 
 
@@ -116,7 +105,7 @@ def servers(tmp):
     path = os.path.join(tmp, ".mcp.json")
     if not os.path.exists(path):
         return None
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         return set(json.load(fh).get("mcpServers", {}).keys())
 
 
@@ -198,7 +187,7 @@ CBM_WRITERS = ("index_repository", "delete_project", "manage_adr", "ingest_trace
 def readonly_permissions(tmp):
     """--codebase-memory allows the read-only graph tools by exact name, once
     each, and never a wildcard or a tool that writes or deletes."""
-    with open(os.path.join(tmp, ".claude", "settings.json")) as fh:
+    with open(os.path.join(tmp, ".claude", "settings.json"), encoding="utf-8") as fh:
         allow = json.load(fh).get("permissions", {}).get("allow", [])
     cbm = [r for r in allow if r.startswith("mcp__codebase-memory-mcp")]
     if "mcp__codebase-memory-mcp__trace_path" not in cbm:
@@ -216,7 +205,7 @@ THIRD_PARTY = {"command": "my-mcp", "args": ["--flag"], "env": {"K": "v"}}
 
 def third_party_survives(tmp):
     """A server the template knows nothing about must never be dropped."""
-    with open(os.path.join(tmp, ".mcp.json")) as fh:
+    with open(os.path.join(tmp, ".mcp.json"), encoding="utf-8") as fh:
         cfg = json.load(fh)
     if "mine" not in cfg.get("mcpServers", {}):
         return "third-party 'mine' server was dropped"
@@ -226,12 +215,12 @@ def third_party_survives(tmp):
 
 
 def seed_third_party(tmp):
-    with open(os.path.join(tmp, ".mcp.json"), "w") as fh:
+    with open(os.path.join(tmp, ".mcp.json"), "w", encoding="utf-8") as fh:
         json.dump({"mcpServers": {"mine": THIRD_PARTY}}, fh)
 
 
 def seed_hand_added_playwright(tmp):
-    with open(os.path.join(tmp, ".mcp.json"), "w") as fh:
+    with open(os.path.join(tmp, ".mcp.json"), "w", encoding="utf-8") as fh:
         json.dump({"mcpServers": {
             "playwright": {"command": "npx", "args": ["-y", "@playwright/mcp"], "env": {}}
         }}, fh)
@@ -242,9 +231,7 @@ def main():
     ap.add_argument("--pwsh")
     args = ap.parse_args()
 
-    targets = [(None, "sh")]
-    if args.pwsh:
-        targets.append((args.pwsh, "ps1"))
+    targets = stubs.shell_targets(args.pwsh)
 
     total = bad = 0
 
@@ -275,10 +262,10 @@ def main():
         # the deploy or clobber the user's bytes.
         tmp = tempfile.mkdtemp(prefix="mcpcase-")
         try:
-            with open(os.path.join(tmp, ".mcp.json"), "w") as fh:
+            with open(os.path.join(tmp, ".mcp.json"), "w", encoding="utf-8") as fh:
                 fh.write("this is not json {")
             code = run(tmp, ["--ui"], pwsh)
-            with open(os.path.join(tmp, ".mcp.json")) as fh:
+            with open(os.path.join(tmp, ".mcp.json"), encoding="utf-8") as fh:
                 content = fh.read()
             problem = None
             if code != 0:
@@ -310,12 +297,12 @@ def main():
         # the case still pins the contract wherever the matrix runs.
         tmp = tempfile.mkdtemp(prefix="mcpcase-")
         try:
-            with open(os.path.join(tmp, ".mcp.json"), "w") as fh:
+            with open(os.path.join(tmp, ".mcp.json"), "w", encoding="utf-8") as fh:
                 json.dump({"mcpServers": {
                     "custom": {"command": "custom-mcp", "args": [], "env": {}}
                 }}, fh)
             run(tmp, ["--xcode"], pwsh)
-            with open(os.path.join(tmp, ".mcp.json")) as fh:
+            with open(os.path.join(tmp, ".mcp.json"), encoding="utf-8") as fh:
                 sargs = json.load(fh)["mcpServers"]["custom"].get("args")
             problem = None if sargs == [] else f"empty args became {sargs!r}"
         finally:
@@ -329,10 +316,10 @@ def main():
         try:
             seed_hand_added_playwright(tmp)
             run(tmp, ["--ui"], pwsh)
-            with open(os.path.join(tmp, ".mcp.json")) as fh:
+            with open(os.path.join(tmp, ".mcp.json"), encoding="utf-8") as fh:
                 spec = json.load(fh)["mcpServers"].get("playwright", {})
             problem = None
-            with open(os.path.join(TEMPLATE_DIR, "mcp", "playwright.json")) as fh:
+            with open(os.path.join(TEMPLATE_DIR, "mcp", "playwright.json"), encoding="utf-8") as fh:
                 shipped = json.load(fh)["playwright"]
             if spec.get("args") != shipped["args"]:
                 problem = f"hand-added playwright not adopted by --ui: {spec}"

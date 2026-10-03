@@ -101,14 +101,15 @@ def check_example_drift():
     ours = os.path.join(template_dir(), ".claude", "settings.local.json.example")
     try:
         with open(mine, "rb") as fh:
-            local = fh.read()
+            local = fh.read().replace(b"\r\n", b"\n")
     except FileNotFoundError:
         return "ABSENT"
     except OSError:
         return UNKNOWN
     try:
         with open(ours, "rb") as fh:
-            return "NO" if fh.read() == local else "YES"
+            # Line endings are no edit: a Windows checkout holds the same text with CRLF.
+            return "NO" if fh.read().replace(b"\r\n", b"\n") == local else "YES"
     except OSError:
         return UNKNOWN
 

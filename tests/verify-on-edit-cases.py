@@ -37,13 +37,25 @@ import pyhook  # noqa: E402
 FAIL, QUIET = "FAIL", "QUIET"          # FAIL = exit 2 (errors surfaced)
 
 
-def write_stub(bindir, name, body):
-    """A fake binary on PATH. Body is POSIX sh; a .cmd twin covers Windows."""
+def write_stub(bindir, name, out="", code=0, sleep=0):
+    """A fake binary on PATH that prints `out`, waits `sleep` seconds and exits `code`.
+
+    Written in Python so it runs on every OS: an executable `name` with a
+    shebang on POSIX, a `name.cmd` launcher on Windows (which neither runs a
+    `#!/bin/sh` script nor finds a file without a PATHEXT extension).
+    """
+    body = (f"import sys, time\ntime.sleep({sleep})\nsys.stdout.write({out!r})\n"
+            f"sys.stdout.flush()\nsys.exit({code})\n")
+    if os.name == "nt":
+        with open(os.path.join(bindir, name + ".stub.py"), "w") as fh:
+            fh.write(body)
+        with open(os.path.join(bindir, name + ".cmd"), "w") as fh:
+            fh.write(f'@"{sys.executable}" "%~dp0{name}.stub.py" %*\n')
+        return
     path = os.path.join(bindir, name)
     with open(path, "w") as fh:
-        fh.write("#!/bin/sh\n" + body + "\n")
+        fh.write(f"#!{sys.executable}\n" + body)
     os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
-    return path
 
 
 def build_fixture(kind):
@@ -55,21 +67,21 @@ def build_fixture(kind):
     if kind == "js-lint-fails":
         with open(os.path.join(root, "package.json"), "w") as fh:
             fh.write('{"scripts": {"lint": "x"}}')
-        write_stub(bindir, "npm", 'echo "1 problem (1 error)"; exit 1')
+        write_stub(bindir, "npm", "1 problem (1 error)\n", 1)
     elif kind == "js-lint-passes":
         with open(os.path.join(root, "package.json"), "w") as fh:
             fh.write('{"scripts": {"lint": "x"}}')
-        write_stub(bindir, "npm", "exit 0")
+        write_stub(bindir, "npm")
     elif kind == "js-no-scripts":
         with open(os.path.join(root, "package.json"), "w") as fh:
             fh.write("{}")
-        write_stub(bindir, "npm", "exit 1")
+        write_stub(bindir, "npm", code=1)
     elif kind == "js-lint-in-deps":
         # "lint"/"typecheck" appear only as dependency names: the old
         # whole-file grep matched them and ran scripts that do not exist.
         with open(os.path.join(root, "package.json"), "w") as fh:
             fh.write('{"dependencies": {"lint": "1.0.0", "typecheck": "2.0.0"}}')
-        write_stub(bindir, "npm", 'echo "Missing script"; exit 1')
+        write_stub(bindir, "npm", "Missing script\n", 1)
     elif kind == "js-no-npm":
         with open(os.path.join(root, "package.json"), "w") as fh:
             fh.write('{"scripts": {"lint": "x"}}')
@@ -77,7 +89,7 @@ def build_fixture(kind):
     elif kind == "js-hanging-lint":
         with open(os.path.join(root, "package.json"), "w") as fh:
             fh.write('{"scripts": {"lint": "x"}}')
-        write_stub(bindir, "npm", "sleep 30; exit 1")
+        write_stub(bindir, "npm", code=1, sleep=30)
     elif kind == "py-no-tools":
         with open(os.path.join(root, "pyproject.toml"), "w") as fh:
             fh.write("[tool.ruff]\n")
@@ -87,28 +99,28 @@ def build_fixture(kind):
         # output here" and dropped everything after it.
         with open(os.path.join(root, "pyproject.toml"), "w") as fh:
             fh.write("[tool.ruff]\n")
-        write_stub(bindir, "ruff", 'printf \'%s\\n\' \'error in "C:\\code\\x.py"\' TAIL-MARKER; exit 1')
+        write_stub(bindir, "ruff", 'error in "C:\\code\\x.py"\nTAIL-MARKER\n', 1)
     elif kind == "py-mypy-fails":
         with open(os.path.join(root, "pyproject.toml"), "w") as fh:
             fh.write("[tool.mypy]\n")
-        write_stub(bindir, "mypy", 'echo "error: Incompatible types"; exit 1')
+        write_stub(bindir, "mypy", "error: Incompatible types\n", 1)
     elif kind == "js-typecheck-fails":
         with open(os.path.join(root, "package.json"), "w") as fh:
             fh.write('{"scripts": {"typecheck": "x"}}')
-        write_stub(bindir, "npm", 'echo "TS2322"; exit 1')
+        write_stub(bindir, "npm", "TS2322\n", 1)
     elif kind == "js-pnpm-project":
         # The lockfile picks the runner: pnpm fails, npm would pass.
         with open(os.path.join(root, "package.json"), "w") as fh:
             fh.write('{"scripts": {"lint": "x"}}')
         open(os.path.join(root, "pnpm-lock.yaml"), "w").close()
-        write_stub(bindir, "npm", "exit 0")
-        write_stub(bindir, "pnpm", 'echo "1 problem"; exit 1')
+        write_stub(bindir, "npm")
+        write_stub(bindir, "pnpm", "1 problem\n", 1)
     elif kind == "rs-clippy-fails":
         open(os.path.join(root, "Cargo.toml"), "w").close()
-        write_stub(bindir, "cargo", 'echo "warning: unused"; exit 1')
+        write_stub(bindir, "cargo", "warning: unused\n", 1)
     elif kind == "go-vet-fails":
         open(os.path.join(root, "go.mod"), "w").close()
-        write_stub(bindir, "go", 'echo "vet: unreachable code"; exit 1')
+        write_stub(bindir, "go", "vet: unreachable code\n", 1)
     elif kind == "empty":
         pass
     return root, bindir
@@ -150,27 +162,13 @@ CASES = [
 ]
 
 
-_SYSPATH = None
-
-
-def syspath():
-    """A dir of symlinks to the tools the hooks themselves need — and nothing
-    else. Prepending the real PATH would leak the machine's npm/ruff into the
-    fixtures and the 'binary missing' cases would silently test nothing."""
-    global _SYSPATH
-    if _SYSPATH is None:
-        _SYSPATH = tempfile.mkdtemp(prefix="verify-syspath-")
-        for tool in ("bash", "sh", "python3", "timeout", "grep", "sleep", "cat", "env"):
-            src = shutil.which(tool)
-            if src:
-                os.symlink(src, os.path.join(_SYSPATH, tool))
-    return _SYSPATH
-
-
 def invoke(runner, root, bindir, file_path, stderr=None):
     env = dict(os.environ,
                CLAUDE_PROJECT_DIR=root,
-               PATH=bindir + os.pathsep + syspath(),
+               # Only the stubs: the machine's own npm/ruff would otherwise answer
+               # and the "binary missing" cases would test nothing. The hook and
+               # the stubs run on absolute interpreter paths, so nothing else is needed.
+               PATH=bindir,
                VERIFY_TIMEOUT="2")
     payload = {"tool_input": {"file_path": file_path}}
     proc = subprocess.run(runner, input=json.dumps(payload),

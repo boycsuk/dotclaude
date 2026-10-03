@@ -1,4 +1,4 @@
-# Project lifecycle script — SKELETON (Windows, lockstep sibling of deploy.sh).
+# Project lifecycle script - SKELETON (Windows, lockstep sibling of deploy.sh).
 # The structure is wired up; you fill in the bodies for how THIS project
 # starts/stops/logs. Keep the four subcommands.
 #

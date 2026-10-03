@@ -130,7 +130,7 @@ def check_context_local_disable_wins(tmp, pwsh):
 def check_graph_added_with_claude_mcp_add(tmp, pwsh):
     """A server added with `claude mcp add` (local scope) lives in ~/.claude.json, not .mcp.json."""
     proj = project(tmp)
-    state = os.path.join(os.environ["HOME"], ".claude.json")
+    state = os.path.join(os.path.expanduser("~"), ".claude.json")
     with open(state, "w") as fh:
         json.dump({"projects": {proj: {"mcpServers": {"codebase-memory-mcp": {"command": "x"}}}}}, fh)
     try:
@@ -143,7 +143,7 @@ def check_graph_added_with_claude_mcp_add(tmp, pwsh):
 def check_user_scope_plugin(tmp, pwsh):
     """An LSP plugin enabled in the user's own ~/.claude/settings.json counts."""
     proj = project(tmp)
-    user = os.path.join(os.environ["HOME"], ".claude")
+    user = os.path.join(os.path.expanduser("~"), ".claude")
     os.makedirs(user, exist_ok=True)
     with open(os.path.join(user, "settings.json"), "w") as fh:
         json.dump({"enabledPlugins": {"rust-analyzer-lsp@claude-plugins-official": True}}, fh)
@@ -157,7 +157,7 @@ def check_user_scope_plugin(tmp, pwsh):
 def check_user_scope_server(tmp, pwsh):
     """A server added with `claude mcp add --scope user` sits at the top of ~/.claude.json."""
     proj = project(tmp)
-    state = os.path.join(os.environ["HOME"], ".claude.json")
+    state = os.path.join(os.path.expanduser("~"), ".claude.json")
     with open(state, "w") as fh:
         json.dump({"mcpServers": {"codebase-memory-mcp": {"command": "x"}}}, fh)
     try:
@@ -190,7 +190,7 @@ def main():
     total = bad = 0
     # A HOME without settings, so the user's own enabledPlugins cannot leak in.
     home = tempfile.mkdtemp(prefix="codeintel-home-")
-    os.environ["HOME"] = home
+    os.environ.update(pyhook.home_env(home))
     # The developer's own CLAUDE_CONFIG_DIR would point the hooks at real
     # settings and decide verdicts by machine.
     os.environ.pop("CLAUDE_CONFIG_DIR", None)

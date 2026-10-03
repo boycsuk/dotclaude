@@ -20,6 +20,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import stubs  # noqa: E402
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = os.path.join(REPO, "templates/project")
 SH = os.path.join(TEMPLATE_DIR, "init.sh")
@@ -51,12 +54,12 @@ LEGACY_PS1 = {
 
 def write(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         fh.write(data if isinstance(data, str) else json.dumps(data, indent=2))
 
 
 def read_json(path):
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
 
@@ -75,7 +78,7 @@ def clean_path():
 def run_init(project, pwsh):
     env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=clean_path())
     cmd = [pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]
-    return subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True)
+    return subprocess.run(cmd, cwd=project, env=env, capture_output=True, encoding="utf-8", errors="replace")
 
 
 def all_commands(settings):
@@ -160,7 +163,7 @@ def case_remove_mcp_is_exact(project, pwsh):
     write(path, {"permissions": {"allow": ["mcp__serena__find", "mcp__serenade__run"]}})
     env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=clean_path())
     cmd = ([pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]) + ["--update", "--remove-obsolete-mcp"]
-    if subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True).returncode != 0:
+    if subprocess.run(cmd, cwd=project, env=env, capture_output=True, encoding="utf-8", errors="replace").returncode != 0:
         return "init exited non-zero"
     allow = read_json(path)["permissions"]["allow"]
     servers = read_json(os.path.join(project, ".mcp.json"))["mcpServers"]
@@ -173,12 +176,12 @@ def case_idempotent(project, pwsh):
     path = os.path.join(project, ".claude/settings.json")
     write(path, {"hooks": LEGACY_SH})
     run_init(project, pwsh)
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         first = fh.read()
     mtime = os.path.getmtime(path)
     if run_init(project, pwsh).returncode != 0:
         return "second init exited non-zero"
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         second = fh.read()
     if first != second or os.path.getmtime(path) != mtime:
         return "a second run rewrote an already-clean settings.json"
@@ -189,11 +192,11 @@ def case_clean_stub_untouched(project, pwsh):
     path = os.path.join(project, ".claude/settings.json")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     shutil.copy(os.path.join(TEMPLATE_DIR, ".claude/settings.json"), path)
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         before = fh.read()
     if run_init(project, pwsh).returncode != 0:
         return "init exited non-zero"
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         if fh.read() != before:
             return "a settings.json with nothing obsolete was rewritten"
     return None
@@ -204,7 +207,7 @@ def case_unparseable_is_left_alone(project, pwsh):
     write(path, '{"hooks": {,}')
     if run_init(project, pwsh).returncode != 0:
         return "init aborted on an unparseable settings.json"
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         if fh.read() != '{"hooks": {,}':
             return "an unparseable settings.json was modified"
     return None
@@ -236,15 +239,13 @@ def case_store_stub_python_is_skipped(project, pwsh):
     if not pwsh:
         return None
     stub_dir = os.path.join(project, "stub-bin")
-    os.makedirs(stub_dir)
-    stub = os.path.join(stub_dir, "python3")
-    write(stub, "#!/bin/sh\necho 'Python was not found; run without arguments to install from the Microsoft Store'\nexit 9\n")
-    os.chmod(stub, 0o755)
+    stubs.write_stub(stub_dir, "python3", "Python was not found; run without arguments to install "
+                                          "from the Microsoft Store\n", 9)
     path = os.path.join(project, ".claude/settings.json")
     write(path, {"hooks": LEGACY_SH})
     env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=stub_dir + os.pathsep + clean_path())
     proc = subprocess.run([pwsh, "-NoProfile", "-File", PS1], cwd=project, env=env,
-                          capture_output=True, text=True)
+                          capture_output=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         return f"init exited {proc.returncode}"
     if all_commands(read_json(path)) != [USER_HOOK["command"]]:
@@ -257,14 +258,12 @@ def case_serena_pruned_while_installed(project, pwsh):
     dotclaude dropped Serena, and keeping its hooks made the recursive plan
     and the deploy disagree about what "obsolete" means."""
     stub_dir = os.path.join(project, "stub-bin")
-    os.makedirs(stub_dir)
-    write(os.path.join(stub_dir, "serena-hooks"), "#!/bin/sh\nexit 0\n")
-    os.chmod(os.path.join(stub_dir, "serena-hooks"), 0o755)
+    stubs.write_stub(stub_dir, "serena-hooks")
     path = os.path.join(project, ".claude/settings.json")
     write(path, {"hooks": LEGACY_SH})
     env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=stub_dir + os.pathsep + clean_path())
     cmd = [pwsh, "-NoProfile", "-File", PS1] if pwsh else ["bash", SH]
-    if subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True).returncode != 0:
+    if subprocess.run(cmd, cwd=project, env=env, capture_output=True, encoding="utf-8", errors="replace").returncode != 0:
         return "init exited non-zero"
     commands = all_commands(read_json(path))
     if any("prefer-" in c for c in commands):
@@ -291,11 +290,11 @@ def case_graphify_git_hooks(project, pwsh):
         return "init exited non-zero"
     if os.path.exists(os.path.join(hooks, "post-commit")):
         return "a hook holding only the graphify block was not removed"
-    with open(os.path.join(hooks, "post-checkout")) as fh:
+    with open(os.path.join(hooks, "post-checkout"), encoding="utf-8") as fh:
         checkout = fh.read()
     if "graphify" in checkout or checkout.count("mine") != 2:
         return f"post-checkout should keep only the user's lines: {checkout!r}"
-    with open(os.path.join(hooks, "pre-push")) as fh:
+    with open(os.path.join(hooks, "pre-push"), encoding="utf-8") as fh:
         if "no end marker here" not in fh.read():
             return "a hook not listed in obsolete.json was touched"
     return None
@@ -322,7 +321,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pwsh", help="path to pwsh, to run init.ps1 too")
     args = ap.parse_args()
-    targets = [(None, "sh")] + ([(args.pwsh, "ps1")] if args.pwsh else [])
+    targets = stubs.shell_targets(args.pwsh)
     total = bad = 0
     for pwsh, label in targets:
         for name, fn in CASES:

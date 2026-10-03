@@ -18,6 +18,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from stubs import minimal_path, shell_targets, write_stub  # noqa: E402
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = os.path.join(REPO, "templates/project")
 SH = os.path.join(TEMPLATE_DIR, "init.sh")
@@ -28,27 +31,17 @@ SYSTEM_TOOLS = ("bash", "sh", "python3", "cp", "mkdir", "grep", "cmp", "dirname"
 
 def make_path(tmp, stubs):
     bindir = os.path.join(tmp, "bin")
-    os.makedirs(bindir)
     log = os.path.join(tmp, "claude-calls.log")
     for name in stubs:
-        body = (f'#!/bin/sh\necho "$@" >> "{log}"\nexit 0\n' if name == "claude"
-                else "#!/bin/sh\nexit 0\n")
-        path = os.path.join(bindir, name)
-        with open(path, "w") as fh:
-            fh.write(body)
-        os.chmod(path, 0o755)
-    for tool in SYSTEM_TOOLS:
-        src = shutil.which(tool)
-        if src and not os.path.exists(os.path.join(bindir, tool)):
-            os.symlink(src, os.path.join(bindir, tool))
-    return bindir, log
+        write_stub(bindir, name, log=log if name == "claude" else None)
+    return minimal_path(bindir, SYSTEM_TOOLS), log
 
 
 def run(tmp, args, stubs, pwsh):
-    bindir, log = make_path(tmp, stubs)
-    env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=bindir)
+    path, log = make_path(tmp, stubs)
+    env = dict(os.environ, TEMPLATE_DIR=TEMPLATE_DIR, PATH=path)
     cmd = [pwsh, "-NoProfile", "-File", PS1] + args if pwsh else ["bash", SH] + args
-    proc = subprocess.run(cmd, cwd=tmp, env=env, capture_output=True, text=True)
+    proc = subprocess.run(cmd, cwd=tmp, env=env, capture_output=True, encoding="utf-8", errors="replace")
     calls = open(log).read().splitlines() if os.path.exists(log) else []
     return proc.returncode, proc.stderr, calls
 
@@ -82,7 +75,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pwsh", help="path to pwsh, to run init.ps1 too")
     args = ap.parse_args()
-    targets = [(None, "sh")] + ([(args.pwsh, "ps1")] if args.pwsh else [])
+    targets = shell_targets(args.pwsh)
     total = bad = 0
     for pwsh, label in targets:
         for name, flags, stubs, want_calls, want_err in CASES:

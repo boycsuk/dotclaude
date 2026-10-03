@@ -243,11 +243,12 @@ def main():
             try:
                 set_state(session, local={"allowPushToMain": True, "allowCommitTrailers": True})
                 set_state(repo, branch="main")
+                repo_sh = repo.replace("\\", "/")    # as typed into Git Bash on Windows
                 for command, want, why in (
-                        (f"cd {repo} && git commit -m 'feat: x'", ASK, "cd into a repo on main"),
-                        (f"git -C {repo} commit -m 'feat: x'", ASK,
+                        (f"cd {repo_sh} && git commit -m 'feat: x'", ASK, "cd into a repo on main"),
+                        (f"git -C {repo_sh} commit -m 'feat: x'", ASK,
                          "the session's opt-out does not cover another repo"),
-                        (f"git -C {repo} commit -m 'feat: x' -m 'Co-Authored-By: a'", DENY,
+                        (f"git -C {repo_sh} commit -m 'feat: x' -m 'Co-Authored-By: a'", DENY,
                          "nor does its trailer opt-out")):
                     got = decide(session, command, pwsh)
                     total += 1
@@ -255,7 +256,7 @@ def main():
                         failures += 1
                         print(f"  FAIL want {want} got {got} | {command!r}  ({why})")
                 set_state(repo, branch="main", local={"allowPushToMain": True})
-                got = decide(session, f"git -C {repo} commit -m 'feat: x'", pwsh)
+                got = decide(session, f"git -C {repo_sh} commit -m 'feat: x'", pwsh)
                 total += 1
                 if got != ALLOW:
                     failures += 1

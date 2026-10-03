@@ -148,7 +148,7 @@ sort -ru "$EMPTIED" | while IFS= read -r d; do
     d="$(dirname "$d")"
   done
 done
-echo "  - central hooks/agents/skills/rules/output-styles installed (.sh + .py hooks)"
+echo "  - central hooks/agents/skills/rules/output-styles installed (Python hooks)"
 
 # --- Central settings.json: MERGE into the user's, do not clobber ------------
 # Three classes of key, and the distinction is the whole point:

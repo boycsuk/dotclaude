@@ -219,6 +219,10 @@ printf '\nif true; then\n' >> "$WORK/repo/templates/project/init.sh"
 expect_fail "script syntax" "the deployer gains a plain bash syntax error"
 
 setup
+printf '\n# a comment \342\200\224 with an em dash\n' >> "$WORK/repo/install.ps1"
+expect_fail "script syntax" "install.ps1 gains a non-ASCII character PowerShell 5.1 cannot parse"
+
+setup
 printf '\ndef broken(:\n' >> "$WORK/repo/global/.claude/hooks/_lib/hookio.py"
 expect_fail "script syntax" "the shared Python hook library stops compiling"
 

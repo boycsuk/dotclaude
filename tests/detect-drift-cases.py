@@ -18,6 +18,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import stubs  # noqa: E402
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(REPO, "skills/init-project/scripts/detect-drift.py")
 TEMPLATE_DIR = os.path.join(REPO, "templates/project")
@@ -45,7 +48,7 @@ def run(project, path_prefix=None):
     if path_prefix:
         env["PATH"] = path_prefix + os.pathsep + env["PATH"]
     proc = subprocess.run([sys.executable, SCRIPT], cwd=project, env=env,
-                          capture_output=True, text=True)
+                          capture_output=True, encoding="utf-8", errors="replace")
     values = dict(line.split("=", 1) for line in proc.stdout.splitlines() if "=" in line)
     return proc.returncode, values, proc.stderr
 
@@ -70,10 +73,7 @@ def case_serena_installed(project):
           '{"hooks": {"SessionStart": [{"hooks": [{"type": "command", '
           '"command": "serena-hooks activate --client=claude-code"}]}]}}')
     stub = os.path.join(project, "bin")
-    os.makedirs(stub)
-    with open(os.path.join(stub, "serena-hooks"), "w") as fh:
-        fh.write("#!/bin/sh\nexit 0\n")
-    os.chmod(os.path.join(stub, "serena-hooks"), 0o755)
+    stubs.write_stub(stub, "serena-hooks")
     return run(project, stub), {"OBSOLETE_HOOKS": "1"}
 
 
@@ -101,9 +101,14 @@ def case_clean(project):
 
 def case_example_drift(project):
     # The deploy prints DRIFT on the user's terminal, which the skill never
-    # sees, so the skill reads it here.
-    with open(os.path.join(TEMPLATE_DIR, ".claude", "settings.local.json.example")) as fh:
-        write(project, ".claude/settings.local.json.example", fh.read())
+    # sees, so the skill reads it here. The copy is written with CRLF: line
+    # endings alone (a Windows checkout) are no edit.
+    with open(os.path.join(TEMPLATE_DIR, ".claude", "settings.local.json.example"), encoding="utf-8", newline="") as fh:
+        crlf = fh.read().replace("\r\n", "\n").replace("\n", "\r\n")
+    path = os.path.join(project, ".claude", "settings.local.json.example")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        fh.write(crlf)
     first = run(project)
     write(project, ".claude/settings.local.json.example", '{"edited": true}')
     second = run(project)

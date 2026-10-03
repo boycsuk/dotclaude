@@ -1,6 +1,6 @@
 # dotclaude installer for Windows.
 #
-# Installs the CENTRAL config into $HOME\.claude\ — hooks, agents, skills,
+# Installs the CENTRAL config into $HOME\.claude\ - hooks, agents, skills,
 # rules, output-styles, and the base settings.json. These apply to every
 # project automatically, so improving the master repo and re-running this
 # script propagates to all your projects at once.
@@ -12,7 +12,7 @@
 # rules in those directories survive. It never clobbers your personal CLAUDE.md.
 # In $HOME\.claude\settings.json it keeps every key you own, seeds defaults only
 # when absent, and REPLACES the keys dotclaude owns (permissions, hooks,
-# attribution) — saving a backup first whenever your file had entries there.
+# attribution) - saving a backup first whenever your file had entries there.
 #
 # This is the lockstep sibling of install.sh. On Windows the .ps1 hooks run
 # under PowerShell, so the central settings.json points at the .ps1 files with
@@ -26,7 +26,7 @@ $Target = Join-Path $HOME ".claude"
 Write-Host "==> Installing dotclaude into $Target"
 
 # Prerequisite check, mirroring install.sh: the .ps1 hooks and this installer
-# need PowerShell 5.1+, and the .py hooks run on Python (DESIGN.md §5).
+# need PowerShell 5.1+, and the .py hooks run on Python (DESIGN.md section 5).
 if ($PSVersionTable.PSVersion.Major -lt 5) {
     [Console]::Error.WriteLine("ERROR: PowerShell 5.1 or newer is required (found $($PSVersionTable.PSVersion)).")
     exit 1
@@ -49,7 +49,7 @@ foreach ($candidate in @(@("python3", ""), @("python", ""), @("py", "-3"))) {
     if ($PythonExe) { break }
 }
 if (-not $PythonExe) {
-    [Console]::Error.WriteLine("ERROR: no working Python found (tried python3, python, py -3) — the .py hooks run on it. Install Python and re-run.")
+    [Console]::Error.WriteLine("ERROR: no working Python found (tried python3, python, py -3) - the .py hooks run on it. Install Python and re-run.")
     exit 1
 }
 
@@ -57,7 +57,7 @@ if (-not $PythonExe) {
 # Lockstep with install.sh. A hook that fails to parse is a wall, not a degraded
 # hook: the central guards run on PreToolUse, so an unparseable one breaks every
 # session, and that state cannot be repaired from inside Claude Code (the broken
-# hook blocks the installer that would replace it). See DESIGN.md §32. Abort
+# hook blocks the installer that would replace it). See DESIGN.md section 32. Abort
 # before copying, leaving the previously installed working hooks in place.
 $hookDir = Join-Path $ScriptDir "global/.claude/hooks"
 if (Test-Path $hookDir) {
@@ -67,7 +67,7 @@ if (Test-Path $hookDir) {
         [System.Management.Automation.Language.Parser]::ParseFile(
             $hook.FullName, [ref]$tokens, [ref]$errors) | Out-Null
         if ($errors -and $errors.Count -gt 0) {
-            [Console]::Error.WriteLine("  ! $($hook.Name) does not parse — aborting before anything is copied.")
+            [Console]::Error.WriteLine("  ! $($hook.Name) does not parse - aborting before anything is copied.")
             [Console]::Error.WriteLine("    $($errors[0].Message)")
             [Console]::Error.WriteLine("    Your currently installed hooks are untouched. Fix the source and re-run.")
             exit 1
@@ -81,11 +81,11 @@ if (Test-Path $hookDir) {
 function New-Hook($src, $name, $isPython) {
     # No `if` parameter on purpose: hook entries carry no `if` gates (a
     # prefix-anchored pattern reopens the wrapped-form bypasses the hooks'
-    # own parsers close — DESIGN.md §27b). check.py enforces the same on the
+    # own parsers close - DESIGN.md section 27b). check.py enforces the same on the
     # source JSON; the guard below keeps Windows from reintroducing one.
     # Claude Code launches a "shell": "powershell" hook as `powershell -Command
     # <command>`, and -Command converts a script's or program's exit 2 into
-    # process exit 1 — which does not block. Without the trailing
+    # process exit 1 - which does not block. Without the trailing
     # `exit $LASTEXITCODE` every .ps1 guard was a no-op on Windows.
     if ($isPython) {
         $script = Join-Path (Join-Path $Target "hooks") "$name.py"
@@ -113,10 +113,13 @@ function New-Hook($src, $name, $isPython) {
 #   - Bash(x)          -> kept, plus PowerShell(<mapped equivalent>) unless unmappable
 #   - hooks .sh        -> .ps1 + "shell": "powershell"
 #   - hooks .py        -> same .py, run by the verified $PythonExe
-# Adding a rule to the JSON therefore reaches Windows with no edit here — and a
+# Adding a rule to the JSON therefore reaches Windows with no edit here - and a
 # rule with no mapping is a HARD FAILURE below, never a silent drop.
 
-$srcSettings = Get-Content (Join-Path $ScriptDir "global\.claude\settings.json") -Raw | ConvertFrom-Json
+# -Encoding UTF8 on every read: Windows PowerShell 5.1 reads a BOM-less file in
+# the ANSI code page, so a non-ASCII value came back as mojibake and was then
+# written out as UTF-8 - corrupting the user's own keys on every install.
+$srcSettings = Get-Content (Join-Path $ScriptDir "global\.claude\settings.json") -Raw -Encoding UTF8 | ConvertFrom-Json
 
 # Bash verb -> PowerShell equivalent. $null means "no Windows analogue, drop it"
 # (e.g. sudo). A verb absent from this table is reported below, so a new rule in
@@ -162,7 +165,7 @@ function Convert-Rule($rule) {
     # suffix. A pattern that also ate a lone trailing `*` turned the wildcard
     # rule `Bash(mkfs.*)` into the verb `mkfs.` (unmapped), and the older
     # `Bash(mkfs.*:*)` spelling it replaced matched nothing at all on Unix:
-    # Claude Code reads `*` before `:*` literally (DESIGN.md §35).
+    # Claude Code reads `*` before `:*` literally (DESIGN.md section 35).
     if ($rule -notmatch '^Bash\((.*?)(?::\*)?\)$') { return $rule }
     $verb = $Matches[1]
     if ($verbMap.ContainsKey($verb)) {
@@ -194,7 +197,7 @@ $central = [ordered]@{
     permissions = [ordered]@{
         # @(...) on every list: PowerShell unwraps a single-element array to a
         # bare scalar, which ConvertTo-Json would then emit as a string instead
-        # of a one-item array — silently invalid settings.json.
+        # of a one-item array - silently invalid settings.json.
         allow = @(Convert-RuleList $srcSettings.permissions.allow)
         ask   = @(Convert-RuleList $srcSettings.permissions.ask)
         deny  = @(Convert-RuleList $srcSettings.permissions.deny) + $extraDeny
@@ -204,7 +207,7 @@ $central = [ordered]@{
     # Derived, not hardcoded: every sibling above reads $srcSettings, and
     # install.sh copies "attribution" straight from the source JSON. A literal
     # pair here meant any future change to attribution in
-    # global/.claude/settings.json silently never reached Windows — exactly the
+    # global/.claude/settings.json silently never reached Windows - exactly the
     # drift CLAUDE.md requires install.ps1 to avoid by deriving its config.
     attribution = $srcSettings.attribution
     hooks = [ordered]@{}
@@ -215,14 +218,16 @@ foreach ($p in $srcSettings.permissions.PSObject.Properties) {
     if (-not $central.permissions.Contains($p.Name)) { $central.permissions[$p.Name] = $p.Value }
 }
 
-# Translate the hooks tree: same events, same matchers, same order — only the
+# Translate the hooks tree: same events, same matchers, same order - only the
 # script extension, the shell, and any "if" rule change.
 foreach ($event in $srcSettings.hooks.PSObject.Properties) {
     $groups = @()
     foreach ($group in $event.Value) {
         $hooks = @()
         foreach ($h in $group.hooks) {
-            $name = [System.IO.Path]::GetFileNameWithoutExtension($h.command)
+            # Split by hand: .NET Framework (PowerShell 5.1) throws on the quotes in
+            # "python3 "$HOME"/..." where .NET Core quietly accepts them.
+            $name = (($h.command -split "[/\\]")[-1].Trim([char]34) -replace "\.(py|sh|ps1)$", "")
             if ($h.'if') {
                 [Console]::Error.WriteLine("ERROR: hook '$name' carries an `"if`" gate in global/.claude/settings.json.")
                 [Console]::Error.WriteLine("       Prefix-anchored `"if`" patterns reopen the wrapped-form bypasses the")
@@ -248,7 +253,7 @@ if ($unmapped.Count -gt 0) {
     # Hard failure, not a warning: a dropped rule is a permission the user
     # believes they have. Silently losing one is how Windows lost the
     # sudo/dd/mkfs/shred denies before check.py existed.
-    [Console]::Error.WriteLine("ERROR: permission rules with no PowerShell mapping — Windows would silently lose them:")
+    [Console]::Error.WriteLine("ERROR: permission rules with no PowerShell mapping - Windows would silently lose them:")
     foreach ($u in ($unmapped | Select-Object -Unique)) { [Console]::Error.WriteLine("       Bash($u)") }
     [Console]::Error.WriteLine("       Add them to `$verbMap in install.ps1 (use `$null to drop one deliberately).")
     exit 1
@@ -263,7 +268,7 @@ if ($pyHooks.Count -gt 0) {
     if ($PythonArgs) { $pyArgs += $PythonArgs }
     & $PythonExe @pyArgs -c $probe @pyHooks
     if ($LASTEXITCODE -ne 0) {
-        [Console]::Error.WriteLine("  ! a Python hook does not compile (above) — aborting before anything is copied.")
+        [Console]::Error.WriteLine("  ! a Python hook does not compile (above) - aborting before anything is copied.")
         [Console]::Error.WriteLine("    Your currently installed hooks are untouched. Fix the source and re-run.")
         exit 1
     }
@@ -273,13 +278,13 @@ New-Item -ItemType Directory -Force -Path (Join-Path $Target "templates") | Out-
 New-Item -ItemType Directory -Force -Path (Join-Path $Target "skills") | Out-Null
 
 # --- Central artifacts: hooks, agents, skills, rules, output-styles ----------
-# Owned by this repo — but the DIRECTORIES are shared with the user, who may
+# Owned by this repo - but the DIRECTORIES are shared with the user, who may
 # keep their own skills/agents/rules there. Removing each directory outright
 # (the previous form) silently deleted all of them on every re-install. So:
 # remove only the files this repo shipped LAST time (from the manifest), then
 # copy the current set and rewrite it. See install.sh for the same logic.
 $manifestPath = Join-Path $Target ".dotclaude-manifest"
-$oldManifest = if (Test-Path -LiteralPath $manifestPath) { @(Get-Content -LiteralPath $manifestPath) } else { @() }
+$oldManifest = if (Test-Path -LiteralPath $manifestPath) { @(Get-Content -LiteralPath $manifestPath -Encoding UTF8) } else { @() }
 $emptied = @()
 foreach ($rel in $oldManifest) {
     if ([string]::IsNullOrWhiteSpace($rel) -or $rel -like "*..*") { continue }
@@ -320,8 +325,8 @@ foreach ($dir in @("hooks", "agents", "skills", "rules", "output-styles")) {
 }
 # Removing a skill's files leaves its directory behind, and an empty
 # skills\<name>\ still shows up in the skill listing as a phantom. Prune only
-# the directories removing our own files emptied — an empty directory the user
-# made is theirs — and never climb above the top-level tree.
+# the directories removing our own files emptied - an empty directory the user
+# made is theirs - and never climb above the top-level tree.
 foreach ($d in ($emptied | Sort-Object -Unique -Descending)) {
     while ($d -and ($d -match '[\\/]')) {
         $full = Join-Path $Target ($d -replace '/', '\')
@@ -330,7 +335,9 @@ foreach ($d in ($emptied | Sort-Object -Unique -Descending)) {
         $d = Split-Path -Parent $d
     }
 }
-$manifest | Set-Content -Path $manifestPath -Encoding UTF8
+# BOM-less: PS 5.1's Set-Content -Encoding UTF8 writes a BOM, which glued itself
+# to the first entry so it never matched again (and install.sh read it too).
+[System.IO.File]::WriteAllLines($manifestPath, [string[]]$manifest, (New-Object System.Text.UTF8Encoding($false)))
 # A hook this repo stopped shipping is still wired in every project deployed
 # with it; its entry now points at a deleted script. Say how to clean that up.
 $retired = @($oldManifest | Where-Object { $_ -match '^hooks/[^/]+$' -and $manifest -notcontains $_ })
@@ -338,7 +345,7 @@ if ($retired.Count -gt 0) {
     Write-Host "  ! retired hooks removed: $(($retired | ForEach-Object { $_ -replace '^hooks/', '' }) -join ' ')"
     Write-Host "    Projects that wired them: run /init-project --update (or init.ps1) to prune the entries."
 }
-Write-Host "  - central hooks/agents/skills/rules/output-styles installed (.ps1 + .py hooks)"
+Write-Host "  - central hooks/agents/skills/rules/output-styles installed (Python hooks)"
 
 # Mirrors OWNED/SEEDED in install.sh; check.py asserts the three sites agree.
 # OWNED is overwritten every install (it is the deterministic guarantee);
@@ -354,7 +361,7 @@ $seeded = @("outputStyle", "fileCheckpointingEnabled", "statusLine")
 # cmd and PowerShell alike, and hands stdin to the Python it starts.
 $slLegacy = @()
 if ($srcSettings.PSObject.Properties.Name -contains "statusLine" -and $srcSettings.statusLine.command) {
-    $slName = [System.IO.Path]::GetFileNameWithoutExtension(($srcSettings.statusLine.command -split '[/\\]')[-1].Trim('"'))
+    $slName = (($srcSettings.statusLine.command -split "[/\\]")[-1].Trim([char]34) -replace "\.(py|sh|ps1)$", "")
     # The forms earlier installs seeded (the .ps1 twin is gone), ours to repair.
     $slLegacy = @("& `"$Target\hooks\$slName.ps1`"",
                   "powershell -NoProfile -File `"$((Join-Path (Join-Path $Target "hooks") "$slName.ps1") -replace '\\', '/')`"")
@@ -370,7 +377,7 @@ $existing = [ordered]@{}
 $raw = $null
 if (Test-Path $settingsPath) {
     try {
-        $raw = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        $raw = Get-Content $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
         # Copy existing keys we do NOT own, so the user's theme/effort/etc survive.
         foreach ($p in $raw.PSObject.Properties) {
             if ($p.Name -notin $owned) {
@@ -384,10 +391,10 @@ if (Test-Path $settingsPath) {
         $backup = "$settingsPath.bak-" + (Get-Date -Format "yyyyMMdd-HHmmss")
         Copy-Item $settingsPath $backup -Force
         [Console]::Error.WriteLine("  ! $settingsPath does not parse; your keys could not be preserved.")
-        [Console]::Error.WriteLine("    A copy is saved at $backup — merge anything you need back by hand.")
+        [Console]::Error.WriteLine("    A copy is saved at $backup - merge anything you need back by hand.")
     }
 }
-# The owned keys are replaced — but a deny rule or hook the user added there
+# The owned keys are replaced - but a deny rule or hook the user added there
 # must never vanish without a trace. Compared as JSON, so key order is noise.
 if ($raw) {
     $replaced = @()
@@ -401,7 +408,7 @@ if ($raw) {
         $backup = "$settingsPath.bak-" + (Get-Date -Format "yyyyMMdd-HHmmss")
         Copy-Item -LiteralPath $settingsPath -Destination $backup -Force
         [Console]::Error.WriteLine("  ! $($replaced -join ', ') was replaced in ~/.claude/settings.json (dotclaude owns it); your previous")
-        [Console]::Error.WriteLine("    file is saved at $backup — move personal rules or hooks to a project's")
+        [Console]::Error.WriteLine("    file is saved at $backup - move personal rules or hooks to a project's")
         [Console]::Error.WriteLine("    .claude/settings.json or settings.local.json, which merge on top.")
     }
 }
@@ -428,7 +435,7 @@ foreach ($k in $seeded) {
     }
 }
 # BOM-less on purpose: PS 5.1's Set-Content -Encoding UTF8 writes a BOM, which
-# strict JSON parsers reject — settings.json is read by more than PowerShell.
+# strict JSON parsers reject - settings.json is read by more than PowerShell.
 [System.IO.File]::WriteAllText($settingsPath, ($existing | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))
 $seedNote = if ($seededNow.Count -gt 0) { " seeded $($seededNow -join ', ');" } else { "" }
 Write-Host "  - $settingsPath merged (permissions, hooks, attribution set to dotclaude's;$seedNote your other keys kept)"
@@ -444,14 +451,14 @@ if (Test-Path $skillDest) { Remove-Item -Recurse -Force $skillDest }
 Copy-Item -Recurse (Join-Path $ScriptDir "skills\init-project") (Join-Path $Target "skills\")
 Write-Host "  - skills/init-project/ installed"
 
-# --- ~/.claude/CLAUDE.md is the USER's own — never touch it ------------------
+# --- ~/.claude/CLAUDE.md is the USER's own - never touch it ------------------
 # The repo's CLAUDE.md is the maintenance guide for THIS repo, not user global
 # preferences, so the installer does not copy it anywhere. Your
 # ~/.claude/CLAUDE.md (global preferences for all projects) is yours to manage.
 
 # --- Validate ----------------------------------------------------------------
 try {
-    Get-Content $settingsPath -Raw | ConvertFrom-Json | Out-Null
+    Get-Content $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json | Out-Null
     Write-Host "  - settings.json valid"
 } catch {
     Write-Host "  ! settings.json failed to parse - investigate before using"

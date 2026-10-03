@@ -1,6 +1,6 @@
 # Deploy the PER-PROJECT files of the dotclaude template (Windows).
 #
-# The reusable artifacts — hooks, agents, skills, rules, output-styles — are
+# The reusable artifacts - hooks, agents, skills, rules, output-styles - are
 # NOT deployed here: they live centrally in $HOME\.claude\ (installed from the
 # dotclaude repo via install.ps1) and the harness applies them to every project
 # automatically. This script only writes what is specific to THIS project:
@@ -8,7 +8,7 @@
 # optional .mcp.json servers, and optional infra scaffolds. Every run also
 # prunes hook entries dotclaude no longer ships (obsolete.json).
 #
-# Lockstep sibling of init.sh — see it for the full semantics.
+# Lockstep sibling of init.sh - see it for the full semantics.
 #
 # Usage (run inside the target project directory):
 #   powershell -File "$HOME\.claude\templates\project\init.ps1" [--xcode] [--ui] [--codebase-memory] [--lsp=<plugin>] [--update] [scaffold flags]
@@ -87,7 +87,7 @@ if ($Unknown.Count -gt 0) {
 
 # Lockstep sibling of merge_mcp_servers in init.sh: ./.mcp.json is COMPOSED from
 # per-server fragments, never copied, so each flag owns only its own keys and
-# leaves everything else — including servers the user added by hand — untouched.
+# leaves everything else - including servers the user added by hand - untouched.
 # See tests/mcp-merge-cases.py for the cases this must satisfy.
 function Merge-McpServers {
     param([string[]]$Fragments)
@@ -100,7 +100,7 @@ function Merge-McpServers {
 }
 
 # PS 5.1's Set-Content -Encoding UTF8 writes a BOM, which strict JSON parsers
-# (python json.load, Node JSON.parse) reject — breaking mixed WSL+Windows use
+# (python json.load, Node JSON.parse) reject - breaking mixed WSL+Windows use
 # of the same checkout. pwsh 7 is BOM-less, so tests never see this; write
 # explicitly BOM-less on every host.
 function Write-Utf8NoBom([string]$Path, [string]$Text) {
@@ -111,7 +111,7 @@ function Write-Utf8NoBom([string]$Path, [string]$Text) {
 # Run one of the template's Python scripts (shared with init.sh). The
 # interpreter must actually RUN: the Microsoft Store "python3" alias exists on a
 # clean Windows install, exits non-zero and would make the step a silent no-op.
-# Never fatal — every failure is a WARN naming what did not happen.
+# Never fatal - every failure is a WARN naming what did not happen.
 $script:PythonCmd = $null
 function Resolve-TemplatePython {
     if (-not $script:PythonCmd) {
@@ -182,7 +182,7 @@ $DstRoot = Join-Path (Get-Location) ".claude"
 if (-not (Test-Path $TemplateDir)) {
     # [Console]::Error, not Write-Error: under $ErrorActionPreference = "Stop"
     # a Write-Error is promoted to a TERMINATING error, so the script dies
-    # right there with exit code 1 and the `exit N` below never runs — the
+    # right there with exit code 1 and the `exit N` below never runs - the
     # documented exit codes were unreachable, and the skill keys its
     # remediation off them.
     [Console]::Error.WriteLine("ERROR: template not found at $TemplateDir (run install.ps1 from the dotclaude repo)")
@@ -218,7 +218,8 @@ $localExampleDst = Join-Path $DstRoot "settings.local.json.example"
 if (Test-Path $localExample) {
     if (-not (Test-Path $localExampleDst)) {
         Copy-Item $localExample $localExampleDst
-    } elseif ((Get-FileHash $localExample).Hash -ne (Get-FileHash $localExampleDst).Hash) {
+    } elseif (([System.IO.File]::ReadAllText($localExample) -replace "`r", "") -cne ([System.IO.File]::ReadAllText((Resolve-Path $localExampleDst)) -replace "`r", "")) {
+        # Compared without CR: the same text with CRLF (a Windows checkout) is no edit.
         [Console]::Error.WriteLine("DRIFT: .claude\settings.local.json.example (template updated; your edits kept)")
     }
 }
@@ -251,7 +252,7 @@ if ((Test-Path $DocsSrc) -and -not (Test-IsLink ".\docs")) {
 # --- .gitignore : merge template entries in (or seed if absent) --------------
 # APPEND, never sort. Order is semantic in .gitignore: a negation (`!x`) only
 # re-includes when it comes AFTER the pattern that excluded it, and sorting
-# hoists negations above their parents — verified with real git: both the
+# hoists negations above their parents - verified with real git: both the
 # template's own `!.env.example` and a user's `!keep.log` ended up ignored.
 $gi = ".\.gitignore"
 $giTpl = Join-Path $TemplateDir ".gitignore.template"
@@ -264,14 +265,16 @@ if (Test-IsLink $gi) {
     # shared with WSL. -ccontains matches the .sh sibling's `grep -qxF`, which
     # is case-SENSITIVE: -contains would treat a user's `thumbs.db` as already
     # covering the template's `Thumbs.db` and silently skip it.
-    $existing = @(Get-Content $gi)
+    # -Encoding UTF8: PS 5.1 reads a BOM-less file as ANSI, so a non-ASCII line
+    # never matched its template twin and was appended again on every deploy.
+    $existing = @(Get-Content $gi -Encoding UTF8)
     $appended = @()
     if ($existing -cnotcontains "# --- dotclaude template ---") {
         $appended += ""
         $appended += "# --- dotclaude template ---"
         $existing += "# --- dotclaude template ---"
     }
-    foreach ($line in (Get-Content $giTpl)) {
+    foreach ($line in (Get-Content $giTpl -Encoding UTF8)) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         if ($existing -cnotcontains $line) {
             $appended += $line
@@ -289,14 +292,14 @@ if (Test-IsLink $gi) {
 
 # --- Xcode MCP (opt-in, macOS only) ------------------------------------------
 # Lockstep sibling of the --xcode block in init.sh. PowerShell does run on macOS,
-# so this is not dead code there — but $IsMacOS is $false on Windows PowerShell 5.1
+# so this is not dead code there - but $IsMacOS is $false on Windows PowerShell 5.1
 # (the variable does not exist), which is exactly the host that must fail here.
 if ($InstallXcode) {
     # $IsMacOS is an engine variable, so unlike init.sh's `uname` it cannot be
     # stubbed through PATH. Two escape hatches let tests/mcp-merge-cases.py
     # exercise BOTH verdicts from either kind of runner, and neither is ever set
     # in normal use: MCP_FORCE_DARWIN reaches the merge logic from a non-Mac,
-    # and MCP_FORCE_NON_DARWIN reaches this abort from a Mac — without the
+    # and MCP_FORCE_NON_DARWIN reaches this abort from a Mac - without the
     # latter, the exit-5 case silently passed on Linux and inverted on macOS.
     $isMac = [bool]$IsMacOS
     if ($env:MCP_FORCE_DARWIN) { $isMac = $true }
@@ -309,7 +312,7 @@ if ($InstallXcode) {
     # Command Line Tools, but mcpbridge only from Xcode 26.3.
     & xcrun --find mcpbridge *> $null
     if ($LASTEXITCODE -ne 0) {
-        [Console]::Error.WriteLine("ERROR: 'xcrun mcpbridge' not available — needs Xcode 26.3 or later.")
+        [Console]::Error.WriteLine("ERROR: 'xcrun mcpbridge' not available - needs Xcode 26.3 or later.")
         [Console]::Error.WriteLine("       Check the selected toolchain with: xcode-select -p")
         [Console]::Error.WriteLine("       Then enable MCP in Xcode > Settings > Intelligence.")
         exit 6
@@ -324,7 +327,7 @@ if ($InstallXcode) {
 # npx fetches @playwright/mcp on demand; npx itself is the only prerequisite.
 if ($InstallUi) {
     if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
-        [Console]::Error.WriteLine("ERROR: 'npx' not found in PATH — the playwright MCP server launches via npx.")
+        [Console]::Error.WriteLine("ERROR: 'npx' not found in PATH - the playwright MCP server launches via npx.")
         [Console]::Error.WriteLine("       Install Node.js (which ships npx) and re-run.")
         exit 7
     }
@@ -355,14 +358,14 @@ if ($InstallCodebaseMemory) {
 
 # --- LSP plugins (opt-in, one per --lsp=<plugin>) -----------------------------
 # Lockstep sibling of the init.sh block: same catalog (lsp-plugins.json), same
-# never-fatal contract — every problem is a WARN carrying the command that fixes it.
+# never-fatal contract - every problem is a WARN carrying the command that fixes it.
 $catalog = $null
 if ($LspPlugins.Count -gt 0) {
     # Guarded: under $ErrorActionPreference = "Stop" an unreadable catalog
     # aborted the whole deploy with exit 1, read by the skill as "template
-    # missing" — against this block's never-fatal contract.
+    # missing" - against this block's never-fatal contract.
     try {
-        $catalog = Get-Content -Raw (Join-Path $TemplateDir "lsp-plugins.json") | ConvertFrom-Json
+        $catalog = Get-Content -Raw -Encoding UTF8 (Join-Path $TemplateDir "lsp-plugins.json") | ConvertFrom-Json
     } catch {
         [Console]::Error.WriteLine("WARN: the LSP plugin catalog could not be read ($_); --lsp skipped. Re-run install.ps1.")
     }
@@ -376,7 +379,7 @@ if ($catalog) {
         }
         $marketplace = $catalog.marketplace
         if (-not (Get-Command $entry.Value.binary -ErrorAction SilentlyContinue)) {
-            [Console]::Error.WriteLine("WARN: language server '$($entry.Value.binary)' is not in PATH — $plugin stays inert until you install it:")
+            [Console]::Error.WriteLine("WARN: language server '$($entry.Value.binary)' is not in PATH - $plugin stays inert until you install it:")
             [Console]::Error.WriteLine("        $($entry.Value.install)")
         }
         if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
@@ -399,7 +402,7 @@ if ($catalog) {
     }
 }
 
-# --- Optional scaffolding — each block is independent; flags can be combined -
+# --- Optional scaffolding - each block is independent; flags can be combined -
 $Scaffolds = Join-Path $TemplateDir "scaffolds"
 
 if ($Fullstack) {
