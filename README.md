@@ -26,7 +26,7 @@ Then open Claude Code in any project and run `/init-project`. It detects the sta
 
 `install.sh` copies the central config into `~/.claude/`:
 
-- **Hooks** — deterministic guarantees that run on every tool call: block destructive commands and remote-code-execution patterns (`guard-destructive`), block force pushes and direct pushes to main (`guard-push-main`), catch secrets before they land in a commit (`detect-secrets`), lint and typecheck files as they are edited (`verify-on-edit`), keep mirrored docs in sync, protect the installed config from in-project edits, and re-inject project rules lost to context compaction.
+- **Hooks** — deterministic guarantees that run on every tool call: block destructive commands and remote-code-execution patterns (`guard-destructive`), block force pushes and direct pushes to main (`guard-push-main`), catch secrets before they land in a commit (`detect-secrets`), lint and typecheck files as they are edited (`verify-on-edit`), deny commit trailers, emoji and non-English commit messages and ask before `--amend` (`guard-commit`), ask before any new dependency (`guard-dependencies`), tell the model which code-intelligence tools a project has (`code-intel-context`, `explore-graph-prompt`), keep mirrored docs in sync, protect the installed config from in-project edits, re-inject project rules lost to context compaction, and flag a turn that changed code without a CHANGELOG entry (`changelog-reminder`).
 - **Agents** — `researcher` (architectural deep-dives), `code-reviewer` (skeptical post-change review), `debugger` (root-cause diagnosis), `db-inspector` (read-only SQL inspection).
 - **Skills** — workflow commands available in every project: `/verify`, `/commit`, `/audit`, `/changes`, `/plan-feature`, `/resume-context`, `/update-docs`, `/compound`, `/implement-ui`, `/readme`.
 - **Rules** — coding conventions loaded into every session (workflow, code quality, security, AI collaboration).
@@ -61,13 +61,22 @@ git pull && ./install.sh
 
 That refreshes the central config for every project at once. Inside a project, `/init-project --update` re-seeds any missing per-project files and offers new template additions without overwriting your edits.
 
+To refresh every project under a folder in one go — for example after an update retires something projects were deployed with:
+
+```bash
+bash ~/.claude/templates/project/init.sh --update --recursive ~/projects --dry-run   # show the plan only
+bash ~/.claude/templates/project/init.sh --update --recursive ~/projects             # show it, ask, then apply
+```
+
+It finds the projects dotclaude deployed (skipping dependency folders, nested projects and template copies), re-runs the deploy in each with the flags its `.mcp.json` implies, prunes hooks and MCP servers that are no longer shipped, and lists — never deletes — leftover directories such as `.serena/`. `--yes` skips the confirmation. `init.ps1` takes the same flags.
+
 ## Notes on the safety hooks
 
 Direct pushes to `main`/`master` are blocked by default; for solo repos, opt out with `"allowPushToMain": true` in the project's `.claude/settings.local.json`. Force pushes stay blocked regardless. Destructive-command and secret-detection hooks have no opt-out.
 
 ## Development
 
-Hooks, installers and deployers ship as `.sh`/`.ps1` pairs that must stay logically equivalent — change both in the same commit. Before committing:
+New hooks are a single Python file in `global/.claude/hooks/` (the installers wire them for both Unix and Windows). Older hooks, the installers and the deployers ship as `.sh`/`.ps1` pairs that must stay logically equivalent — change both in the same commit. Before committing:
 
 ```bash
 python3 check.py
