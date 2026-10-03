@@ -7,21 +7,13 @@
 # dotclaude repo via install.sh) and the harness applies them to every project
 # automatically. This script only writes what is specific to THIS project:
 # CLAUDE.md, CHANGELOG.md, docs/, a minimal settings.json stub, .gitignore,
-# the optional Serena + Graphify .mcp.json bundle, and optional infra scaffolds.
+# optional .mcp.json servers, and optional infra scaffolds. Every run also
+# prunes hook entries dotclaude no longer ships (obsolete.json).
 #
 # Usage (run inside the target project directory):
-#   bash ~/.claude/templates/project/init.sh [--serena] [--xcode] [--ui] [--update] [scaffold flags]
+#   bash ~/.claude/templates/project/init.sh [--xcode] [--ui] [--codebase-memory] [--lsp=<plugin>] [--update] [scaffold flags]
 #
 # Core flags:
-#   --serena   Merge the serena + graphify servers into ./.mcp.json AND merge
-#              Serena's drift-prevention hooks (serena-hooks.json) into the
-#              project's .claude/settings.json — these make the model
-#              deterministically prefer Serena's tools instead of drifting back
-#              to Grep/Edit over a long session (oraios/serena #1201). The two
-#              are companions: serena (symbol-level) + graphify (graph-level).
-#              Exit 4 if the 'serena' binary is not in PATH; warns (non-fatal)
-#              if 'graphify' is not in PATH. Both merges are idempotent and
-#              non-destructive.
 #   --xcode    Merge the 'xcode' server (Apple's own `xcrun mcpbridge`, shipped
 #              with Xcode 26.3+) into ./.mcp.json. macOS-only: aborts with exit 5
 #              on a non-Darwin host and exit 6 if `xcrun mcpbridge` is missing.
@@ -37,6 +29,20 @@
 #   Both MCP flags COMPOSE ./.mcp.json rather than copying it: each owns its own
 #   server keys, so they combine in either order, re-run idempotently, and never
 #   drop a server the user added by hand. See tests/mcp-merge-cases.py.
+#   --codebase-memory  Merge the 'codebase-memory-mcp' server (DeusData's
+#              persistent code graph: callers, impact of a change, dead code,
+#              architecture) into ./.mcp.json and its READ-ONLY tool names into
+#              .claude/settings.json permissions.allow. Exit 8 if the binary is
+#              not in PATH. Binary only: never run its own `install`
+#              subcommand, which rewrites ~/.claude/settings.json hooks.
+#   --lsp=<plugin>  Install an official LSP plugin (lsp-plugins.json, e.g.
+#              pyright-lsp) at PROJECT scope via `claude plugin install
+#              --scope project`, which also records it in .claude/settings.json
+#              so teammates see it. Repeatable for polyglot repos. Never fatal:
+#              a missing language-server binary, a missing `claude` CLI or an
+#              unknown plugin name each print a WARN with the fix. (Listing the
+#              plugin in enabledPlugins alone does NOT load it — verified: an
+#              uninstalled plugin stays off until installed.)
 #   --update   Re-deploy mode. Per-project files are user-owned: CLAUDE.md,
 #              CHANGELOG.md, docs/* and settings.json are only seeded when
 #              absent, never overwritten. settings.local.json.example is
@@ -61,16 +67,19 @@
 #   3  RETIRED (was: --serena and ./.mcp.json conflict). .mcp.json is composed
 #      per-server now, so there is no whole-file conflict to abort on. Do not
 #      reuse this number: a project on an older init.sh still emits it.
-#   4  --serena requested but the 'serena' binary is not in PATH
+#   4  RETIRED (was: --serena requested but 'serena' not in PATH). Serena and
+#      Graphify were removed; --serena now only warns. Do not reuse.
 #   5  --xcode requested on a non-macOS host
 #   6  --xcode requested but `xcrun mcpbridge` is unavailable (needs Xcode 26.3+)
 #   7  --ui requested but 'npx' is not in PATH
+#   8  --codebase-memory requested but 'codebase-memory-mcp' is not in PATH
 
 set -euo pipefail
 
-INSTALL_SERENA=false
 INSTALL_XCODE=false
 INSTALL_UI=false
+INSTALL_CODEBASE_MEMORY=false
+LSP_PLUGINS=()
 FULLSTACK=false
 RUNTIME=""
 COMPOSE=false
@@ -78,9 +87,12 @@ PROXY=""
 DEPLOY_SCRIPT=false
 for arg in "$@"; do
   case "$arg" in
-    --serena)         INSTALL_SERENA=true ;;
+    # A command printed by an older /init-project may still carry it.
+    --serena)         echo "WARN: --serena was removed (Serena and Graphify are no longer shipped); ignoring it." >&2 ;;
     --xcode)          INSTALL_XCODE=true ;;
     --ui)             INSTALL_UI=true ;;
+    --lsp=*)          LSP_PLUGINS+=("${arg#--lsp=}") ;;
+    --codebase-memory) INSTALL_CODEBASE_MEMORY=true ;;
     --update)         : ;;  # informational: seeding always skips existing files
     --db)             : ;;  # accepted, no-op (db-inspector is central now)
     --fullstack)      FULLSTACK=true ;;
@@ -200,6 +212,16 @@ if [ -f "$SRC_CLAUDE/settings.local.json.example" ]; then
   fi
 fi
 
+# --- Obsolete artifacts: prune dead hook entries, report the rest ------------
+# The deploy merges only ever add; a hook dotclaude stopped shipping stays wired
+# in the project and errors on every matching tool call once install.sh removes
+# its script. One Python implementation serves init.sh and init.ps1 alike. The
+# KEY= lines on stdout are for detect-drift.py; the human report is on stderr.
+if [ -f "$TEMPLATE_DIR/obsolete.json" ]; then
+  python3 "$TEMPLATE_DIR/scripts/prune-obsolete.py" "$TEMPLATE_DIR/obsolete.json" . >/dev/null \
+    || echo "WARN: obsolete-artifact check did not complete; deploy continues." >&2
+fi
+
 # --- CLAUDE.md, CHANGELOG.md : user-owned, seed when absent -------------------
 [ -f ./CLAUDE.md    ] || cp "$TEMPLATE_DIR/CLAUDE.md.template"    ./CLAUDE.md
 [ -f ./CHANGELOG.md ] || cp "$TEMPLATE_DIR/CHANGELOG.md.template" ./CHANGELOG.md
@@ -234,126 +256,11 @@ else
   cp "$TEMPLATE_DIR/.gitignore.template" ./.gitignore
 fi
 
-# --- Serena + Graphify MCP (opt-in) ------------------------------------------
-# Both servers deploy together (they are companions: Serena = symbol-level,
-# Graphify = graph-level). Serena is required (abort if missing);
-# Graphify is a soft prerequisite (warn only) because its MCP server is
-# secondary — it starts only after a graph is built (/graphify .) and fails
-# inertly otherwise, without affecting Serena.
-if [ "$INSTALL_SERENA" = "true" ]; then
-  if ! command -v serena >/dev/null 2>&1; then
-    echo "ERROR: 'serena' binary not found in PATH." >&2
-    echo "       Install once per machine with:" >&2
-    echo "         uv tool install -p 3.13 serena-agent@latest --prerelease=allow" >&2
-    echo "       (Requires uv: curl -LsSf https://astral.sh/uv/install.sh | sh)" >&2
-    exit 4
-  fi
-  if ! command -v graphify >/dev/null 2>&1; then
-    echo "WARN: 'graphify' not found in PATH — the bundled graphify MCP server" >&2
-    echo "      will be unavailable until you install it and build a graph:" >&2
-    echo "        uv tool install graphifyy" >&2
-    echo "        then run '/graphify .' once to build graphify-out/graph.json." >&2
-    echo "      Serena still works; this is non-fatal." >&2
-  else
-    # Graphify present: install its git post-commit/post-checkout hooks so the
-    # graph auto-rebuilds (AST-only, no API cost) and never goes stale — a stale
-    # graph is the main reason the graph-first workflow gets abandoned. We do NOT
-    # run 'graphify install'/'graphify claude install': those append a raw block
-    # to CLAUDE.md and a per-project skill that duplicate what the template + the
-    # central prefer-graphify hook already provide. The graph itself is still
-    # built by '/graphify .' (run it once); the hooks only keep it fresh after.
-    if graphify hook install >/dev/null 2>&1; then
-      echo "  - graphify git hooks installed (graph auto-rebuilds on commit/checkout)"
-    else
-      echo "  ! graphify hook install failed (non-fatal); run 'graphify hook install' manually" >&2
-    fi
-  fi
-  # Serena and Graphify are companions and always deploy together.
-  merge_mcp_servers "$TEMPLATE_DIR/mcp/serena.json" "$TEMPLATE_DIR/mcp/graphify.json"
-
-  # Merge Serena's drift-prevention hooks into the project's settings.json.
-  # These are what make the model deterministically prefer Serena's tools over
-  # Grep/Edit instead of drifting back over a long session (oraios/serena #1201).
-  # We MERGE rather than overwrite so any project-specific hooks/permissions in
-  # the stub survive, and we de-duplicate by command so re-running --serena is
-  # idempotent. We parse JSON with python3, never jq (DESIGN.md §5). 'serena'
-  # is already confirmed in PATH above (exit 4 otherwise), so 'serena-hooks'
-  # ships alongside it — the hooks will resolve at runtime.
-  if [ -f "$SRC_CLAUDE/serena-hooks.json" ]; then
-    # A merge failure must not abort the deploy (.mcp.json is already written),
-    # so run the heredoc under `if` (which neutralizes `set -e` for this command)
-    # and turn a non-zero exit into a non-fatal WARN.
-    if SERENA_HOOKS_SRC="$SRC_CLAUDE/serena-hooks.json" \
-       SETTINGS_DST="$DST_CLAUDE/settings.json" \
-       python3 - <<'PY'
-import json, os, sys
-
-src = os.environ["SERENA_HOOKS_SRC"]
-dst = os.environ["SETTINGS_DST"]
-
-with open(src) as f:
-    # {{HOOK_EXT}} resolves to the OS hook form: 'sh' here, 'ps1' in init.ps1.
-    # serena-hooks.json stays OS-agnostic; only the merge picks the concrete script.
-    raw = f.read().replace("{{HOOK_EXT}}", "sh")
-hook_block = json.loads(raw)["hooks"]
-
-try:
-    with open(dst) as f:
-        settings = json.load(f)
-except (FileNotFoundError, json.JSONDecodeError):
-    settings = {}
-
-hooks = settings.setdefault("hooks", {})
-
-def cmds(group_list):
-    out = set()
-    for g in group_list:
-        for h in g.get("hooks", []):
-            if "command" in h:
-                out.add(h["command"])
-    return out
-
-changed = False
-for event, groups in hook_block.items():
-    existing = hooks.setdefault(event, [])
-    have = cmds(existing)
-    for group in groups:
-        new_cmds = cmds([group])
-        if new_cmds and new_cmds.issubset(have):
-            continue  # already present — keep idempotent
-        existing.append(group)
-        have |= new_cmds
-        changed = True
-
-if changed:
-    try:
-        with open(dst, "w") as f:
-            json.dump(settings, f, indent=2)
-            f.write("\n")
-    except OSError as e:
-        # Don't abort the whole deploy: .mcp.json is already written. Surface a
-        # warning so the user can add the hooks manually, and exit non-zero so
-        # the caller's `|| ...` guard turns this into a WARN rather than a fatal.
-        print("  ! could not write Serena hooks into %s (%s) — add them manually from serena-hooks.json" % (dst, e), file=sys.stderr)
-        sys.exit(1)
-    print("  - merged: Serena drift-prevention hooks into %s" % dst, file=sys.stderr)
-else:
-    print("  - skip: Serena hooks already present in %s" % dst, file=sys.stderr)
-PY
-    then
-      :  # merge succeeded (the heredoc already printed merged/skip)
-    else
-      echo "WARN: Serena hook merge did not complete; deploy continues. Add the hooks manually from serena-hooks.json." >&2
-    fi
-  fi
-fi
-
 # --- Xcode MCP (opt-in, macOS only) ------------------------------------------
 # Apple's own MCP server, shipped with Xcode 26.3+ as `xcrun mcpbridge`. It is a
 # STDIO bridge that connects over XPC to a RUNNING Xcode process — there is no
 # standalone mode, so Xcode must be open with the project before Claude Code
-# starts or the server simply shows as unavailable (same shape as the graphify
-# server being inert until a graph exists).
+# starts or the server simply shows as unavailable.
 if [ "$INSTALL_XCODE" = "true" ]; then
   if [ "$(uname -s)" != "Darwin" ]; then
     echo "ERROR: --xcode is macOS-only (Apple's mcpbridge ships with Xcode)." >&2
@@ -384,6 +291,64 @@ if [ "$INSTALL_UI" = "true" ]; then
   fi
   merge_mcp_servers "$TEMPLATE_DIR/mcp/playwright.json"
 fi
+
+# --- codebase-memory-mcp (opt-in) ---------------------------------------------
+# A persistent code graph for structural questions. Opt-in, not default: its
+# authors' own benchmark scores it below plain file exploration on answer
+# quality (it wins on tokens) — DESIGN.md §33. Only the binary is a
+# prerequisite; dotclaude wires the server and permissions itself.
+if [ "$INSTALL_CODEBASE_MEMORY" = "true" ]; then
+  if ! command -v codebase-memory-mcp >/dev/null 2>&1; then
+    echo "ERROR: 'codebase-memory-mcp' not found in PATH (--codebase-memory needs it)." >&2
+    echo "       Install the BINARY only, with one of:" >&2
+    echo "         npm install -g codebase-memory-mcp" >&2
+    echo "         pip install --user codebase-memory-mcp" >&2
+    echo "         release archive + checksums.txt from github.com/DeusData/codebase-memory-mcp/releases" >&2
+    echo "         (verify with sha256sum -c, then put the binary in ~/.local/bin)" >&2
+    echo "       Do NOT run 'codebase-memory-mcp install' or its curl|bash one-liner: they rewrite" >&2
+    echo "       ~/.claude/settings.json hooks, add agents and skills, and edit your shell rc." >&2
+    exit 8
+  fi
+  merge_mcp_servers "$TEMPLATE_DIR/mcp/codebase-memory-mcp.json"
+  python3 "$TEMPLATE_DIR/scripts/merge-permissions.py" "$TEMPLATE_DIR/permissions/codebase-memory-mcp.json" . \
+    || echo "WARN: codebase-memory-mcp permissions not merged; deploy continues." >&2
+fi
+
+# --- LSP plugins (opt-in, one per --lsp=<plugin>) -----------------------------
+# Native code intelligence: go-to-definition/references through the `LSP` tool
+# and diagnostics after every edit. The plugin is only wiring; the language
+# server binary must be on PATH, so its absence is reported, not fatal.
+# ${arr[@]+...}: an empty array under `set -u` is an error on bash < 4.4.
+for plugin in ${LSP_PLUGINS[@]+"${LSP_PLUGINS[@]}"}; do
+  spec=$(python3 - "$TEMPLATE_DIR/lsp-plugins.json" "$plugin" <<'PY' 2>/dev/null || true
+import json, sys
+catalog = json.load(open(sys.argv[1], encoding="utf-8"))
+entry = catalog["plugins"].get(sys.argv[2])
+if entry:
+    print("%s\t%s\t%s" % (catalog["marketplace"], entry["binary"], entry["install"]))
+PY
+)
+  if [ -z "$spec" ]; then
+    echo "WARN: --lsp=$plugin is not an official LSP plugin (see $TEMPLATE_DIR/lsp-plugins.json); skipped." >&2
+    continue
+  fi
+  IFS=$'\t' read -r marketplace binary install_hint <<< "$spec"
+  if ! command -v "$binary" >/dev/null 2>&1; then
+    echo "WARN: language server '$binary' is not in PATH — $plugin stays inert until you install it:" >&2
+    echo "        $install_hint" >&2
+  fi
+  if ! command -v claude >/dev/null 2>&1; then
+    echo "WARN: 'claude' CLI not in PATH; install the plugin from Claude Code with:" >&2
+    echo "        /plugin install $plugin@$marketplace   (choose project scope)" >&2
+    continue
+  fi
+  if claude plugin install "$plugin@$marketplace" --scope project >/dev/null 2>&1; then
+    echo "  - installed LSP plugin $plugin (project scope, recorded in .claude/settings.json)" >&2
+  else
+    echo "WARN: could not install $plugin; run it yourself:" >&2
+    echo "        claude plugin install $plugin@$marketplace --scope project" >&2
+  fi
+done
 
 # --- Optional scaffolding ----------------------------------------------------
 SCAFFOLDS="$TEMPLATE_DIR/scaffolds"

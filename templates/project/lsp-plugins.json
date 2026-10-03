@@ -1,0 +1,19 @@
+{
+  "_comment": "The official Claude Code LSP plugins (marketplace claude-plugins-official) and the language-server binary each one needs on PATH. Single source for init.sh/init.ps1 (--lsp=<plugin>) and for /init-project, which maps the detected language to a plugin. A plugin only provides the wiring: without its binary it stays inert ('Executable not found in $PATH' in /plugin > Errors). 'install' is a hint shown to the user, never run by the deploy.",
+  "marketplace": "claude-plugins-official",
+  "plugins": {
+    "clangd-lsp":        {"languages": ["C", "C++"], "binary": "clangd", "install": "apt install clangd  |  brew install llvm"},
+    "csharp-lsp":        {"languages": ["C#"], "binary": "csharp-ls", "install": "dotnet tool install --global csharp-ls"},
+    "gopls-lsp":         {"languages": ["Go"], "binary": "gopls", "install": "go install golang.org/x/tools/gopls@latest"},
+    "jdtls-lsp":         {"languages": ["Java"], "binary": "jdtls", "install": "brew install jdtls  |  Eclipse JDT LS release archive on PATH"},
+    "kotlin-lsp":        {"languages": ["Kotlin"], "binary": "kotlin-lsp", "install": "JetBrains kotlin-lsp release (github.com/Kotlin/kotlin-lsp) on PATH"},
+    "liquid-lsp":        {"languages": ["Liquid (Shopify themes)"], "binary": "shopify", "install": "npm install -g @shopify/cli"},
+    "lua-lsp":           {"languages": ["Lua"], "binary": "lua-language-server", "install": "brew install lua-language-server  |  release archive on PATH"},
+    "php-lsp":           {"languages": ["PHP"], "binary": "intelephense", "install": "npm install -g intelephense"},
+    "pyright-lsp":       {"languages": ["Python"], "binary": "pyright-langserver", "install": "npm install -g pyright  |  pipx install pyright"},
+    "ruby-lsp":          {"languages": ["Ruby"], "binary": "ruby-lsp", "install": "gem install ruby-lsp"},
+    "rust-analyzer-lsp": {"languages": ["Rust"], "binary": "rust-analyzer", "install": "rustup component add rust-analyzer"},
+    "swift-lsp":         {"languages": ["Swift"], "binary": "sourcekit-lsp", "install": "ships with Xcode / the Swift toolchain"},
+    "typescript-lsp":    {"languages": ["TypeScript", "JavaScript"], "binary": "typescript-language-server", "install": "npm install -g typescript-language-server typescript"}
+  }
+}

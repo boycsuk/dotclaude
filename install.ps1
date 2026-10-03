@@ -23,15 +23,25 @@ $Target = Join-Path $HOME ".claude"
 Write-Host "==> Installing dotclaude into $Target"
 
 # Prerequisite check, mirroring install.sh: the .ps1 hooks and this installer
-# need PowerShell 5.1+, and several hooks shell out to python3 exactly as the
-# .sh ones do (DESIGN.md §5). Without python3 the guard hooks fail silently.
+# need PowerShell 5.1+, and the .py hooks run on Python (DESIGN.md §5).
 if ($PSVersionTable.PSVersion.Major -lt 5) {
     [Console]::Error.WriteLine("ERROR: PowerShell 5.1 or newer is required (found $($PSVersionTable.PSVersion)).")
     exit 1
 }
-if (-not (Get-Command python3 -ErrorAction SilentlyContinue) -and
-    -not (Get-Command python -ErrorAction SilentlyContinue)) {
-    [Console]::Error.WriteLine("ERROR: python3 not found — the hooks parse hook input with it. Install Python and re-run.")
+# Resolve an interpreter that actually RUNS, and wire the .py hooks to its full
+# path. Get-Command alone is not enough: the Microsoft Store "python3" alias
+# exists on a clean Windows install and only opens the Store.
+$PythonExe = $null
+foreach ($candidate in @("python3", "python")) {
+    $cmd = Get-Command $candidate -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $cmd) { continue }
+    try {
+        & $cmd.Source --version *> $null
+        if ($LASTEXITCODE -eq 0) { $PythonExe = $cmd.Source; break }
+    } catch { }
+}
+if (-not $PythonExe) {
+    [Console]::Error.WriteLine("ERROR: no working Python found (tried python3, python) — the .py hooks run on it. Install Python and re-run.")
     exit 1
 }
 
@@ -59,9 +69,15 @@ foreach ($dir in @("hooks", "agents", "skills", "rules", "output-styles")) {
     if (-not (Test-Path $src)) { continue }
     $dst = Join-Path $Target $dir
     New-Item -ItemType Directory -Force -Path $dst | Out-Null
-    Copy-Item -Recurse -Force (Join-Path $src "*") $dst
-    foreach ($f in (Get-ChildItem -Path $src -Recurse -File)) {
+    # File by file, skipping __pycache__: a dev checkout that ran the Python
+    # hooks or tests holds bytecode that must not land in a repo-owned tree.
+    $files = Get-ChildItem -Path $src -Recurse -File |
+        Where-Object { $_.FullName -notmatch '[\\/]__pycache__[\\/]' }
+    foreach ($f in $files) {
         $rel = $f.FullName.Substring($src.Length).TrimStart('\', '/') -replace '\\', '/'
+        $destFile = Join-Path $dst ($rel -replace '/', [System.IO.Path]::DirectorySeparatorChar)
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destFile) | Out-Null
+        Copy-Item -Force $f.FullName $destFile
         # Windows keeps the .ps1 hooks; the .sh siblings are dropped below and
         # must stay out of the manifest so a later run does not chase them.
         # Only hooks/ is filtered: a .sh anywhere else IS written, so it must
@@ -82,18 +98,32 @@ foreach ($dir in @("skills", "agents", "rules", "output-styles", "hooks")) {
         Where-Object { -not (Get-ChildItem -Path $_.FullName -Force -ErrorAction SilentlyContinue) } |
         Remove-Item -Force -ErrorAction SilentlyContinue
 }
+$oldManifest = if (Test-Path $manifestPath) { @(Get-Content $manifestPath) } else { @() }
 $manifest | Set-Content -Path $manifestPath -Encoding UTF8
-Write-Host "  - central hooks/agents/skills/rules/output-styles installed (.ps1 hooks)"
+# A hook this repo stopped shipping is still wired in every project deployed
+# with it; its entry now points at a deleted script. Say how to clean that up.
+$retired = @($oldManifest | Where-Object { $_ -match '^hooks/[^/]+$' -and $manifest -notcontains $_ })
+if ($retired.Count -gt 0) {
+    Write-Host "  ! retired hooks removed: $(($retired | ForEach-Object { $_ -replace '^hooks/', '' }) -join ' ')"
+    Write-Host "    Projects that wired them: run /init-project --update (or init.ps1) to prune the entries."
+}
+Write-Host "  - central hooks/agents/skills/rules/output-styles installed (.ps1 + .py hooks)"
 
 # --- Central settings.json: build the PowerShell form and MERGE into user's --
-function New-Hook($name, $t) {
+function New-Hook($name, $t, $isPython) {
     # No `if` parameter on purpose: hook entries carry no `if` gates (a
     # prefix-anchored pattern reopens the wrapped-form bypasses the hooks'
     # own parsers close — DESIGN.md §27b). check.py enforces the same on the
     # source JSON; the guard below keeps Windows from reintroducing one.
+    if ($isPython) {
+        $script = Join-Path (Join-Path $Target "hooks") "$name.py"
+        $command = "& `"$PythonExe`" `"$script`""
+    } else {
+        $command = "& `"$Target\hooks\$name.ps1`""
+    }
     return [ordered]@{
         type    = "command"
-        command = "& `"$Target\hooks\$name.ps1`""
+        command = $command
         shell   = "powershell"
         timeout = $t
     }
@@ -105,6 +135,7 @@ function New-Hook($name, $t) {
 # mkfs/shred/truncate denies). Everything below TRANSLATES that file:
 #   - Bash(x)          -> PowerShell(<mapped equivalent>), dropped if unmappable
 #   - hooks .sh        -> .ps1 + "shell": "powershell"
+#   - hooks .py        -> same .py, run by the verified $PythonExe
 # Adding a rule to the JSON therefore reaches Windows with no edit here — and a
 # rule with no mapping is a HARD FAILURE below, never a silent drop.
 
@@ -205,7 +236,7 @@ foreach ($event in $srcSettings.hooks.PSObject.Properties) {
                 exit 1
             }
             $timeout = if ($h.timeout) { $h.timeout } else { 5 }
-            $hooks += (New-Hook $name $timeout)
+            $hooks += (New-Hook $name $timeout ($h.command -match '\.py"?$'))
         }
         $groups += [ordered]@{ matcher = $group.matcher; hooks = $hooks }
     }

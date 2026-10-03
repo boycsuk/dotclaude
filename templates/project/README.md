@@ -18,7 +18,7 @@ and applies to every project automatically. See DESIGN.md §23.
 │   ├── ui.md                    # Visual contract: brand design tokens (palette, type, spacing) + sections
 │   ├── user-stories.md          # Behavioral contract: what the user can do (platform-agnostic)
 │   └── conventions.md           # How to write the code — portable mirror of the central rules for non-Claude-Code tools
-├── .mcp.json              # Only when MCP flags were passed — COMPOSED per server (--serena → serena+graphify, --xcode, --ui → playwright); hand-added servers survive
+├── .mcp.json              # Only when MCP flags were passed — COMPOSED per server (--xcode, --ui → playwright, --codebase-memory); hand-added servers survive
 └── .claude/
     ├── settings.json            # Per-project STUB — only adds project-specific perms (MCP, etc.); base config is central
     └── settings.local.json.example   # Personal overrides; rename to settings.local.json
@@ -29,7 +29,7 @@ and applies to every project automatically. See DESIGN.md §23.
 Installed from the dotclaude repo (`.claude/`) via `install.sh`; updated
 for all projects at once with `git pull && ./install.sh`:
 
-- **hooks/** — verify-on-edit, guard-destructive, guard-push-main, detect-secrets, sync-mirror-docs, guard-central-config (blocks editing the central `~/.claude/` config from inside a project), reinject-rules (re-primes the non-negotiable conventions after a context compaction).
+- **hooks/** — verify-on-edit, guard-destructive, guard-push-main, detect-secrets, sync-mirror-docs, guard-central-config (blocks editing the central `~/.claude/` config from inside a project), reinject-rules (re-primes the non-negotiable conventions after a context compaction), code-intel-context (tells the session and every code-reading subagent which code-intelligence tools the project has — the LSP plugin, the codebase-memory graph — and when to use each; silent where there are none), explore-graph-prompt (appends the same guidance to every Explore delegation, since Explore skips CLAUDE.md).
 - **agents/** — researcher, code-reviewer, debugger, db-inspector.
 - **skills/** — verify, commit, changes, plan-feature, compound, resume-context, update-docs, audit, readme, implement-ui (design reference → tokens in `docs/ui.md` → section-by-section build with a screenshot-vs-reference loop; pairs with the playwright MCP deployed by `init.sh --ui`).
 - **rules/** — code-quality, security, workflow, ai-collaboration.
@@ -54,10 +54,10 @@ The skill detects your OS, detects your stack (or interviews you), and asks whic
 
 ```bash
 cd <your project>
-bash ~/.claude/templates/project/init.sh [--serena] [--xcode] [--ui] [scaffold flags]
+bash ~/.claude/templates/project/init.sh [--lsp=<plugin>] [--codebase-memory] [--xcode] [--ui] [scaffold flags]
 ```
 
-The MCP flags are added by the skill per the interview: `--serena` (Serena + Graphify), `--xcode` (Apple's `xcrun mcpbridge`, macOS + Xcode 26.3+ only), `--ui` (Playwright browser MCP — lets the model screenshot the running app, which `/implement-ui` uses to verify UI work against a design reference; needs `npx`). Scaffold flags (`--fullstack`, `--runtime=`, `--compose`, `--proxy=`, `--deploy-script`) per the interview. When the script prints `init.sh: deploy OK`, return to Claude Code.
+`--lsp=<plugin>` installs the official Claude Code LSP plugin for the project's language at project scope (see below). The MCP flags are added by the skill per the interview: `--codebase-memory` (persistent code graph; needs the `codebase-memory-mcp` binary), `--xcode` (Apple's `xcrun mcpbridge`, macOS + Xcode 26.3+ only), `--ui` (Playwright browser MCP — lets the model screenshot the running app, which `/implement-ui` uses to verify UI work against a design reference; needs `npx`). Scaffold flags (`--fullstack`, `--runtime=`, `--compose`, `--proxy=`, `--deploy-script`) per the interview. When the script prints `init.sh: deploy OK`, return to Claude Code.
 
 **3. Personalize with Claude Code.** The skill resumes: it fills in placeholders in the deployed `CLAUDE.md` and `settings.json`, sanity-checks `.gitignore`, and verifies the deploy.
 
@@ -95,76 +95,21 @@ The reusable core is central, so **where** you add something depends on whether 
 | Permissions for a new MCP, or a project-only override | Add to `permissions.allow` in the project's `.claude/settings.json` stub |
 | A new high-level area doc (e.g. `mobile.md`, `bot.md`) | Add the file under `docs/`; `/update-docs` keeps it in sync with the diff |
 
-## Optional MCP: Serena (semantic code intelligence)
+## Code intelligence: the LSP plugin (`--lsp=<plugin>`)
 
-[Serena](https://github.com/oraios/serena) is an LSP-backed MCP that exposes symbol-level tools (`find_symbol`, `find_referencing_symbols`, `replace_symbol_body`, `get_symbols_overview`, etc.). When selected during `/init-project`, the deploy merges the `serena` and `graphify` fragments from `templates/project/mcp/` into the project's `.mcp.json`.
+`/init-project` maps the project's language to one of Claude Code's 13 official LSP plugins (`lsp-plugins.json`: pyright-lsp, typescript-lsp, gopls-lsp, rust-analyzer-lsp, …) and passes `--lsp=<plugin>`. The deploy runs `claude plugin install <plugin>@claude-plugins-official --scope project`, which records it in `.claude/settings.json`. The model then gets a read-only `LSP` tool (definitions, references, hover types, call hierarchy) and the language server's diagnostics after every edit ("Found N new diagnostic issues").
 
-**Deterministic tool preference (not just advisory).** Selecting Serena also merges Serena's own drift-prevention hooks into this project's `.claude/settings.json`: `serena-hooks activate` (SessionStart) primes the model to read Serena's instructions, and `serena-hooks remind` (PreToolUse) nudges it back to Serena's symbol tools whenever it over-relies on Grep/Read — silent when you're already using Serena. This is what makes the preference hold over a long session, where advisory CLAUDE.md prose alone tends to decay. The hooks are merged idempotently and never overwrite your own project hooks/permissions.
+The plugin is only the wiring: the language-server binary (`pyright-langserver`, `typescript-language-server`, …) must be on PATH — the deploy warns with the install command if it is not. A teammate who clones the project runs the same `claude plugin install … --scope project` once: a plugin listed in `enabledPlugins` but not installed stays off. Languages without an official plugin (Bash, PowerShell, …) get none.
 
-### Prerequisite (one-time per machine)
+## Optional code graph: codebase-memory-mcp (`--codebase-memory`)
 
-Serena is invoked via the `serena` binary. Install it once with `uv`:
+[codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) keeps a persistent graph of the code for structural questions: who calls X, what the current diff affects, dead code, architecture. The flag merges the server into `.mcp.json` and its 13 read-only tools into `permissions.allow` by exact name; the tools that write or delete the index stay on ask. Index it once after the deploy (`index_repository`); the server re-indexes on git changes after that. The index lives in `~/.cache/codebase-memory-mcp/`, not in the repo.
 
-```bash
-uv tool install -p 3.13 serena-agent@latest --prerelease=allow
-```
+Install the binary only (`npm install -g codebase-memory-mcp`, `pip install --user codebase-memory-mcp`, or a checksum-verified release archive). Do not run its own `install` subcommand: it rewrites hooks in `~/.claude/settings.json`, adds agents and a skill, and edits your shell rc. Recommended for large or multi-service codebases only — its authors' benchmark scores it below plain file exploration on answer quality; it wins on tokens.
 
-If `uv` is not installed:
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh    # Linux/macOS/WSL
-# or: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"   # Windows
-```
+## Retired artifacts are pruned on every deploy
 
-The template intentionally does NOT use `uvx --from git+https://github.com/oraios/serena ...`. That form works without a global install but adds ~5–15s startup latency per session and re-resolves the package on every cold start. The `uv tool install` approach pins the version, starts instantly, and is the form recommended by Serena's official docs.
-
-### What Serena writes to disk
-
-- `.serena/project.yml` — committed (project-wide config).
-- `.serena/memories/*.md` — committed (onboarding summaries written on first run; act as team-shared context).
-- `.serena/project.local.yml` — gitignored (personal overrides; the template `.gitignore` already excludes it).
-- `.serena/cache/` — gitignored (LSP cache).
-
-### First-run behavior
-
-On the first MCP call after activation, Serena runs an "onboarding" pass: reads key files, derives project structure, writes summaries to `.serena/memories/`. This takes ~30s–2min depending on repo size.
-
-For repos with >1k source files, run once for faster symbol lookups:
-```bash
-serena project index
-```
-
-### Web dashboard (no browser auto-open)
-
-The `.mcp.json` passes `--open-web-dashboard False`, so starting the Serena MCP server does **not** pop open a browser tab on every session — which is noise inside a terminal/IDE agent. The dashboard *server* is left at its default (enabled), so if you ever want Serena's live log/tool view you can open it manually at `http://127.0.0.1:24282/dashboard/` while the server is running (24282 is the base port; Serena picks the next free port up from there if it's taken). To stop the dashboard from running at all, add `--enable-web-dashboard False` to the serena args in `.mcp.json` (the deploy intentionally does not, per Serena's own recommendation to keep the dashboard available but not auto-opened).
-
-### When to use Serena tools vs native Claude Code tools
-
-See the "Serena" block in the deployed `CLAUDE.md` (only present if Serena was selected during `/init-project`). Short version: symbol-level operations (find a definition, rewrite a function body, list references) go through Serena; plain text reads/edits stay on `Read` and `Edit`.
-
-### Permissions
-
-`/init-project` adds `mcp__serena__*` (and `mcp__graphify__*`, see below) to `permissions.allow` automatically when Serena is selected. The MCP itself runs without `execute_shell_command` (disabled under `--context claude-code`), so it cannot run shell commands — Claude Code's `Bash` tool handles that.
-
-## Companion MCP: Graphify (codebase knowledge graph)
-
-[Graphify](https://github.com/safishamsi/graphify) ships in the **same `.mcp.json`** as Serena (deployed together by `--serena`) because they are complementary: Serena works at the **symbol** level, Graphify at the **graph** level — a queryable knowledge graph of how the whole codebase (code + docs + schema) relates. Use Graphify to understand structure and ripple effects ("what depends on this", "what breaks if I change X"), then Serena to act precisely on the symbols involved.
-
-Graphify is a **Skill (builds the graph) + an MCP server (serves it)**, set up in this order:
-
-1. **Build the graph:** install once with `uv`, then build:
-   ```
-   uv tool install graphifyy
-   /graphify .             # builds graphify-out/graph.json (run inside the project)
-   ```
-   You do **not** need to run `graphify install`. The graph-first *determinism* — a `PreToolUse` nudge toward `graphify query` when you grep/find or read source files one-by-one while a graph exists — ships centrally as `prefer-graphify.{sh,ps1}` and is merged into this project's hooks by `--serena` (gated on the graph existing, so it's silent until you build it). `--serena` also runs `graphify hook install` for you (git post-commit/post-checkout auto-rebuild, AST-only, no API cost) so the graph never goes stale and the nudges point at current data. We deliberately avoid `graphify install`/`graphify claude install`: they append a raw block to `CLAUDE.md`, drop a per-project skill, and rewrite `settings.json` destructively.
-2. **MCP server (secondary):** the `graphify` entry in `.mcp.json` exposes the built graph for repeated tool-call access (`query_graph`, `get_neighbors`, `shortest_path`, `get_pr_impact`, …). **It reads `graphify-out/graph.json` and will not start until that file exists** — so on a fresh project the `graphify` MCP server shows as unavailable until you run `/graphify .` at least once. Serena (same `.mcp.json`) starts independently and is unaffected.
-
-`graphify-out/` is build output and is gitignored — with the auto-rebuild hook it changes on every commit, so versioning it would put a multi-MB diff in each commit. Each dev builds their own with `/graphify .`.
-
-### What Graphify writes to disk
-
-- `graphify-out/graph.json` — the built graph (gitignored; auto-rebuilt per commit).
-- `graphify-out/` — cache and intermediate artifacts (gitignored).
+dotclaude sometimes stops shipping a piece a project was deployed with — Serena and Graphify (once deployed by `--serena`) were the first. `templates/project/obsolete.json` lists them, and every `init.sh` / `init.ps1` run removes their dead hook entries from `.claude/settings.json` and `settings.local.json` (the scripts behind them are gone from `~/.claude/hooks/`). Obsolete `.mcp.json` servers and directories (`.serena/`, `graphify-out/`) are only reported: `/init-project --update` asks before removing them.
 
 ## Database inspection: `db-inspector` agent
 
@@ -232,14 +177,14 @@ The `init.sh` / `init.ps1` scripts work on their own — useful for CI, scripted
 ```bash
 # Linux / macOS / WSL
 cd <your project>
-bash ~/.claude/templates/project/init.sh [--serena] [--xcode] [--ui]
+bash ~/.claude/templates/project/init.sh [--lsp=<plugin>] [--codebase-memory] [--xcode] [--ui]
 # Edit CLAUDE.md: replace {{...}} placeholders with real values
 ```
 
 ```powershell
 # Windows
 cd <your project>
-powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\templates\project\init.ps1" [--serena] [--ui]
+powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\templates\project\init.ps1" [--ui]
 # Edit CLAUDE.md: replace {{...}} placeholders with real values
 ```
 
@@ -276,7 +221,7 @@ Components in this template that override:
 | `skills/resume-context` | `haiku` | Mechanical: read three files and structure them. |
 
 Everything else uses `inherit`. Specifically, do NOT downgrade these to `haiku`:
-- `researcher` — synthesizing architecture and cross-module flow is reasoning, not lookup. Quick "where is X" lookups go to the built-in Explore agent (Haiku) instead.
+- `researcher` — synthesizing architecture and cross-module flow is reasoning, not lookup. Quick "where is X" lookups go to the built-in Explore agent instead (smaller context; it runs on the session model since Claude Code v2.1.198).
 - `code-reviewer`, `debugger` — need reasoning for subtle bugs.
 - `db-inspector` — interpreting query results against an expectation requires judgment, not pattern matching.
 - `commit`, `compound`, `plan-feature`, `init-project` — need judgment.

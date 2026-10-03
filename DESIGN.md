@@ -149,6 +149,8 @@ The goal of this repo: turn that guide into a concrete, portable, reusable setup
 
 ### 13. Serena MCP as an opt-in symbol-level layer
 
+> **Superseded by §32 (2026-10-03).** Serena and Graphify were removed. The reasoning below is kept as history: it explains what old projects still carry and why `obsolete.json` lists it.
+
 **Considered:** (a) baking Serena into the default template so every project gets it; (b) leaving it as a third-party tool the user wires up manually; (c) opt-in via `/init-project` with a pre-built `.mcp.json` template.
 
 **Chosen:** option (c). The skill offers Serena in the MCP multi-select; when selected, it merges the `serena` + `graphify` fragments from `templates/project/mcp/` into the project's `.mcp.json`, adds `mcp__serena__*` to `permissions.allow`, gitignores `.serena/project.local.yml` and `.serena/cache/`, and includes a Serena block in CLAUDE.md explaining when to prefer its tools.
@@ -328,6 +330,8 @@ One feature appears in all three under a different lens, with no duplicated deta
 
 ### 20. Not packaged as a Claude Code plugin / marketplace
 
+> **Amended by §33 (2026-10-03):** dotclaude still is not a plugin, but `--lsp=<plugin>` installs official Claude Code LSP plugins into projects.
+
 **Considered:** distributing the template as a Claude Code plugin published to a marketplace (`plugin.json` + `marketplace.json`, `claude plugin install`, `defaultEnabled`), instead of `install.sh` copying files plus the `/init-project` planner skill.
 
 **Chosen:** keep `install.sh` + `init.sh` + the planner skill. Do NOT package the whole thing as a plugin.
@@ -502,6 +506,33 @@ The recurring failure in design-to-code work was handing the model a whole HTML 
 - `--ui` OWNS the `playwright` key in `.mcp.json`: a hand-added entry is adopted (updated), not duplicated — pinned in `tests/mcp-merge-cases.py`.
 
 **Rejected:** user-scope installation (`claude mcp add --scope user`) as the default recommendation. It works, but leaves nothing versioned in the project, so a second machine or collaborator silently loses the browser loop the skill's verification gate depends on.
+
+### 32. Serena and Graphify removed; retired artifacts are pruned, not left dangling (2026-10-03)
+
+**Why remove them.** Claude Code now ships native LSP navigation and post-edit diagnostics through the official `*-lsp` plugins (the `LSP` tool, since v2.0.74), which covers what Serena was for in day-to-day work. Serena only paid off on large multi-file refactors, and the model kept ignoring its tools even with the drift-prevention hooks of §13 — the hooks guaranteed the reminder, not the behaviour. Graphify's strengths (docs, PDFs, mixed corpora) do not match a code-only workflow, and its advertised token savings did not hold up in practice. `--serena` is now accepted and ignored with a warning (an older `/init-project` may still print it); exit 4 is retired like exit 3.
+
+**The migration problem.** Deploy merges only ever *add* hook entries. Removing `prefer-graphify` / `prefer-serena-bash` from `global/.claude/hooks/` makes `install.sh` delete the scripts, but every project deployed with `--serena` still wires them in `.claude/settings.json` — so each matching tool call reports a hook error (non-blocking: exit 127 is not exit 2, but noise on every Bash/Read).
+
+**Chosen: a data-driven manifest, applied on every deploy.** `templates/project/obsolete.json` lists retired hooks (by command substring, in POSIX and PowerShell forms), MCP servers and directories. `scripts/prune-obsolete.py` — one Python implementation called by both `init.sh` and `init.ps1`, so the pruning rules cannot drift between them — removes the matching hook entries from `settings.json` and `settings.local.json`. Servers and directories are only *reported* (`OBSOLETE_MCP` / `OBSOLETE_FILES` from `detect-drift.py`), and `/init-project --update` asks before removing them (update-mode.md §1e): pruning an entry that points at a deleted script is housekeeping, deleting a server or a directory the user might still use is their call. The installers print a one-line notice whenever a re-install removes a hook file, so the user knows to re-run the deploy.
+
+**Guard rails.** check.py fails if an `obsolete.json` match also hits a hook dotclaude still ships (that would strip a live hook from every project on its next deploy), or if a listed server still has an `mcp/` fragment. `tests/update-prune-cases.py` pins the contract through both init scripts. This is the first rule set of a general drift mechanism: retiring any artifact from now on means adding it to the manifest.
+
+**Rejected:** keeping no-op stub hooks for a release (leaves dead files and entries forever, and hides the problem instead of fixing it); pruning inside `install.sh` (the installer does not know where the user's projects are).
+
+### 33. Code intelligence: official LSP plugins + optional codebase-memory-mcp, steered by hooks (2026-10-03)
+
+**Three layers, each answering a different question.** The official Claude Code LSP plugin answers questions about *one symbol* (definition, references, hover type, call hierarchy) and pushes diagnostics after every edit. codebase-memory-mcp (DeusData) answers *structural* questions — callers and call paths, the impact of the current diff, architecture, dead code. Grep/Read stay for literal text, config and non-code files.
+
+**LSP: `--lsp=<plugin>` runs the real install.** The plan was to have `/init-project` write `enabledPlugins` into the project stub. A probe disproved it: an official plugin listed in project `enabledPlugins` but not installed stays off (no `LSP` tool), while an installed-but-user-disabled one is switched on by the same entry. So `init.sh`/`init.ps1` run `claude plugin install <plugin>@claude-plugins-official --scope project`, which installs it and records it in `.claude/settings.json`; teammates run the same command once. Every failure (binary missing, CLI missing, unknown name) is a WARN with the fix, never an abort. Only the 13 official plugins are offered (`lsp-plugins.json`); languages without one (Bash, PowerShell) get none rather than a community plugin. This amends §20: dotclaude still is not a plugin, but it now *installs* official ones.
+
+**codebase-memory-mcp: opt-in, binary only.** Opt-in because its authors' own preprint (arXiv:2603.27277) scores 83% answer quality against 92% for plain file exploration — it saves tokens, it does not answer better — and an MCP server costs context in every session. Type resolution is a C "hybrid LSP" layer for Python/TS/JS/Go/Rust/Java/Kotlin/C#/C/C++/PHP and tree-sitter only elsewhere; the upstream docs disagree on the exact list. dotclaude never runs the upstream `install` subcommand: it writes hook entries into `~/.claude/settings.json` (whose `hooks` key `install.sh` owns and would overwrite on the next run), adds three agents and a skill to `~/.claude/`, appends a PATH line to the shell rc and configures up to 45 other AI clients. Instead `--codebase-memory` composes `mcp/codebase-memory-mcp.json` and merges the 13 read-only tools into `permissions.allow` *by exact name* (`permissions/codebase-memory-mcp.json`, via the shared `scripts/merge-permissions.py`); a wildcard would also allow `index_repository`, `delete_project`, `manage_adr` and `ingest_traces` (annotated read-only upstream, documented as creating edges). The index lives in `~/.cache/codebase-memory-mcp/`, outside the repo.
+
+**Guidance by hooks, not CLAUDE.md prose and not a custom Explore.** Prose decays under compaction and never reaches subagents; a project `Explore.md` would replace the built-in's tuned prompt and load CLAUDE.md plus git status into every lookup. Two facts from probes on Claude Code 2.1.288 shaped the replacement: the built-in Explore already has every non-editing tool (MCP tools and `LSP` included) — it only lacks the knowledge that the project has them; and both delivery channels work — `SubagentStart` `additionalContext` reaches the subagent, and a `PreToolUse` hook on `Agent` can rewrite the prompt through `updatedInput` *without* returning a permission decision (so it never bypasses the user's rules for `Agent`). When the two channels carried competing instructions, the prompt won (n=1). Hence:
+- `code-intel-context.py` (advisory): SessionStart (`startup|resume|clear|compact`) and SubagentStart for `Plan|general-purpose|researcher|debugger|code-reviewer`.
+- `explore-graph-prompt.py` (rewrite): appends the same guidance to every Explore prompt, idempotently, touching no other input key.
+Both read the project's `.mcp.json` and the merged user/project/local `enabledPlugins`, and print nothing when neither tool is present. Neither hook denies Grep or Read: a hook guarantees the guidance arrives, not that the model prefers the graph — and given the benchmark, forcing it would be wrong.
+
+**Rejected:** a `prefer-graph` PreToolUse nudge on Grep/Glob (the `prefer-graphify` pattern; it did not change behaviour with Serena either); community LSP plugins; running the upstream installer with `--clients=claude-code`.
 
 ## Things deliberately not included
 

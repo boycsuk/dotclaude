@@ -61,10 +61,21 @@ def check(name):
     return wrap
 
 
-# --- 1. Every hook ships as a .sh + .ps1 pair --------------------------------
+def py_hooks():
+    """Names of the single-file Python hooks (no .sh/.ps1 twin by design)."""
+    return sorted(os.path.basename(p)[:-3]
+                  for p in glob.glob(os.path.join(REPO, "global/.claude/hooks/*.py")))
+
+
+# --- 1. Every shell hook ships as a .sh + .ps1 pair --------------------------
 @check("hook .sh/.ps1 pairs")
 def _():
     hooks = os.path.join(REPO, "global/.claude/hooks")
+    for name in py_hooks():
+        for ext in (".sh", ".ps1"):
+            if os.path.exists(os.path.join(hooks, name + ext)):
+                fail("hook .sh/.ps1 pairs",
+                     f"{name}.py also has a {name}{ext} — one hook, one implementation")
     sh = {os.path.basename(p)[:-3] for p in glob.glob(os.path.join(hooks, "*.sh"))}
     ps = {os.path.basename(p)[:-4] for p in glob.glob(os.path.join(hooks, "*.ps1"))}
     for only in sorted(sh - ps):
@@ -90,7 +101,18 @@ def _():
     for event, groups in settings["hooks"].items():
         for group in groups:
             for hook in group["hooks"]:
-                name = os.path.basename(hook["command"]).replace(".sh", "")
+                command = hook["command"].rstrip('"')
+                if command.endswith(".py"):
+                    name = os.path.basename(command)
+                    if not command.startswith("python3 "):
+                        fail("settings.json hook wiring",
+                             f"{event} wires {name} without `python3 ` — install.ps1 "
+                             f"only rewrites that form to the verified interpreter")
+                    if not os.path.exists(os.path.join(REPO, "global/.claude/hooks", name)):
+                        fail("settings.json hook wiring",
+                             f"{event} wires '{name}' but it does not exist")
+                    continue
+                name = os.path.basename(command).replace(".sh", "")
                 for ext in (".sh", ".ps1"):
                     path = os.path.join(REPO, "global/.claude/hooks", name + ext)
                     if not os.path.exists(path):
@@ -136,23 +158,18 @@ def _():
 @check("doc inventories")
 def _():
     hooks = sorted(os.path.basename(p)[:-3]
-                   for p in glob.glob(os.path.join(REPO, "global/.claude/hooks/*.sh")))
+                   for p in glob.glob(os.path.join(REPO, "global/.claude/hooks/*.sh"))) + py_hooks()
     agents = sorted(os.path.basename(p)[:-3]
                     for p in glob.glob(os.path.join(REPO, "global/.claude/agents/*.md")))
     skills = sorted(os.path.basename(os.path.dirname(p))
                     for p in glob.glob(os.path.join(REPO, "global/.claude/skills/*/SKILL.md")))
-
-    # Hooks that are opt-in (merged only by --serena) are not part of the
-    # always-on inventory those docs describe.
-    optional_hooks = {"prefer-serena-bash", "prefer-graphify"}
-    core_hooks = [h for h in hooks if h not in optional_hooks]
 
     inventories = {
         "CLAUDE.md": read("CLAUDE.md"),
         "templates/project/README.md": read("templates/project/README.md"),
     }
     for doc, text in inventories.items():
-        for hook in core_hooks:
+        for hook in hooks:
             if hook not in text:
                 fail("doc inventories", f"{doc} never mentions the '{hook}' hook")
         for agent in agents:
@@ -165,7 +182,7 @@ def _():
                  f"templates/project/README.md never mentions the '{skill}' skill")
 
 
-# --- 6. The code-extension lists agree across rules and hooks ----------------
+# --- 6. The code-extension lists agree across the path-scoped rules ----------
 @check("code extension lists")
 def _():
     def exts_from_rule(path):
@@ -173,37 +190,18 @@ def _():
         m = re.search(r"paths:\s*(.+)", head)
         return set(re.findall(r"\w+", m.group(1).split("{")[-1])) if m else set()
 
-    def exts_from_hook(path):
-        # The hook's list lives inside a grep -qE '\.(ts|tsx|...)' alternation.
-        # Anchor on that shape rather than on specific extensions, so reordering
-        # the list cannot make this silently return nothing.
-        m = re.search(r"\\\.\(([a-z0-9|]+)\)", read(path))
-        return set(m.group(1).split("|")) if m else set()
-
     rule_exts = exts_from_rule("global/.claude/rules/code-quality.md")
     sec_exts = exts_from_rule("global/.claude/rules/security.md")
-    if rule_exts != sec_exts:
-        diff = rule_exts.symmetric_difference(sec_exts)
-        fail("code extension lists",
-             f"code-quality.md and security.md disagree on: {sorted(diff)}")
-
-    hook_exts = exts_from_hook("global/.claude/hooks/prefer-serena-bash.sh")
-    # A check that silently no-ops is worse than no check: if either list came
-    # back empty the extraction broke, and that is itself the finding.
-    if not hook_exts:
-        fail("code extension lists",
-             "could not extract the extension list from prefer-serena-bash.sh — "
-             "fix this check rather than trusting its pass")
+    # A check that silently no-ops is worse than no check: an empty list means
+    # the extraction broke, and that is itself the finding.
     if not rule_exts:
         fail("code extension lists",
              "could not extract the paths: glob from code-quality.md — "
              "fix this check rather than trusting its pass")
-    if hook_exts and rule_exts:
-        missing = hook_exts - rule_exts
-        if missing:
-            fail("code extension lists",
-                 f"prefer-serena-bash.sh treats {sorted(missing)} as code but the "
-                 f"rules' paths: glob does not, so no rule loads for those files")
+    if rule_exts != sec_exts:
+        diff = rule_exts.symmetric_difference(sec_exts)
+        fail("code extension lists",
+             f"code-quality.md and security.md disagree on: {sorted(diff)}")
 
 
 # --- 7. Skills never use inline interpreters (guard-destructive blocks them) --
@@ -342,13 +340,38 @@ def _():
     # An advisory hook must deliver via hookSpecificOutput.additionalContext on
     # stdout: with exit 0, stderr reaches the debug log only, so three hooks
     # were inert for months (DESIGN.md §17, 2026-08-15).
-    for name in ("prefer-serena-bash", "prefer-graphify", "sync-mirror-docs"):
+    for name in ("sync-mirror-docs",):
         for ext in ("sh", "ps1"):
             body = read(f"global/.claude/hooks/{name}.{ext}")
             if "additionalContext" not in body:
                 fail("hook wiring",
                      f"{name}.{ext} does not emit additionalContext — an advisory "
                      f"written to stderr with exit 0 never reaches the model")
+
+    # Python hooks declare their kind instead of being listed here by hand, so
+    # a new hook cannot dodge this check by never being added to a tuple.
+    for name in py_hooks():
+        body = read(f"global/.claude/hooks/{name}.py")
+        m = re.search(r"^# hook-kind: (guard|advisory|rewrite)\s*$", body, re.M)
+        if not m:
+            fail("hook wiring",
+                 f"{name}.py has no `# hook-kind: guard|advisory|rewrite` header line")
+            continue
+        kind = m.group(1)
+        if kind == "advisory" and "hookio.context(" not in body:
+            fail("hook wiring",
+                 f"{name}.py is advisory but never calls hookio.context() — its "
+                 f"text would not reach the model")
+        if kind == "rewrite" and "hookio.update_input(" not in body:
+            fail("hook wiring",
+                 f"{name}.py is a rewrite hook but never calls hookio.update_input()")
+        # A guard decides, a rewrite alters what a tool receives: both are
+        # pinned by a matrix, since neither failure shows up in normal use.
+        if kind in ("guard", "rewrite") and not os.path.exists(
+                os.path.join(REPO, "tests", f"{name}-cases.py")):
+            fail("hook wiring",
+                 f"{name}.py is a {kind} hook with no tests/{name}-cases.py matrix — "
+                 f"every guard hook shipped defects reading did not reveal")
 
 
 # --- 10. DESIGN.md structural headings survive edits -------------------------
@@ -404,10 +427,12 @@ def _():
     # passed green while check 10 deferred to "the JSON validity check".
     fragments = sorted(
         os.path.relpath(p, REPO)
-        for p in glob.glob(os.path.join(REPO, "templates/project/mcp/*.json")))
+        for p in glob.glob(os.path.join(REPO, "templates/project/mcp/*.json"))
+        + glob.glob(os.path.join(REPO, "templates/project/permissions/*.json")))
     for rel in ["global/.claude/settings.json",
                 "templates/project/.claude/settings.json",
-                "templates/project/.claude/serena-hooks.json",
+                "templates/project/obsolete.json",
+                "templates/project/lsp-plugins.json",
                 "templates/project/.claude/settings.local.json.example",
                 ] + fragments:
         path = os.path.join(REPO, rel)
@@ -417,6 +442,51 @@ def _():
             json.loads(read(rel))
         except json.JSONDecodeError as exc:
             fail("JSON validity", f"{rel} does not parse: {exc}")
+
+
+# --- 12. obsolete.json names only what dotclaude really stopped shipping -----
+@check("obsolete manifest")
+def _():
+    # prune-obsolete.py deletes every project hook entry whose command contains
+    # a listed match. A match that also hits a hook still shipped would strip
+    # a live hook from every project on its next deploy.
+    manifest = json.loads(read("templates/project/obsolete.json"))
+    shipped_hooks = [f"hooks/{n}" for n in os.listdir(os.path.join(REPO, "global/.claude/hooks"))]
+    for entry in manifest.get("hooks", []):
+        match = entry.get("match", "")
+        if not match or not entry.get("reason"):
+            fail("obsolete manifest", f"hook entry {entry} needs a non-empty match and reason")
+            continue
+        for hook in shipped_hooks:
+            if match in hook or match.replace("\\", "/") in hook:
+                fail("obsolete manifest",
+                     f"match {match!r} hits {hook}, which dotclaude still ships — "
+                     f"every project would lose it on the next deploy")
+    for entry in manifest.get("mcpServers", []):
+        name = entry.get("name", "")
+        if os.path.exists(os.path.join(REPO, "templates/project/mcp", f"{name}.json")):
+            fail("obsolete manifest",
+                 f"MCP server {name!r} is listed as obsolete but mcp/{name}.json still ships")
+
+
+# --- 13. The LSP plugin catalog is complete and well-formed -------------------
+@check("LSP plugin catalog")
+def _():
+    # init.sh/init.ps1 read the binary and install hint from here, and the
+    # skill maps languages through it: a missing field degrades into a WARN
+    # with an empty command, which looks like a hint and helps nobody.
+    catalog = json.loads(read("templates/project/lsp-plugins.json"))
+    if catalog.get("marketplace") != "claude-plugins-official":
+        fail("LSP plugin catalog", "marketplace must be claude-plugins-official (official plugins only)")
+    plugins = catalog.get("plugins", {})
+    if not plugins:
+        fail("LSP plugin catalog", "no plugins listed")
+    for name, entry in plugins.items():
+        if not name.endswith("-lsp"):
+            fail("LSP plugin catalog", f"{name!r} is not an official *-lsp plugin name")
+        for field in ("languages", "binary", "install"):
+            if not entry.get(field):
+                fail("LSP plugin catalog", f"{name} has no {field!r}")
 
 
 def main():

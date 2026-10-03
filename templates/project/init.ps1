@@ -5,18 +5,17 @@
 # dotclaude repo via install.ps1) and the harness applies them to every project
 # automatically. This script only writes what is specific to THIS project:
 # CLAUDE.md, CHANGELOG.md, docs/, a minimal settings.json stub, .gitignore,
-# the optional Serena + Graphify .mcp.json bundle, and optional infra scaffolds.
+# optional .mcp.json servers, and optional infra scaffolds. Every run also
+# prunes hook entries dotclaude no longer ships (obsolete.json).
 #
 # Lockstep sibling of init.sh — see it for the full semantics.
 #
 # Usage (run inside the target project directory):
-#   powershell -File "$HOME\.claude\templates\project\init.ps1" [--serena] [--update] [scaffold flags]
+#   powershell -File "$HOME\.claude\templates\project\init.ps1" [--xcode] [--ui] [--codebase-memory] [--lsp=<plugin>] [--update] [scaffold flags]
 #
-# --serena (deploys the serena + graphify MCP bundle AND merges Serena's
-# drift-prevention hooks from serena-hooks.json into the project settings.json;
-# aborts if 'serena' is missing, warns if 'graphify' is missing), --update, --db (no-op now:
-# db-inspector is central), and the scaffold flags (--fullstack, --runtime=,
-# --compose, --proxy=, --deploy-script) behave as in init.sh.
+# --update, --db (no-op now: db-inspector is central), and the scaffold flags
+# (--fullstack, --runtime=, --compose, --proxy=, --deploy-script) behave as in
+# init.sh. --serena was removed and only warns.
 #
 # --xcode is recognised for lockstep with init.sh but can never succeed here:
 # Apple's mcpbridge ships with Xcode, so the flag exits 5 on any Windows host.
@@ -26,21 +25,31 @@
 # --ui merges the 'playwright' browser server (@playwright/mcp via npx) into
 # ./.mcp.json for the visual verification loop the central /implement-ui skill
 # drives. Exit 7 if 'npx' is not in PATH.
+#
+# --codebase-memory merges the 'codebase-memory-mcp' server and its read-only
+# tool permissions (see init.sh). Exit 8 if the binary is not in PATH.
+#
+# --lsp=<plugin> (repeatable) installs an official LSP plugin at project scope
+# via `claude plugin install --scope project`; never fatal (see init.sh).
 
 $ErrorActionPreference = "Stop"
 
-$InstallSerena = $false
 $InstallXcode  = $false
 $InstallUi     = $false
+$LspPlugins    = @()
+$InstallCodebaseMemory = $false
 $Fullstack     = $false
 $Runtime       = ""
 $Compose       = $false
 $Proxy         = ""
 $DeployScript  = $false
 foreach ($arg in $args) {
-    if     ($arg -eq "--serena")        { $InstallSerena = $true }
+    # A command printed by an older /init-project may still carry it.
+    if     ($arg -eq "--serena")        { [Console]::Error.WriteLine("WARN: --serena was removed (Serena and Graphify are no longer shipped); ignoring it.") }
     elseif ($arg -eq "--xcode")         { $InstallXcode  = $true }
     elseif ($arg -eq "--ui")            { $InstallUi     = $true }
+    elseif ($arg -like "--lsp=*")       { $LspPlugins   += $arg.Substring(6) }
+    elseif ($arg -eq "--codebase-memory") { $InstallCodebaseMemory = $true }
     elseif ($arg -eq "--update")        { }  # informational: seeding always skips existing files
     elseif ($arg -eq "--db")            { }  # accepted, no-op (db-inspector is central now)
     elseif ($arg -eq "--fullstack")     { $Fullstack     = $true }
@@ -142,8 +151,8 @@ if (-not (Test-Path $TemplateDir)) {
     # [Console]::Error, not Write-Error: under $ErrorActionPreference = "Stop"
     # a Write-Error is promoted to a TERMINATING error, so the script dies
     # right there with exit code 1 and the `exit N` below never runs — the
-    # documented exit codes (3 = .mcp.json conflict, 4 = serena missing) were
-    # unreachable, and the skill keys its remediation off them.
+    # documented exit codes were unreachable, and the skill keys its
+    # remediation off them.
     [Console]::Error.WriteLine("ERROR: template not found at $TemplateDir (run install.ps1 from the dotclaude repo)")
     exit 1
 }
@@ -162,6 +171,19 @@ if (Test-Path $localExample) {
         Copy-Item $localExample $localExampleDst
     } elseif ((Get-FileHash $localExample).Hash -ne (Get-FileHash $localExampleDst).Hash) {
         [Console]::Error.WriteLine("DRIFT: .claude\settings.local.json.example (template updated; your edits kept)")
+    }
+}
+
+# --- Obsolete artifacts: prune dead hook entries, report the rest ------------
+# Lockstep sibling of the init.sh block, through the SAME Python script so the
+# pruning rules exist once. stdout carries KEY= lines for detect-drift.py only.
+$obsolete = Join-Path $TemplateDir "obsolete.json"
+if (Test-Path $obsolete) {
+    $py = Get-Command python3, python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($py) {
+        & $py.Source (Join-Path $TemplateDir "scripts/prune-obsolete.py") $obsolete (Get-Location).Path | Out-Null
+    } else {
+        [Console]::Error.WriteLine("WARN: python not found; obsolete-artifact check skipped. Deploy continues.")
     }
 }
 
@@ -204,132 +226,6 @@ if (Test-Path $gi) {
     Copy-Item $giTpl $gi
 }
 
-# --- Serena + Graphify MCP (opt-in) ------------------------------------------
-# Both servers deploy together (companions: Serena = symbol-level, Graphify =
-# graph-level). Serena is required (abort if missing);
-# Graphify is a soft prerequisite (warn only) — its MCP server is secondary and
-# starts only after a graph is built (/graphify .), failing inertly otherwise
-# without affecting Serena.
-if ($InstallSerena) {
-    if (-not (Get-Command serena -ErrorAction SilentlyContinue)) {
-        [Console]::Error.WriteLine("ERROR: 'serena' binary not found in PATH. Install once per machine: uv tool install -p 3.13 serena-agent@latest --prerelease=allow (requires uv).")
-        exit 4
-    }
-    if (-not (Get-Command graphify -ErrorAction SilentlyContinue)) {
-        Write-Warning "'graphify' not found in PATH - the bundled graphify MCP server will be unavailable until you install it and build a graph: uv tool install graphifyy, then run '/graphify .' once to build graphify-out/graph.json. Serena still works; this is non-fatal."
-    } else {
-        # Graphify present: install its git hooks so the graph auto-rebuilds and
-        # never goes stale (a stale graph is why graph-first gets abandoned). We do
-        # NOT run 'graphify install'/'graphify claude install' - those append a raw
-        # CLAUDE.md block + per-project skill that duplicate the template + central
-        # prefer-graphify hook. '/graphify .' still builds the graph; hooks keep it fresh.
-        try {
-            graphify hook install *> $null
-            Write-Host "  - graphify git hooks installed (graph auto-rebuilds on commit/checkout)"
-        } catch {
-            Write-Warning "graphify hook install failed (non-fatal); run 'graphify hook install' manually"
-        }
-    }
-    # Serena and Graphify are companions and always deploy together.
-    Merge-McpServers @(
-        (Join-Path $TemplateDir "mcp/serena.json"),
-        (Join-Path $TemplateDir "mcp/graphify.json")
-    )
-
-    # Merge Serena's drift-prevention hooks into the project's settings.json.
-    # Lockstep sibling of the python3 merge in init.sh — these make the model
-    # deterministically prefer Serena's tools over Grep/Edit instead of drifting
-    # back over a long session (oraios/serena #1201). MERGE (not overwrite) so
-    # project-specific hooks/permissions survive; de-duplicate by command so
-    # re-running --serena is idempotent. 'serena' is confirmed in PATH above, so
-    # 'serena-hooks' ships alongside it.
-    $hooksSrc = Join-Path $SrcRoot "serena-hooks.json"
-    $settingsDst = Join-Path $DstRoot "settings.json"
-    if (Test-Path $hooksSrc) {
-        # {{HOOK_EXT}} resolves to the OS hook form: 'ps1' here, 'sh' in init.sh.
-        # serena-hooks.json stays OS-agnostic; only the merge picks the concrete script.
-        $hookBlock = ((Get-Content -Raw $hooksSrc).Replace('{{HOOK_EXT}}', 'ps1') | ConvertFrom-Json).hooks
-        # The JSON ships POSIX-form script entries ("$HOME"/.claude/hooks/x.ps1).
-        # A bare .ps1 path never executes under the default hook shell and
-        # "$HOME" only expands in sh — rewrite to install.ps1's New-Hook form
-        # (& "<abs path>" + shell: powershell) or the merged hooks are inert.
-        foreach ($event in $hookBlock.PSObject.Properties.Name) {
-            foreach ($group in @($hookBlock.$event)) {
-                foreach ($h in @($group.hooks)) {
-                    if ($h.command -match '\.claude/hooks/([A-Za-z0-9_.-]+\.ps1)') {
-                        $scriptPath = Join-Path (Join-Path $HOME ".claude\hooks") $Matches[1]
-                        $h.command = "& `"$scriptPath`""
-                        $h | Add-Member -NotePropertyName shell -NotePropertyValue "powershell" -Force
-                    }
-                }
-            }
-        }
-        if (Test-Path $settingsDst) {
-            # -Encoding UTF8: PS 5.1 reads/writes ANSI by default, which would
-            # corrupt non-ASCII content (Unicode paths, identifiers) on round-trip.
-            try { $settings = Get-Content -Raw $settingsDst -Encoding UTF8 | ConvertFrom-Json }
-            catch { $settings = [PSCustomObject]@{} }
-        } else {
-            $settings = [PSCustomObject]@{}
-        }
-        # PS 5.1's ConvertFrom-Json collapses empty JSON arrays ([]) to $null. The
-        # project stub ships "permissions":{"allow":[],"ask":[],"deny":[]}; without
-        # this restore, the round-trip below would rewrite them as null, which
-        # Claude Code rejects. Re-materialize any collapsed array back to @().
-        if ($settings.PSObject.Properties['permissions']) {
-            foreach ($key in @('allow', 'ask', 'deny')) {
-                if ((-not $settings.permissions.PSObject.Properties[$key]) -or ($null -eq $settings.permissions.$key)) {
-                    $settings.permissions | Add-Member -NotePropertyName $key -NotePropertyValue @() -Force
-                }
-            }
-        }
-        if (-not $settings.PSObject.Properties['hooks']) {
-            $settings | Add-Member -NotePropertyName hooks -NotePropertyValue ([PSCustomObject]@{})
-        }
-
-        function Get-HookCommands($groupList) {
-            $out = @()
-            foreach ($g in @($groupList)) {
-                foreach ($h in @($g.hooks)) {
-                    if ($h.command) { $out += $h.command }
-                }
-            }
-            return $out
-        }
-
-        $changed = $false
-        foreach ($event in $hookBlock.PSObject.Properties.Name) {
-            if (-not $settings.hooks.PSObject.Properties[$event]) {
-                $settings.hooks | Add-Member -NotePropertyName $event -NotePropertyValue @()
-            }
-            $existing = @($settings.hooks.$event)
-            $have = Get-HookCommands $existing
-            foreach ($group in @($hookBlock.$event)) {
-                $newCmds = Get-HookCommands $group
-                $allPresent = ($newCmds.Count -gt 0) -and (-not ($newCmds | Where-Object { $_ -notin $have }))
-                if ($allPresent) { continue }  # already present — keep idempotent
-                $existing += $group
-                $have += $newCmds
-                $changed = $true
-            }
-            # Write back via Add-Member -Force, NOT `$settings.hooks.$event = $existing`:
-            # PS 5.1's `=` property assignment unwraps a single-element array to a
-            # bare object, so a one-group event (e.g. SessionStart) would serialize
-            # as {...} instead of [{...}] and Claude Code would reject it. Add-Member
-            # stores the array reference as-is. Cast to [array] for belt-and-braces.
-            $settings.hooks | Add-Member -NotePropertyName $event -NotePropertyValue ([array]$existing) -Force
-        }
-
-        if ($changed) {
-            # BOM-less + trailing newline to match the python3 sibling in init.sh.
-            Write-Utf8NoBom $settingsDst (($settings | ConvertTo-Json -Depth 20) + "`n")
-            [Console]::Error.WriteLine("  - merged: Serena drift-prevention hooks into $settingsDst")
-        } else {
-            [Console]::Error.WriteLine("  - skip: Serena hooks already present in $settingsDst")
-        }
-    }
-}
-
 # --- Xcode MCP (opt-in, macOS only) ------------------------------------------
 # Lockstep sibling of the --xcode block in init.sh. PowerShell does run on macOS,
 # so this is not dead code there — but $IsMacOS is $false on Windows PowerShell 5.1
@@ -366,6 +262,61 @@ if ($InstallUi) {
         exit 7
     }
     Merge-McpServers @((Join-Path $TemplateDir "mcp/playwright.json"))
+}
+
+# --- codebase-memory-mcp (opt-in) ---------------------------------------------
+# Lockstep sibling of the init.sh block; permissions go through the SAME Python
+# script so the read-only allowlist is merged identically on both platforms.
+if ($InstallCodebaseMemory) {
+    if (-not (Get-Command codebase-memory-mcp -ErrorAction SilentlyContinue)) {
+        [Console]::Error.WriteLine("ERROR: 'codebase-memory-mcp' not found in PATH (--codebase-memory needs it).")
+        [Console]::Error.WriteLine("       Install the BINARY only, with one of:")
+        [Console]::Error.WriteLine("         npm install -g codebase-memory-mcp")
+        [Console]::Error.WriteLine("         pip install --user codebase-memory-mcp")
+        [Console]::Error.WriteLine("         release archive + checksums.txt from github.com/DeusData/codebase-memory-mcp/releases")
+        [Console]::Error.WriteLine("         (verify the SHA-256 with Get-FileHash, then put the binary on PATH)")
+        [Console]::Error.WriteLine("       Do NOT run 'codebase-memory-mcp install' or its install.ps1: they rewrite")
+        [Console]::Error.WriteLine("       ~/.claude/settings.json hooks, add agents and skills, and edit your profile.")
+        exit 8
+    }
+    Merge-McpServers @((Join-Path $TemplateDir "mcp/codebase-memory-mcp.json"))
+    $py = Get-Command python3, python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($py) {
+        & $py.Source (Join-Path $TemplateDir "scripts/merge-permissions.py") (Join-Path $TemplateDir "permissions/codebase-memory-mcp.json") (Get-Location).Path
+    } else {
+        [Console]::Error.WriteLine("WARN: python not found; codebase-memory-mcp permissions not merged. Deploy continues.")
+    }
+}
+
+# --- LSP plugins (opt-in, one per --lsp=<plugin>) -----------------------------
+# Lockstep sibling of the init.sh block: same catalog (lsp-plugins.json), same
+# never-fatal contract — every problem is a WARN carrying the command that fixes it.
+if ($LspPlugins.Count -gt 0) {
+    $catalog = Get-Content -Raw (Join-Path $TemplateDir "lsp-plugins.json") | ConvertFrom-Json
+    foreach ($plugin in $LspPlugins) {
+        $entry = $catalog.plugins.PSObject.Properties[$plugin]
+        if (-not $entry) {
+            [Console]::Error.WriteLine("WARN: --lsp=$plugin is not an official LSP plugin (see $(Join-Path $TemplateDir 'lsp-plugins.json')); skipped.")
+            continue
+        }
+        $marketplace = $catalog.marketplace
+        if (-not (Get-Command $entry.Value.binary -ErrorAction SilentlyContinue)) {
+            [Console]::Error.WriteLine("WARN: language server '$($entry.Value.binary)' is not in PATH — $plugin stays inert until you install it:")
+            [Console]::Error.WriteLine("        $($entry.Value.install)")
+        }
+        if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
+            [Console]::Error.WriteLine("WARN: 'claude' CLI not in PATH; install the plugin from Claude Code with:")
+            [Console]::Error.WriteLine("        /plugin install $plugin@$marketplace   (choose project scope)")
+            continue
+        }
+        & claude plugin install "$plugin@$marketplace" --scope project *> $null
+        if ($LASTEXITCODE -eq 0) {
+            [Console]::Error.WriteLine("  - installed LSP plugin $plugin (project scope, recorded in .claude/settings.json)")
+        } else {
+            [Console]::Error.WriteLine("WARN: could not install $plugin; run it yourself:")
+            [Console]::Error.WriteLine("        claude plugin install $plugin@$marketplace --scope project")
+        }
+    }
 }
 
 # --- Optional scaffolding — each block is independent; flags can be combined -

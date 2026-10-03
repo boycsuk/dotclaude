@@ -18,11 +18,14 @@ the NEXT re-deploy fails, which is exactly the path update-mode.md §1e uses to
 reconcile drift. Neither was caught by reading the scripts, so the cases go in
 the matrix before the fix (DESIGN.md §26).
 
+(--serena itself was removed later; the composition contract it exposed is
+pinned below with the flags that remain.)
+
 Each case builds a throwaway project dir, stubs the host probes (uname/xcrun/
-serena/npx) via a PATH prefix so the cases are hermetic on any OS, runs the
-real init script, and asserts on the resulting .mcp.json. Probe-failure cases
-scrub PATH down to a minimal tail so "omit a stub" really removes the binary —
-otherwise the machine's own npx/serena leaks in and exits 4/7 are untestable.
+npx) via a PATH prefix so the cases are hermetic on any OS, runs the real init
+script, and asserts on the resulting .mcp.json. Probe-failure cases scrub PATH
+down to a minimal tail so "omit a stub" really removes the binary — otherwise
+the machine's own npx leaks in and exit 7 is untestable.
 """
 
 import argparse
@@ -37,9 +40,6 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SH = os.path.join(REPO, "templates/project/init.sh")
 PS1 = os.path.join(REPO, "templates/project/init.ps1")
 TEMPLATE_DIR = os.path.join(REPO, "templates/project")
-
-SERENA = {"serena", "graphify"}
-
 
 def write_stub(bindir, name, body):
     path = os.path.join(bindir, name)
@@ -56,9 +56,8 @@ def make_bin(tmp, omit=(), uname_out="Darwin", xcrun_fail=False):
     stubs = {
         "uname": "#!/bin/sh\necho %s\n" % uname_out,
         "xcrun": "#!/bin/sh\nexit 1\n" if xcrun_fail else "#!/bin/sh\nexit 0\n",
-        "serena": "#!/bin/sh\nexit 0\n",
-        "graphify": "#!/bin/sh\nexit 0\n",
         "npx": "#!/bin/sh\nexit 0\n",
+        "codebase-memory-mcp": "#!/bin/sh\nexit 0\n",
     }
     for name, body in stubs.items():
         if name not in omit:
@@ -122,32 +121,32 @@ def case(name, steps, expect_servers, expect_last_code=0, extra=None):
 
 
 CASES = [
-    case("serena alone", [["--serena"]], SERENA),
     case("xcode alone", [["--xcode"]], {"xcode"}),
-    case("serena then xcode", [["--serena"], ["--xcode"]], SERENA | {"xcode"}),
-    case("xcode then serena", [["--xcode"], ["--serena"]], SERENA | {"xcode"}),
-    case("both flags at once", [["--serena", "--xcode"]], SERENA | {"xcode"}),
-    case("re-run serena is idempotent",
-         [["--serena"], ["--serena"]], SERENA),
+    case("ui alone", [["--ui"]], {"playwright"}),
+    case("xcode then ui", [["--xcode"], ["--ui"]], {"xcode", "playwright"}),
+    case("ui then xcode", [["--ui"], ["--xcode"]], {"xcode", "playwright"}),
+    case("both flags at once", [["--xcode", "--ui"]], {"xcode", "playwright"}),
     case("re-run xcode is idempotent",
          [["--xcode"], ["--xcode"]], {"xcode"}),
-    # The regression that motivated the refactor: a later --update --serena
-    # must still succeed once xcode is present.
-    case("update --serena after xcode",
-         [["--xcode"], ["--serena"], ["--update", "--serena"]],
-         SERENA | {"xcode"}),
-    case("update --serena after both",
-         [["--serena", "--xcode"], ["--update", "--serena"]],
-         SERENA | {"xcode"}),
+    case("re-run ui is idempotent", [["--ui"], ["--ui"]], {"playwright"}),
+    # The regression that motivated the refactor: a later --update naming one
+    # flag must still succeed once another flag's server is present.
+    case("update --ui after xcode",
+         [["--xcode"], ["--ui"], ["--update", "--ui"]], {"xcode", "playwright"}),
     # An --update that does not name a flag must not strip that flag's server.
     case("bare --update preserves everything",
-         [["--serena", "--xcode"], ["--update"]], SERENA | {"xcode"}),
-    case("ui alone", [["--ui"]], {"playwright"}),
-    case("re-run ui is idempotent", [["--ui"], ["--ui"]], {"playwright"}),
-    case("all three flags at once",
-         [["--serena", "--xcode", "--ui"]], SERENA | {"xcode", "playwright"}),
+         [["--xcode", "--ui"], ["--update"]], {"xcode", "playwright"}),
     case("bare --update preserves ui",
          [["--ui"], ["--update"]], {"playwright"}),
+    case("codebase-memory alone", [["--codebase-memory"]], {"codebase-memory-mcp"},
+         extra=lambda tmp: readonly_permissions(tmp)),
+    case("codebase-memory with the other flags, re-run",
+         [["--codebase-memory", "--ui"], ["--xcode"], ["--update", "--codebase-memory"]],
+         {"codebase-memory-mcp", "playwright", "xcode"},
+         extra=lambda tmp: readonly_permissions(tmp)),
+    # A command printed by an older /init-project may still carry --serena:
+    # it must warn and deploy normally, not abort or compose anything.
+    case("removed --serena is ignored", [["--serena"]], None),
 ]
 
 # The prerequisite probes each abort with a documented exit code the skill
@@ -155,14 +154,14 @@ CASES = [
 # zero coverage — a typo'd binary name in a probe would have shipped green.
 #   (name, args, run-kwargs, expected exit code)
 PROBES = [
-    ("missing serena aborts: exit 4", ["--serena"],
-     dict(omit={"serena"}, scrub_path=True), 4),
     ("--xcode on a non-mac host aborts: exit 5", ["--xcode"],
      dict(uname_out="Linux"), 5),
     ("xcrun without mcpbridge aborts: exit 6", ["--xcode"],
      dict(xcrun_fail=True), 6),
     ("missing npx aborts --ui: exit 7", ["--ui"],
      dict(omit={"npx"}, scrub_path=True), 7),
+    ("missing codebase-memory-mcp aborts: exit 8", ["--codebase-memory"],
+     dict(omit={"codebase-memory-mcp"}, scrub_path=True), 8),
 ]
 
 
@@ -186,54 +185,49 @@ def run_case(c, pwsh=None):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+CBM_WRITERS = ("index_repository", "delete_project", "manage_adr", "ingest_traces")
+
+
+def readonly_permissions(tmp):
+    """--codebase-memory allows the read-only graph tools by exact name, once
+    each, and never a wildcard or a tool that writes or deletes."""
+    with open(os.path.join(tmp, ".claude", "settings.json")) as fh:
+        allow = json.load(fh).get("permissions", {}).get("allow", [])
+    cbm = [r for r in allow if r.startswith("mcp__codebase-memory-mcp")]
+    if "mcp__codebase-memory-mcp__trace_path" not in cbm:
+        return f"read-only graph tools not allowed: {cbm}"
+    if len(cbm) != len(set(cbm)):
+        return "a re-run duplicated permission rules"
+    bad = [r for r in cbm if r.endswith("*") or r.split("__")[-1] in CBM_WRITERS]
+    if bad:
+        return f"write-capable or wildcard rules allowed: {bad}"
+    return None
+
+
+THIRD_PARTY = {"command": "my-mcp", "args": ["--flag"], "env": {"K": "v"}}
+
+
 def third_party_survives(tmp):
     """A server the template knows nothing about must never be dropped."""
     with open(os.path.join(tmp, ".mcp.json")) as fh:
         cfg = json.load(fh)
-    if "playwright" not in cfg.get("mcpServers", {}):
-        return "third-party 'playwright' server was dropped"
-    if cfg["mcpServers"]["playwright"].get("command") != "npx":
+    if "mine" not in cfg.get("mcpServers", {}):
+        return "third-party 'mine' server was dropped"
+    if cfg["mcpServers"]["mine"] != THIRD_PARTY:
         return "third-party server was mutated"
     return None
 
 
 def seed_third_party(tmp):
     with open(os.path.join(tmp, ".mcp.json"), "w") as fh:
+        json.dump({"mcpServers": {"mine": THIRD_PARTY}}, fh)
+
+
+def seed_hand_added_playwright(tmp):
+    with open(os.path.join(tmp, ".mcp.json"), "w") as fh:
         json.dump({"mcpServers": {
             "playwright": {"command": "npx", "args": ["-y", "@playwright/mcp"], "env": {}}
         }}, fh)
-
-
-def serena_hooks_shape(tmp, is_ps1):
-    """The settings.json hook merge is the most intricate code in either init
-    script and had no assertions at all. After two --serena runs: parseable,
-    de-duplicated, and in a form the OS can actually execute (a bare .ps1 path
-    under the default hook shell is inert — the Windows bug this pins)."""
-    path = os.path.join(tmp, ".claude", "settings.json")
-    try:
-        with open(path, encoding="utf-8") as fh:
-            raw = fh.read()
-        if raw.startswith("﻿"):
-            return "settings.json carries a UTF-8 BOM"
-        cfg = json.loads(raw)
-    except (OSError, ValueError) as e:
-        return f"settings.json unreadable: {e}"
-    cmds = [h.get("command", "")
-            for groups in cfg.get("hooks", {}).values()
-            for g in groups for h in g.get("hooks", [])]
-    prefer = [c for c in cmds if "prefer-serena-bash" in c]
-    if len(prefer) != 1:
-        return f"prefer-serena-bash appears {len(prefer)} times, want 1 (dedup)"
-    if is_ps1:
-        if not prefer[0].startswith('& "') or not prefer[0].endswith('.ps1"'):
-            return f"ps1 hook not in executable form: {prefer[0]}"
-        entry = [h for groups in cfg["hooks"].values() for g in groups
-                 for h in g.get("hooks", []) if "prefer-serena-bash" in h.get("command", "")][0]
-        if entry.get("shell") != "powershell":
-            return "ps1 hook entry lacks shell: powershell"
-    elif not prefer[0].endswith(".sh"):
-        return f"sh hook does not point at the .sh form: {prefer[0]}"
-    return None
 
 
 def main():
@@ -291,11 +285,11 @@ def main():
         tmp = tempfile.mkdtemp(prefix="mcpcase-")
         try:
             seed_third_party(tmp)
-            run(tmp, ["--serena"], pwsh)
             run(tmp, ["--xcode"], pwsh)
+            run(tmp, ["--ui"], pwsh)
             problem = third_party_survives(tmp)
             got = servers(tmp)
-            if problem is None and got != SERENA | {"xcode", "playwright"}:
+            if problem is None and got != {"mine", "xcode", "playwright"}:
                 problem = f"servers {sorted(got)}"
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
@@ -311,7 +305,7 @@ def main():
                 json.dump({"mcpServers": {
                     "custom": {"command": "custom-mcp", "args": [], "env": {}}
                 }}, fh)
-            run(tmp, ["--serena"], pwsh)
+            run(tmp, ["--xcode"], pwsh)
             with open(os.path.join(tmp, ".mcp.json")) as fh:
                 sargs = json.load(fh)["mcpServers"]["custom"].get("args")
             problem = None if sargs == [] else f"empty args became {sargs!r}"
@@ -324,7 +318,7 @@ def main():
         # stale. This is the flip side of third-party preservation above.
         tmp = tempfile.mkdtemp(prefix="mcpcase-")
         try:
-            seed_third_party(tmp)
+            seed_hand_added_playwright(tmp)
             run(tmp, ["--ui"], pwsh)
             with open(os.path.join(tmp, ".mcp.json")) as fh:
                 spec = json.load(fh)["mcpServers"].get("playwright", {})
@@ -334,17 +328,6 @@ def main():
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         report(label, "--ui adopts a hand-added playwright", problem)
-
-        # The serena-hooks settings merge, asserted after an idempotency
-        # double-run.
-        tmp = tempfile.mkdtemp(prefix="mcpcase-")
-        try:
-            run(tmp, ["--serena"], pwsh)
-            run(tmp, ["--serena"], pwsh)
-            problem = serena_hooks_shape(tmp, is_ps1=pwsh is not None)
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
-        report(label, "serena hooks merge: executable form, deduped", problem)
 
     print(f"\nmcp-merge: {total - bad} ok, {bad} bad")
     return 1 if bad else 0

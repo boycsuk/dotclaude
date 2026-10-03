@@ -86,6 +86,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME\"/.claude/hooks/explore-graph-prompt.py",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -117,6 +127,28 @@
           {
             "type": "command",
             "command": "\"$HOME\"/.claude/hooks/reinject-rules.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME\"/.claude/hooks/code-intel-context.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "Plan|general-purpose|researcher|debugger|code-reviewer",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME\"/.claude/hooks/code-intel-context.py",
             "timeout": 5
           }
         ]

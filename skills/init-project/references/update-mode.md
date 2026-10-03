@@ -42,15 +42,23 @@ nothing to refresh inside the project for those five types.
 files that were missing and drift-reports `settings.local.json.example`:
 
 ```
-bash ~/.claude/templates/project/init.sh --update [--serena] [--xcode] [--ui]
+bash ~/.claude/templates/project/init.sh --update [--xcode] [--ui] [--codebase-memory] [--lsp=<plugin>]
 ```
 
-Include `--serena` only if `.mcp.json` exists and has a `serena` entry,
-`--xcode` only if it has an `xcode` entry (`grep -q '"xcode"' ./.mcp.json`),
-and `--ui` only if it has a `playwright` entry. Re-passing any of them is safe:
+Include `--xcode` only if `.mcp.json` has an `xcode` entry
+(`grep -q '"xcode"' ./.mcp.json`), `--ui` only if it has a `playwright`
+entry, and `--codebase-memory` only if it has a `codebase-memory-mcp` entry. Re-passing any of them is safe:
 all merge idempotently. Omitting a flag on a re-deploy does **not** remove its
 server — `.mcp.json` is never rewritten except by the flag that owns the entry.
 (`--db` is accepted but a no-op now — the db-inspector agent is central.)
+
+**Offer `--lsp=<plugin>` to code projects that predate it.** Read
+`enabledPlugins` in `.claude/settings.json`. If the project's language has an
+official plugin in `~/.claude/templates/project/lsp-plugins.json` and it is not
+there, ask via AskUserQuestion whether to add it (see
+`references/mcp-and-db.md` §3b for the binary check), and include the flag in
+the command above if accepted. Same rule as below: ask once, never edit
+silently.
 
 **Offer `--ui` to web-UI projects that predate it.** If `.mcp.json` has no
 `playwright` entry but the project clearly has a web UI (a frontend framework in
@@ -68,16 +76,17 @@ What `--update` does (implemented in `init.sh`):
   are seeded only if absent — never overwritten (user content).
 - `settings.local.json.example` is refreshed if untouched; if the user edited
   it, it is kept and a `DRIFT:` line is emitted.
-- With `--serena`, Serena's drift-prevention hooks are *merged* into the
-  existing `settings.json` (additive, idempotent, de-duplicated by command — it
-  never clobbers your own hooks/permissions). This is the one case where
-  `--update` touches an existing `settings.json`, and it's how a project that
-  opted into Serena *before* these hooks existed picks them up on a re-run.
+- Hook entries that point at hooks dotclaude no longer ships (listed in
+  `templates/project/obsolete.json`) are pruned from `.claude/settings.json`
+  and `settings.local.json` — every deploy does this, not only `--update`. It
+  is the one case where a deploy edits an existing settings file, and it only
+  ever removes entries whose script is already gone. MCP servers and
+  directories in the manifest are reported, never removed (§1e).
 - No hooks/agents/skills/rules drift here — those live in `~/.claude/` and are
   updated via `git pull && ./install.sh` in the dotclaude repo.
 
 After the user runs the command and confirms `deploy OK`, run §1c (Drift report),
-§1d (CLAUDE.md bullet reconciliation), and §1e (Serena/Graphify improvement
+§1d (CLAUDE.md bullet reconciliation), and §1e (obsolete-artifact
 reconciliation), then skip to step 8 (verify).
 
 ### Path B: Reconfigure
@@ -89,16 +98,16 @@ Example: if `## WHAT — Versions` already says `- Database: PostgreSQL 17.2`, w
 When you reach step 5, the deploy command includes `--update`:
 
 ```
-bash ~/.claude/templates/project/init.sh --update [--serena] [--xcode] [--ui]
+bash ~/.claude/templates/project/init.sh --update [--xcode] [--ui] [--codebase-memory] [--lsp=<plugin>]
 ```
 
-After deploy OK, step 6 fills only the placeholders that changed (e.g. if the user added Docker, write a new `docker compose exec` prefix on the commands). Do not touch sections the user did not change. Then run §1c, §1d, and §1e (the Serena/Graphify reconciliation applies here too) before step 8.
+After deploy OK, step 6 fills only the placeholders that changed (e.g. if the user added Docker, write a new `docker compose exec` prefix on the commands). Do not touch sections the user did not change. Then run §1c, §1d, and §1e before step 8.
 
 ### Path C: Full re-init from scratch
 
 This destroys local edits in `.claude/`. Before proceeding, ask the user explicitly: "This will delete the current `.claude/`, including any edits of yours. Are you sure?". On confirmation, instruct the user to run `rm -rf .claude` from their terminal (do NOT do it from the skill — destructive ops belong in the user's hands), then continue with the standard first-time flow from §2 (load `references/stack-interview.md`).
 
-`CLAUDE.md`, `CHANGELOG.md`, `.gitignore`, `.mcp.json`, and `.serena/` are NOT touched by this — they survive even path C.
+`CLAUDE.md`, `CHANGELOG.md`, `.gitignore`, and `.mcp.json` are NOT touched by this — they survive even path C.
 
 ## 1c. Drift report (after Path A or Path B)
 
@@ -143,33 +152,15 @@ For each bullet the user picked, use `Edit` on `./CLAUDE.md` to insert it at the
 
 After applying, summarize: "Added N bullet(s) to your CLAUDE.md. Review it before committing."
 
-## 1e. Serena / Graphify improvement reconciliation
+## 1e. Obsolete-artifact reconciliation
 
-Projects that opted into Serena *before* recent template improvements miss three
-things that newer deploys get. This step detects which apply and offers them.
-**Only run this step if the project actually uses Serena** — i.e. `./.mcp.json`
-exists and has a `serena` entry. If there is no `serena` entry, skip §1e
-entirely (the project never opted in; nothing to reconcile).
+dotclaude occasionally stops shipping something a project was deployed with
+(Serena and Graphify were the first). `templates/project/obsolete.json` lists
+those artifacts. The deploy already pruned the dead **hook entries** on its own;
+this step handles what it deliberately leaves to the user: obsolete **MCP
+servers** in `.mcp.json` and obsolete **directories**.
 
-**Detection runs AFTER the user's `init.sh --update` deploy**, so if that command
-already included `--serena`, gap 1 (the hooks) is already merged and won't be
-detected — that is correct, not a bug. §1e exists to catch the gaps that the
-deploy does *not* self-heal: a drifted `.mcp.json` (init aborts rather than
-overwriting it) and Graphify never being set up. Gap 1 is only ever offered when
-the user ran the deploy without `--serena` (e.g. they didn't realize the project
-had Serena); in that case the fix is to re-run *with* `--serena`.
-
-Gate first, with the `Bash` tool:
-
-```
-test -f ./.mcp.json && grep -q '"serena"' ./.mcp.json && echo HAS_SERENA
-```
-
-If that does not print `HAS_SERENA`, skip to step 8.
-
-### Detect the three gaps (read-only)
-
-Run the drift detector from the project root — one command, all checks:
+Run the drift detector from the project root:
 
 ```
 python3 ~/.claude/skills/init-project/scripts/detect-drift.py
@@ -177,79 +168,40 @@ python3 ~/.claude/skills/init-project/scripts/detect-drift.py
 
 It prints one `KEY=VALUE` per line. **Do not inline these checks as
 `python3 -c`**: the central `guard-destructive` hook blocks inline interpreters,
-so an inline form fails with exit 2 and the whole gap detection silently dies.
-DESIGN.md §5 justifies `python3 -c` inside *hooks* (no PreToolUse runs there),
-not inside skills. The script also avoids `jq` (§5).
+so an inline form fails with exit 2 and the detection silently dies. DESIGN.md
+§5 justifies `python3 -c` inside *hooks* (no PreToolUse runs there), not inside
+skills.
 
-Map the output to the gaps:
+- `OBSOLETE_HOOKS=<n>` with n > 0 → the deploy has not run since the hook was
+  retired (or the user skipped it). Tell them to re-run the `init.sh --update`
+  command from Path A; it prunes them.
+- `OBSOLETE_MCP=<names>` → servers dotclaude no longer configures, still in
+  `.mcp.json`.
+- `OBSOLETE_FILES=<paths>` → leftover directories (e.g. `.serena`,
+  `graphify-out`).
+- `UNKNOWN` → the manifest is missing (re-run `./install.sh` in the dotclaude
+  clone); say so instead of assuming either way.
 
-1. **Serena drift-prevention hooks missing.** `SERENA_HOOKS=NO_HOOKS` → gap 1
-   applies. (Re-running `init.sh --update --serena` merges them idempotently —
-   that is the fix.) `UNKNOWN` means `.claude/settings.json` is missing or
-   unparseable: report that to the user instead of assuming either way.
+If all three are empty / `0`, tell the user *"No obsolete dotclaude artifacts
+in this project."* and continue to step 8.
 
-2. **`.mcp.json` outdated.** Either `GRAPHIFY_MCP=GRAPHIFY_BROKEN` (graphify
-   still launched via the broken `python -m` form, pre-`uv run` fix) or
-   `SERENA_DASHBOARD=DASH_ON` (serena missing `--open-web-dashboard False`, so
-   it auto-opens a browser tab) → gap 2 applies.
+Otherwise ask via AskUserQuestion (multiSelect), one option per server and per
+directory, each description giving the `reason` from `obsolete.json`:
 
-3. **Graphify never integrated.** `GRAPHIFY_INTEGRATED=GRAPHIFY_ABSENT` → gap 3
-   applies: the project has Serena but no `graphify-out/` directory and no
-   `## graphify` block in `CLAUDE.md`.
+- "These were deployed by an older dotclaude and are no longer maintained. Which do you want to remove?"
 
-If none of the three gaps apply, tell the user *"Serena and Graphify are already
-up to date in this project."* and continue to step 8.
+For each selected **server**, use `Edit` on `./.mcp.json` to delete only that
+key under `mcpServers` (keep every other server), and remove its
+`mcp__<name>__*` entry from `.claude/settings.json` `permissions.allow` if
+present. Tell the user to reopen the session so the MCP change takes effect.
+If the user still has the binary installed, mention it can be uninstalled
+(e.g. `uv tool uninstall serena-agent`, `uv tool uninstall graphifyy`) — their
+call, never yours.
 
-### Offer the applicable gaps (AskUserQuestion, multiSelect)
-
-Build one option per gap that applies:
-
-- "Your project uses Serena but is missing recent template improvements. Which ones do you want to apply?" (multiSelect)
-  - **Gap 1** → label "Serena drift-prevention hooks", description "Adds the hooks that keep the model using Serena's tools (merged by re-running the deploy with `--serena`)."
-  - **Gap 2** → label "Update `.mcp.json`", description "Fixes the Graphify launch (`uv run` instead of the broken `python` form) and disables Serena's dashboard auto-open. Fixed by re-running the deploy."
-  - **Gap 3** → label "Integrate Graphify", description "The graph-first nudge and the auto-rebuild are wired by re-running the deploy with `--serena`; the one step left is building the graph once with `/graphify .`."
-
-### Apply the selected gaps
-
-The three have **different** mechanisms — respect the "skill plans, user executes"
-split (DESIGN.md §15): never run `init.sh` or touch `.claude/` files via shell.
-
-- **Gap 1 selected** → the fix is a re-deploy. Tell the user to run, from their
-  terminal:
-  ```
-  bash ~/.claude/templates/project/init.sh --update --serena
-  ```
-  The hook merge is idempotent (it adds only what is missing) and non-destructive.
-
-- **Gap 2 selected** → a re-deploy fixes it; do **not** hand-edit `./.mcp.json`.
-  `init.sh` composes the file per server, so re-running rewrites a drifted
-  `serena`/`graphify` entry to the current template form while preserving every
-  other key — including servers the user added by hand:
-  ```
-  bash ~/.claude/templates/project/init.sh --update --serena
-  ```
-  (This used to be the one place §1e edited a file, back when `--serena` copied
-  the whole template and aborted with exit 3 on any difference. It no longer
-  does, so the manual edit is gone.) Tell the user the MCP servers must be
-  restarted (reopen the session) for the change to take effect.
-
-- **Gap 3 selected** → the gap closes **only** by building the graph once:
-  ```
-  /graphify .             # builds graphify-out/graph.json (the graphify MCP server needs it)
-  ```
-  (If `graphify` is not installed: `uv tool install graphifyy` first.)
-
-  This is the step to lead with, because it is the one the detector checks:
-  `detect-drift.py` reports GRAPHIFY_PRESENT when `graphify-out/` exists or
-  CLAUDE.md carries the Graphify block — and a `--serena` re-deploy creates
-  neither. Telling the user only to re-deploy would leave the gap open and
-  re-offer it on the next `--update`, forever.
-
-  The supporting pieces come from the `--serena` re-deploy (Gap 1's fix): the
-  graph-first nudge (`prefer-graphify`, central) and the auto-rebuild
-  (`graphify hook install`). We deliberately avoid `graphify install` itself —
-  it appends a raw CLAUDE.md block, drops a per-project skill, and rewrites
-  settings.json destructively; see `references/mcp-and-db.md`.
+For each selected **directory**, print the removal command for the user to
+run from their terminal (`rm -r .serena`) — never delete it from the skill.
+Unselected items stay untouched and will be offered again on the next
+`--update`.
 
 After applying, summarize what changed and what the user still needs to run
 manually, then continue to step 8 (verify).
