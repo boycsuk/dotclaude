@@ -165,6 +165,19 @@ if (Test-Path $localExample) {
     }
 }
 
+# --- Obsolete artifacts: prune dead hook entries, report the rest ------------
+# Lockstep sibling of the init.sh block, through the SAME Python script so the
+# pruning rules exist once. stdout carries KEY= lines for detect-drift.py only.
+$obsolete = Join-Path $TemplateDir "obsolete.json"
+if (Test-Path $obsolete) {
+    $py = Get-Command python3, python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($py) {
+        & $py.Source (Join-Path $TemplateDir "scripts/prune-obsolete.py") $obsolete (Get-Location).Path | Out-Null
+    } else {
+        [Console]::Error.WriteLine("WARN: python not found; obsolete-artifact check skipped. Deploy continues.")
+    }
+}
+
 # --- CLAUDE.md, CHANGELOG.md : user-owned, seed when absent ------------------
 if (-not (Test-Path ".\CLAUDE.md"))    { Copy-Item (Join-Path $TemplateDir "CLAUDE.md.template")    ".\CLAUDE.md" }
 if (-not (Test-Path ".\CHANGELOG.md")) { Copy-Item (Join-Path $TemplateDir "CHANGELOG.md.template") ".\CHANGELOG.md" }

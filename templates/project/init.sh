@@ -200,6 +200,16 @@ if [ -f "$SRC_CLAUDE/settings.local.json.example" ]; then
   fi
 fi
 
+# --- Obsolete artifacts: prune dead hook entries, report the rest ------------
+# The deploy merges only ever add; a hook dotclaude stopped shipping stays wired
+# in the project and errors on every matching tool call once install.sh removes
+# its script. One Python implementation serves init.sh and init.ps1 alike. The
+# KEY= lines on stdout are for detect-drift.py; the human report is on stderr.
+if [ -f "$TEMPLATE_DIR/obsolete.json" ]; then
+  python3 "$TEMPLATE_DIR/scripts/prune-obsolete.py" "$TEMPLATE_DIR/obsolete.json" . >/dev/null \
+    || echo "WARN: obsolete-artifact check did not complete; deploy continues." >&2
+fi
+
 # --- CLAUDE.md, CHANGELOG.md : user-owned, seed when absent -------------------
 [ -f ./CLAUDE.md    ] || cp "$TEMPLATE_DIR/CLAUDE.md.template"    ./CLAUDE.md
 [ -f ./CHANGELOG.md ] || cp "$TEMPLATE_DIR/CHANGELOG.md.template" ./CHANGELOG.md

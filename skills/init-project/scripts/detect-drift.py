@@ -79,6 +79,33 @@ def check_graphify_integrated():
     return "GRAPHIFY_PRESENT" if (has_dir or has_block) else "GRAPHIFY_ABSENT"
 
 
+def check_obsolete():
+    """Leftovers of artifacts dotclaude stopped shipping (templates/project/obsolete.json).
+
+    Hook entries are normally already pruned by init.sh/init.ps1; a non-empty
+    OBSOLETE_HOOKS means the deploy has not been re-run since. Servers and
+    files are never removed automatically — the skill asks first.
+    """
+    template = os.environ.get("TEMPLATE_DIR") or os.path.join(
+        os.path.expanduser("~"), ".claude", "templates", "project")
+    manifest = load_json(os.path.join(template, "obsolete.json"))
+    if not isinstance(manifest, dict):
+        return "UNKNOWN", "UNKNOWN", "UNKNOWN"
+    matches = [h.get("match", "") for h in manifest.get("hooks", []) if h.get("match")]
+    hooks = 0
+    for name in ("settings.json", "settings.local.json"):
+        settings = load_json(os.path.join(".claude", name)) or {}
+        for groups in (settings.get("hooks") or {}).values():
+            for group in groups:
+                for hook in group.get("hooks", []):
+                    if any(m in str(hook.get("command", "")) for m in matches):
+                        hooks += 1
+    servers = (load_json(".mcp.json") or {}).get("mcpServers", {})
+    mcp = [s["name"] for s in manifest.get("mcpServers", []) if s.get("name") in servers]
+    files = [f["path"] for f in manifest.get("files", []) if os.path.exists(f.get("path", ""))]
+    return str(hooks), ",".join(mcp), ",".join(files)
+
+
 def check_allow_push_main():
     """§8 verification: did the "todo en main" choice actually land?"""
     local = load_json(os.path.join(".claude", "settings.local.json"))
@@ -89,7 +116,11 @@ def check_allow_push_main():
 
 def main():
     graphify_mcp, dashboard = check_mcp()
+    obsolete_hooks, obsolete_mcp, obsolete_files = check_obsolete()
     for key, value in (
+        ("OBSOLETE_HOOKS", obsolete_hooks),
+        ("OBSOLETE_MCP", obsolete_mcp),
+        ("OBSOLETE_FILES", obsolete_files),
         ("SERENA_HOOKS", check_serena_hooks()),
         ("GRAPHIFY_MCP", graphify_mcp),
         ("SERENA_DASHBOARD", dashboard),
