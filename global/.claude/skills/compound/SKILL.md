@@ -24,7 +24,7 @@ If it is local, **stop** — it does not deserve codification.
 | Convention that only applies to certain file types (code style, a language idiom) | A `.claude/rules/<topic>.md` with a `paths:` glob in frontmatter, so it loads only for matching files instead of every session |
 | Repeatable procedure (how to deploy, review, generate tests, etc.) | `.claude/skills/<name>/SKILL.md` |
 | Tone / language / response-format convention ("answer in Spanish", "no emojis", "always lead with a diagram") | A `.claude/output-styles/<name>.md` (system-prompt level, main conversation only — subagents run their own system prompt and do not inherit it) — enable via `outputStyle`, and set `keep-coding-instructions: true` in the frontmatter for a coding project, since the default strips Claude Code's software-engineering instructions |
-| Non-negotiable guarantee (must always pass) | `.claude/hooks/<name>.{sh,ps1}` + entry in `.claude/settings.json` |
+| Non-negotiable guarantee (must always pass) | A hook in `.claude/hooks/` + its entry in `.claude/settings.json`. Promoted to dotclaude it becomes one `global/.claude/hooks/<name>.py` with a `# hook-kind:` line and a case matrix (dotclaude's CLAUDE.md, "Writing a new hook") |
 | Knowledge that needs isolation to avoid contaminating context | `.claude/agents/<name>.md` |
 
 Mental rule:

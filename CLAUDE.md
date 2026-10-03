@@ -27,14 +27,13 @@ dotclaude/
 ├── README.md                    # human-facing install/usage doc
 ├── check.py                     # the coherence validator — run before EVERY commit
 ├── tests/                       # the behavioural net (see "Operating in this repo")
-│   ├── guard-push-main-cases.py        # + guard-destructive, detect-secrets,
-│   │                                   # guard-central-config, verify-on-edit
-│   ├── mcp-merge-cases.py / install-cases.py   # deployer + installer matrices
+│   ├── <hook>-cases.py                 # one matrix per hook (pyhook.py runs them as production does)
+│   ├── install-cases.py / init-seed-cases.py / mcp-merge-cases.py / …   # installer + deployer
 │   ├── inject.py                       # injects one regression into a scratch copy
 │   └── check-selftest.sh               # asserts check.py fails on what it claims
 ├── global/.claude/              # CENTRAL config — installed into ~/.claude/, applies to ALL projects
 │   ├── settings.json            # base permissions + hooks + attribution (install resolves OS form)
-│   ├── hooks/                   # .sh + .ps1 pairs — must stay in lockstep
+│   ├── hooks/                   # one .py per new hook (+ _lib/); older .sh/.ps1 pairs stay in lockstep
 │   ├── agents/                  # researcher, code-reviewer, debugger, db-inspector
 │   ├── rules/                   # progressive-disclosure conventions
 │   ├── skills/                  # workflow skills (verify, commit, audit, update-docs, …)
@@ -125,7 +124,7 @@ When `/compound` (a skill inside the template) suggests promoting a project-loca
 | You discovered… | Edit… |
 |---|---|
 | A bug in the deployer | `skills/init-project/SKILL.md` or `templates/project/init.sh` / `init.ps1` |
-| A new always-on guarantee for every project | New hook in `global/.claude/hooks/` (both `.sh` and `.ps1`) + entry in `global/.claude/settings.json` (and the PowerShell mirror in `install.ps1`) |
+| A new always-on guarantee for every project | One `global/.claude/hooks/<name>.py` with a `# hook-kind:` line + its entry in `global/.claude/settings.json` (`install.ps1` derives the Windows form) + `tests/<name>-cases.py` |
 | A reusable workflow every project should have | New skill in `global/.claude/skills/` |
 | A convention all projects should follow | Add to the right file in `global/.claude/rules/` (and mirror in `templates/project/docs/conventions.md`) |
 | A specialist agent useful everywhere | New agent in `global/.claude/agents/` |

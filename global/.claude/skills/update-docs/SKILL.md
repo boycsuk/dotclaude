@@ -100,8 +100,10 @@ will edit, plus any file the coverage audit below points you at.
    Then stop. Do not edit any file. Do not invent changes to justify the
    invocation.
 
-3. **If there is a contract change**, edit the affected `docs/*.md` file(s)
-   with the `Edit` tool. Rules:
+3. **If there is a contract change**, first show the proposed edit for each
+   affected `docs/*.md` file (the section and the new text) and confirm via
+   AskUserQuestion — apply / adjust / skip. The description promises that, and
+   docs are shared surface. Then edit with the `Edit` tool. Rules:
    - Only touch the sections that need to change. Leave the rest verbatim.
    - Keep the existing structure and tone of the file. Match its style.
    - **Coverage over depth.** Every new capability must appear, even if

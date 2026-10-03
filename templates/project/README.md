@@ -59,7 +59,7 @@ bash ~/.claude/templates/project/init.sh [--lsp=<plugin>] [--codebase-memory] [-
 
 `--lsp=<plugin>` installs the official Claude Code LSP plugin for the project's language at project scope (see below). The MCP flags are added by the skill per the interview: `--codebase-memory` (persistent code graph; needs the `codebase-memory-mcp` binary), `--xcode` (Apple's `xcrun mcpbridge`, macOS + Xcode 26.3+ only), `--ui` (Playwright browser MCP — lets the model screenshot the running app, which `/implement-ui` uses to verify UI work against a design reference; needs `npx`). Scaffold flags (`--fullstack`, `--runtime=`, `--compose`, `--proxy=`, `--deploy-script`) per the interview. When the script prints `init.sh: deploy OK`, return to Claude Code.
 
-**3. Personalize with Claude Code.** The skill resumes: it fills in placeholders in the deployed `CLAUDE.md` and `settings.json`, sanity-checks `.gitignore`, and verifies the deploy.
+**3. Personalize with Claude Code.** The skill resumes: it fills in the placeholders in the deployed `CLAUDE.md` and `docs/conventions.md`, adds project-specific permissions to the `settings.json` stub, sanity-checks `.gitignore`, and verifies the deploy.
 
 ### Why the split
 
@@ -75,14 +75,14 @@ Re-running `/init-project --update` inside a project only touches the per-projec
 
 The reusable core is central, so **where** you add something depends on whether it should apply everywhere or only to this project:
 
-**Reusable across all your projects → add it to the dotclaude repo (`.claude/`), then `git pull && ./install.sh`:**
+**Reusable across all your projects → add it to the dotclaude repo (`global/.claude/`), then `git pull && ./install.sh`:**
 
 | You want to add... | How |
 |---|---|
-| A repeatable workflow (deploy, test gen, etc.) | New skill in the repo's `.claude/skills/<name>/SKILL.md` |
-| A non-negotiable guarantee (must always pass) | New hook in the repo's `.claude/hooks/<name>.{sh,ps1}` + entry in `.claude/settings.json` (lockstep) |
-| A specialist agent useful everywhere | New agent in the repo's `.claude/agents/<name>.md` |
-| A convention all projects should follow | New file in the repo's `.claude/rules/<topic>.md` (mirror it in `docs/conventions.md`) |
+| A repeatable workflow (deploy, test gen, etc.) | New skill in the repo's `global/.claude/skills/<name>/SKILL.md` |
+| A non-negotiable guarantee (must always pass) | New hook `global/.claude/hooks/<name>.py` (with a `# hook-kind:` line) + its entry in `global/.claude/settings.json` + a `tests/<name>-cases.py` matrix |
+| A specialist agent useful everywhere | New agent in the repo's `global/.claude/agents/<name>.md` |
+| A convention all projects should follow | New file in the repo's `global/.claude/rules/<topic>.md` (mirror it in `templates/project/docs/conventions.md`) |
 
 > Editing the installed `~/.claude/` copy from inside a project is blocked by the `guard-central-config` hook — change the source in the repo and re-install.
 
@@ -200,7 +200,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\templates\pro
 
 ### Sync rule for hooks
 
-The hooks ship in two variants — `.sh` (Bash) and `.ps1` (PowerShell) — that must stay logically equivalent. **When you change one, change the other**. Diverging silently breaks Windows users.
+New hooks are a single Python file that serves both platforms. The older hooks still ship as a `.sh` (Bash) and `.ps1` (PowerShell) pair that must stay logically equivalent: **when you change one, change the other** — or migrate the pair to `.py` — and run its case matrix with `--pwsh`. Diverging silently breaks Windows users.
 
 ### Promoting a project-local extension to every project
 
@@ -212,8 +212,8 @@ When something you added to a project's `.claude/` proves useful for all project
 
 ### Skills: auto-invocable vs manual
 
-- **Auto** (default, `disable-model-invocation: false`): Claude invokes when the description matches the context. Use for `/verify`, `/changes`, `/resume-context`, `/update-docs`, `/readme`, `/implement-ui` (its side effects — components, `docs/ui.md` — are the requested work itself, and the component tree is confirmed via AskUserQuestion before anything is written).
-- **Manual** (`disable-model-invocation: true`): only by typing `/<name>`. Use for actions with visible side effects: `/commit`, `/plan-feature`, `/compound`, `/init-project`.
+- **Auto** (default, `disable-model-invocation: false`): Claude invokes when the description matches the context. Every central skill is auto-invocable; the ones with side effects gate them in their own body instead — `/commit` never commits without explicit confirmation, `/compound` and `/update-docs` propose their edits first, `/plan-feature` interviews before writing, and `/implement-ui` confirms its component tree via AskUserQuestion before anything is written.
+- **Manual** (`disable-model-invocation: true`): only by typing `/<name>`. Only `/init-project`, whose deploy step the user runs in their own terminal.
 - `/audit` stays auto-invocable but asks — in two rounds, categories then depth+scope — before doing any work, so it can never quietly spend a large budget. It also absorbed the old `/security-review`: a pre-commit security pass is `/audit` → Security → Light → Uncommitted changes.
 
 ### Model selection policy
