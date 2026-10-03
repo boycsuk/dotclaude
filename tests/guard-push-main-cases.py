@@ -133,10 +133,10 @@ def set_optout(repo, enabled):
         os.remove(path)
 
 
-def invoke(runner, cmd, cwd):
+def invoke(runner, cmd, cwd, project_dir=None):
     proc = subprocess.run(runner, input=json.dumps({"tool_input": {"command": cmd}}),
                           capture_output=True, text=True, cwd=cwd,
-                          env=dict(os.environ, CLAUDE_PROJECT_DIR=cwd))
+                          env=dict(os.environ, CLAUDE_PROJECT_DIR=project_dir or cwd))
     return BLOCK if proc.returncode == 2 else ALLOW
 
 
@@ -171,6 +171,41 @@ def main():
                 detail = ", ".join(f"{n}={results[n]}" for n in results)
                 print(f"  FAIL want {want} got {detail} | {cmd}   ({why})")
         print(f"  {len(cases)} cases checked")
+
+    # Pushing a DIFFERENT repo than the session's project. The opt-out and the
+    # checked-out branch belong to the repo being pushed: reading them from the
+    # session project let a project with allowPushToMain push main of any
+    # other repo through `git -C`, and a bare `git -C other push` resolved HEAD
+    # in the wrong repository. Found pushing eight projects from a dotclaude
+    # session (DESIGN.md §18).
+    print("\n=== pushing another repo")
+    session = make_repo()                       # the session's project...
+    subprocess.run(["git", "-C", session, "checkout", "-q", "-B", "feature/s"], check=True)
+    set_optout(session, True)                   # ...lives on main by choice
+    other = make_repo()                         # target: on main, no opt-out
+    cross = [
+        (f"git -C {other} push origin main", BLOCK, "session opt-out must not cover another repo"),
+        (f"git -C {other} push", BLOCK, "bare push resolves HEAD in the -C repo (main), not the session's"),
+        (f"cd {other} && git push", BLOCK, "cd into another repo, then a bare push"),
+        (f"cd {other} && git push origin feature/x", ALLOW, "feature branch in another repo"),
+        ("git push", ALLOW, "the session repo itself is on a feature branch"),
+    ]
+    for cmd, want, why in cross:
+        for name, runner in runners:
+            got = invoke(runner, cmd, session)
+            if got != want:
+                failures += 1
+                print(f"  FAIL want {want} got {got} ({name}) | {cmd}   ({why})")
+    set_optout(session, False)
+    set_optout(other, True)
+    for cmd, want, why in ((f"git -C {other} push origin main", ALLOW, "the target repo's own opt-out applies"),
+                           (f"cd {other}/.claude && git push origin main", ALLOW, "opt-out found from a subdirectory")):
+        for name, runner in runners:
+            got = invoke(runner, cmd, session)
+            if got != want:
+                failures += 1
+                print(f"  FAIL want {want} got {got} ({name}) | {cmd}   ({why})")
+    print(f"  {len(cross) + 2} cases checked")
 
     # A non-git directory must not hang or crash.
     nongit = tempfile.mkdtemp()

@@ -150,10 +150,72 @@ function Get-PushArgs($seg) {
     return $null
 }
 
+# Bounded like the .sh sibling's subprocess.run(timeout=2). A bare `&` has no
+# wall-clock bound: a hung git (network FS, lock contention) blows the 5s hook
+# budget in settings.json, the harness cancels the hook, and "harness
+# cancellation drops all output" (see verify-on-edit.ps1) — the verdict is
+# discarded and the push to main proceeds UNJUDGED. Fail closed on timeout.
+function Invoke-GitBounded([string]$repo, [string]$arguments) {
+    try {
+        $git = Get-Command git -ErrorAction SilentlyContinue
+        if (-not $git -or -not (Test-Path -LiteralPath $repo)) { return "" }
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $git.Source
+        $psi.Arguments = $arguments
+        $psi.WorkingDirectory = $repo
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.UseShellExecute = $false
+        $p = [System.Diagnostics.Process]::Start($psi)
+        $outTask = $p.StandardOutput.ReadToEndAsync()
+        if ($p.WaitForExit(2000)) {
+            if ($p.ExitCode -eq 0) { return $outTask.Result.Trim() }
+        } else {
+            try { $p.Kill($true) } catch { try { $p.Kill() } catch { } }
+        }
+    } catch { }
+    return ""
+}
+
+# The repository each push acts on: the opt-out and the checked-out branch
+# belong to IT, not to the session's project. Follow `cd` between segments and
+# git's own -C, so `git -C ..\other push` and `cd ..\other; git push` are judged
+# against ..\other (lockstep with segment_dirs in the .sh sibling).
+function Resolve-Dir([string]$base, [string]$target) {
+    if ($target -eq "~" -or $target.StartsWith("~/") -or $target.StartsWith("~\")) {
+        $target = $HOME + $target.Substring(1)
+    }
+    $joined = if ([System.IO.Path]::IsPathRooted($target)) { $target } else { Join-Path $base $target }
+    return [System.IO.Path]::GetFullPath($joined)
+}
+$segDirs = @()
+$cur = (Get-Location).Path
+foreach ($seg in $segments) {
+    $words = @($seg)
+    if ($words.Count -gt 0 -and $words[0] -in @("cd", "pushd", "Set-Location", "sl", "Push-Location")) {
+        $target = if ($words.Count -gt 1) { $words[1] } else { "~" }
+        $cur = Resolve-Dir $cur $target
+    }
+    $repo = $cur
+    $gi = -1
+    for ($i = 0; $i -lt $words.Count; $i++) { if (Test-GitWord $words[$i]) { $gi = $i; break } }
+    if ($gi -ge 0) {
+        $k = $gi + 1
+        while ($k -lt $words.Count -and $words[$k].StartsWith("-")) {
+            if ($words[$k] -eq "-C" -and $k + 1 -lt $words.Count) { $repo = Resolve-Dir $repo $words[$k + 1] }
+            $k += if ($VALUED_GIT -contains $words[$k]) { 2 } else { 1 }
+        }
+    }
+    $segDirs += $repo
+}
+
 $verdict = $null
 $verdictBranch = $null
+$verdictRepo = $null
 
-foreach ($seg in $segments) {
+for ($segIndex = 0; $segIndex -lt $segments.Count; $segIndex++) {
+    $seg = $segments[$segIndex]
+    $repo = $segDirs[$segIndex]
     # Get-PushArgs returns $null for "not a push" and a (possibly empty) array
     # otherwise. The ,$array wrapping inside it keeps an empty result from
     # collapsing to $null — a bare `git push` has no arguments and must still
@@ -217,39 +279,15 @@ foreach ($seg in $segments) {
     foreach ($t in $targets) { if ($t -in @("HEAD", "@", "")) { $needsHead = $true } }
     if ($needsHead) {
         $targets = @($targets | Where-Object { $_ -notin @("HEAD", "@", "") })
-        # Bounded like the .sh sibling's subprocess.run(timeout=2). A bare `&`
-        # has no wall-clock bound: a hung git (network FS, lock contention)
-        # blows the 5s hook budget in settings.json, the harness cancels the
-        # hook, and "harness cancellation drops all output" (see
-        # verify-on-edit.ps1) — the verdict is discarded and the push to main
-        # proceeds UNJUDGED. Fail closed on timeout: no branch, no fallback.
-        try {
-            $git = Get-Command git -ErrorAction SilentlyContinue
-            if ($git) {
-                $psi = New-Object System.Diagnostics.ProcessStartInfo
-                $psi.FileName = $git.Source
-                $psi.Arguments = "symbolic-ref --quiet --short HEAD"
-                $psi.RedirectStandardOutput = $true
-                $psi.RedirectStandardError = $true
-                $psi.UseShellExecute = $false
-                $p = [System.Diagnostics.Process]::Start($psi)
-                $outTask = $p.StandardOutput.ReadToEndAsync()
-                if ($p.WaitForExit(2000)) {
-                    if ($p.ExitCode -eq 0) {
-                        $branch = $outTask.Result.Trim()
-                        if ($branch) { $targets += $branch }
-                    }
-                } else {
-                    try { $p.Kill($true) } catch { try { $p.Kill() } catch { } }
-                }
-            }
-        } catch { }
+        $branch = Invoke-GitBounded $repo "symbolic-ref --quiet --short HEAD"
+        if ($branch) { $targets += $branch }
     }
 
     foreach ($t in $targets) {
         if ($t -in @("main", "master")) {
             $verdict = "MAIN"
             $verdictBranch = $t
+            $verdictRepo = $repo
             break
         }
     }
@@ -280,7 +318,10 @@ if ($verdict -eq "DELETE") {
 
 # MAIN — honour the opt-out.
 $allowMain = $false
-$projectDir = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { (Get-Location).Path }
+# The opt-out of the repository being pushed, found from its root.
+$projectDir = Invoke-GitBounded $verdictRepo "rev-parse --show-toplevel"
+if (-not $projectDir) { $projectDir = $verdictRepo }
+if (-not $projectDir) { $projectDir = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { (Get-Location).Path } }
 $localSettings = Join-Path $projectDir ".claude\settings.local.json"
 if (Test-Path $localSettings) {
     try {

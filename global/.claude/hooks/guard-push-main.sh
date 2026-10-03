@@ -146,13 +146,44 @@ def is_push(seg):
         return w == "push"
     return False
 
-pushes = [s for s in segments if is_push(s)]
+# The repository each push acts on: the opt-out and the checked-out branch
+# belong to IT, not to the session's project. Follow `cd` between segments and
+# git's own -C, so `git -C ../other push` and `cd ../other && git push` are
+# judged against ../other (a session project with allowPushToMain once let
+# `git -C` push main of any repository).
+def segment_dirs(segs):
+    cur, out = os.getcwd(), []
+    for seg in segs:
+        if seg and seg[0] in ("cd", "pushd"):
+            target = seg[1] if len(seg) > 1 and seg[1] != "--" else (seg[2] if len(seg) > 2 else "~")
+            cur = os.path.normpath(os.path.join(cur, os.path.expanduser(target)))
+        repo = cur
+        if is_push(seg):
+            gi = next(i for i, w in enumerate(seg) if is_git_word(w))
+            k = gi + 1
+            while k < len(seg) and seg[k].startswith("-"):
+                if seg[k] == "-C" and k + 1 < len(seg):
+                    repo = os.path.normpath(os.path.join(repo, os.path.expanduser(seg[k + 1])))
+                k += 2 if seg[k] in ("-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path") else 1
+        out.append(repo)
+    return out
+
+dirs = segment_dirs(segments)
+pushes = [(s, d) for s, d in zip(segments, dirs) if is_push(s)]
 if not pushes:
     sys.exit(0)                      # nothing to judge
 
+def git_out(repo, *argv):
+    try:
+        out = subprocess.run(["git"] + list(argv), cwd=repo, capture_output=True,
+                             text=True, timeout=2)
+    except Exception:
+        return ""
+    return out.stdout.strip() if out.returncode == 0 else ""
+
 FORCE_FLAGS = ("--force", "--force-with-lease", "--force-if-includes", "-f")
 
-for seg in pushes:
+for seg, repo in pushes:
     gi = next(i for i, w in enumerate(seg) if is_git_word(w))
     args = seg[gi + 1:]
     # Drop git's global flags, then the `push` word itself.
@@ -221,18 +252,15 @@ for seg in pushes:
     # resolves it from the checked-out branch, which never appears in the
     # command string. A deletion-only push must NOT fall back to HEAD.
     if (not refspecs and not targets) or any(t in ("HEAD", "@", "") for t in targets):
-        try:
-            out = subprocess.run(["git", "symbolic-ref", "--quiet", "--short", "HEAD"],
-                                 capture_output=True, text=True, timeout=2)
-            if out.returncode == 0 and out.stdout.strip():
-                targets = [t for t in targets if t not in ("HEAD", "@", "")]
-                targets.append(out.stdout.strip())
-        except Exception:
-            pass
+        branch = git_out(repo, "symbolic-ref", "--quiet", "--short", "HEAD")
+        if branch:
+            targets = [t for t in targets if t not in ("HEAD", "@", "")]
+            targets.append(branch)
 
     for t in targets:
         if t in ("main", "master"):
-            print(f"MAIN:{t}")
+            # The repo root travels with the verdict: the opt-out lives there.
+            print(f"MAIN:{t}\t{git_out(repo, 'rev-parse', '--show-toplevel') or repo}")
             sys.exit(0)
 PY
 # An empty verdict means "nothing to judge" and falls through to exit 0, which
@@ -261,10 +289,13 @@ case "$VERDICT" in
     exit 2
     ;;
   MAIN:*)
-    BRANCH="${VERDICT#MAIN:}"
-    ALLOW_MAIN=$(python3 -c "
+    REST="${VERDICT#MAIN:}"
+    BRANCH="${REST%%$'\t'*}"
+    REPO_DIR=""
+    [ "$REST" != "$BRANCH" ] && REPO_DIR="${REST#*$'\t'}"
+    ALLOW_MAIN=$(REPO_DIR="$REPO_DIR" python3 -c "
 import json, os
-p = os.path.join(os.environ.get('CLAUDE_PROJECT_DIR', '.'), '.claude', 'settings.local.json')
+p = os.path.join(os.environ.get('REPO_DIR') or os.environ.get('CLAUDE_PROJECT_DIR', '.'), '.claude', 'settings.local.json')
 try:
     with open(p) as fh:
         print('true' if json.load(fh).get('allowPushToMain') is True else 'false')
