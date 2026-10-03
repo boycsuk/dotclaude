@@ -596,6 +596,16 @@ The verb extractor in check.py and install.ps1 used to strip an optional `:` and
 
 Two lines of work reached the same conclusion independently. The 2026-09-12 installer change made `outputStyle` a SEEDED key (written only when absent, never reverting a `/config` choice) after finding the style had shipped inert; this change had added the same default as a one-off. On merging, the SEEDED-key mechanism won — it is general and checked by `check.py` — and the one-off was dropped. What this change keeps is the consequence: with the style on, its conventions loaded twice, once in the system prompt and again from `rules/ai-collaboration.md` every session, so the rule's "Output style" section shrank to a three-line fallback for machines where the style is off. §22's reason for opt-in — a per-machine choice — still holds; it is simply the default now.
 
+### 38. Audit 2026-10-03: the guards judged a different command than the one that runs
+
+A Deep audit (12 agents, then 4 adversarial verifiers, every claim reproduced) found that most guard defects shared one root: the hook's picture of the command differed from what the shell or the harness actually does.
+
+- **Windows ran a different command.** Claude Code launches a `"shell": "powershell"` hook as `powershell -Command <cmd>`, which turns a script's `exit 2` into 1, so every `.ps1` guard blocked nothing (§9, fixed with `; exit $LASTEXITCODE`). The matrices ran `-File`. Lesson: a matrix must invoke the hook through the production command form, and `tests/install-cases.py` runs the command the installer wrote.
+- **The parser saw a different command line.** guard-push-main's own tokenizer split only on spaced operators and dropped the whole command on an apostrophe in a comment; `shellwords` let a `#` comment hide every later line, skipped `$( )` inside double quotes, and treated an unquoted heredoc body — whose `$( )` runs — as inert data. `shellwords` now strips comments per line, parses every substitution recursively, and treats a heredoc body as data only for a known data sink (`cat >`, `tee`, `git commit -F -`), the §26 allowlist; guard-push-main became one `.py` on top of it (§36), which also resolves bundled short flags, abbreviated long options, `-c alias.*` / configured aliases, `-c remote.*.push`, and `heads/main`.
+- **Unparseable is not innocent.** A push the parser cannot read is now blocked, not allowed: an unbalanced quote must not be a way around the guard.
+
+**What stays out of reach of a hook.** Each verifier also checked the harness layer behind the hooks: Claude Code's `ask`/`deny` rules split compound commands, so most push bypasses still prompted; the `git -c` forms did not, and auto mode allows default-branch pushes. That is why the `-c` forms are handled in the hook rather than left to the permission rules.
+
 ## Things deliberately not included
 
 - **Pre-baked stack variants.** See decision 2.

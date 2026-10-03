@@ -44,6 +44,12 @@ MESSAGE_CASES = [
     ("git -C . commit -m 'feat' -m 'co-authored-by: someone'", DENY, "lowercase trailer through git -C"),
     ("env GIT_EDITOR=true git commit -m 'x' -m 'Co-Authored-By: a'", DENY, "env wrapper"),
     ("git add -A && git commit -m 'x' -m 'Co-Authored-By: a'", DENY, "after git add in the same command"),
+    ("ls # check\ngit commit -m 'feat: x' -m 'Co-Authored-By: a'", DENY,
+     "a comment on an earlier line must not hide the commit"),
+    ("ls # don't\ngit commit -m 'feat: x' -m 'Co-Authored-By: a'", DENY,
+     "an apostrophe in a comment must not abort the parse"),
+    ("cat > f <<EOF\n$(git commit -m 'feat: x' -m 'Co-Authored-By: a')\nEOF", DENY,
+     "an unquoted heredoc runs its $( )"),
     ("git commit -F msg.txt", DENY, "-F file carrying a trailer (file written by the case)"),
     ("git commit -F - <<'EOF'\nfeat: x\n\nSigned-off-by: a <a@b>\nEOF", DENY, "-F - from a heredoc"),
     # Forms a review found walking past the first parser (all verified bypasses).

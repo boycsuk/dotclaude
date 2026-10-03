@@ -36,13 +36,16 @@ def load_json(path):
         return None
 
 
-def local_opt_out(payload, key):
+def local_opt_out(payload, key, root=None):
     """True only when .claude/settings.local.json sets `key` to literal true.
 
     Opt-outs live in the gitignored local file so the choice stays personal
-    and is never forced onto teammates (DESIGN.md §18).
+    and is never forced onto teammates (DESIGN.md §18). `root` is the
+    repository the command acts on; it defaults to the session's project, but
+    a guard judging `git -C ../other ...` must read ../other's choice.
     """
-    data = load_json(os.path.join(project_dir(payload), ".claude", "settings.local.json"))
+    base = root or project_dir(payload)
+    data = load_json(os.path.join(base, ".claude", "settings.local.json"))
     return isinstance(data, dict) and data.get(key) is True
 
 

@@ -81,7 +81,7 @@
           },
           {
             "type": "command",
-            "command": "\"$HOME\"/.claude/hooks/guard-push-main.sh",
+            "command": "python3 \"$HOME\"/.claude/hooks/guard-push-main.py",
             "timeout": 5
           },
           {

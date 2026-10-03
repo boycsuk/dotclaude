@@ -703,7 +703,7 @@ def _():
     keys = set()
     for name in py_hooks():
         body = read(f"global/.claude/hooks/{name}.py")
-        found = re.findall(r'local_opt_out\(\w+, "(\w+)"\)', body)
+        found = re.findall(r'local_opt_out\(\w+, "(\w+)"[,)]', body)
         # A call this pattern cannot read (single quotes, a constant) would
         # otherwise drop out of the check silently.
         if body.count("local_opt_out(") != len(found):

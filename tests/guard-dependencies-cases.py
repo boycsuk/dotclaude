@@ -26,6 +26,11 @@ ASK, ALLOW = "ask", "allow"
 BASH_CASES = [
     # Adds a named package — ask, in every spelling.
     ("npm install lodash", ASK, "npm install <pkg>"),
+    ("ls # list\nnpm install left-pad", ASK, "a comment on an earlier line must not hide the install"),
+    ('echo "$(npm install left-pad)"', ASK, "a substitution inside double quotes runs"),
+    ("cat > f <<EOF\n$(npm install left-pad)\nEOF", ASK, "an unquoted heredoc runs its $( )"),
+    ("ssh host <<EOF\nnpm install left-pad\nEOF", ASK, "a heredoc fed to anything but a file writer runs"),
+    ("cat > notes.md <<'EOF'\n$(npm install left-pad)\nEOF", ALLOW, "a quoted delimiter leaves $( ) inert"),
     ("npm i lodash", ASK, "npm i shorthand (missed by Bash(npm install:*))"),
     ("npm add -D vitest", ASK, "npm add with a flag"),
     ("pnpm add zod", ASK, "pnpm add"),

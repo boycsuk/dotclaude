@@ -4,19 +4,24 @@ A regex over the raw command line is wrong in both directions (DESIGN.md §18):
 it blocks innocent text (a commit message that mentions "git push") and misses
 real commands written in a wrapped form (`git -C /repo push`). These helpers
 split a command into the commands it actually runs, with quotes resolved, so a
-hook judges the arguments of the command itself. The core is ported from
-guard-push-main.sh; the wrapper, subshell, `bash -c`, heredoc and PowerShell
-handling exist because a review found each one bypassing guard-commit.
+hook judges the arguments of the command itself. The wrapper, subshell,
+`bash -c`, heredoc and PowerShell handling exist because a review found each
+one bypassing guard-commit; comment, substitution and heredoc-allowlist
+handling because an audit found each one bypassing guard-push-main.
 """
 
 import re
 import shlex
 
-# A heredoc fed to a shell runs as commands; any other heredoc (cat > file,
-# git commit -F -, python) is data and must not be parsed as shell.
-_HEREDOC = re.compile(r"<<-?\s*([\"']?)([A-Za-z_][A-Za-z0-9_]*)\1")
-_SHELL_FED = re.compile(r"(^|[\s;&|(])(ba|z|k|da)?sh(\s|$)")
+# A heredoc body is DATA only when the command it feeds is known to read it as
+# data: a file writer (`cat > f`, `tee f`) or `git commit -F -`. Anything else
+# — a shell, ssh, docker exec, an interpreter, an unknown program — may run it,
+# so its body stays in the parsed text (DESIGN.md §26: unknown shapes fail
+# closed). Even a data body runs its $( ) and backticks when the delimiter is
+# unquoted; those are extracted and parsed as commands.
+_HEREDOC = re.compile(r"(?<!<)<<-?\s*([\"']?)([A-Za-z_][A-Za-z0-9_]*)\1")
 _WRITER_TARGET = re.compile(r"(?:\bcat\s*>{1,2}\s*|\btee\s+(?:-a\s+)?)([^\s|;&<>()]+)")
+_COMMIT_STDIN = re.compile(r"\bcommit\b.*(?:\s-[A-Za-z]*F\s*-(?:\s|$)|\s--file(?:=|\s+)-(?:\s|$))")
 # "$(cat <<'EOF' ... EOF)" — the form Claude uses for multi-line messages. The
 # body may hold quotes and apostrophes that shlex cannot balance, so the whole
 # substitution is replaced by its body, quoted, before tokenising.
@@ -84,6 +89,7 @@ def heredocs(cmd, shell="bash"):
 
 
 def _split_heredocs(cmd):
+    """(text with data-heredoc bodies removed, the data heredocs found)."""
     lines = cmd.split("\n")
     kept, found, i = [], [], 0
     while i < len(lines):
@@ -100,19 +106,87 @@ def _split_heredocs(cmd):
         if j >= len(lines):                       # unterminated: leave it to the tokenizer
             i += 1
             continue
-        if _SHELL_FED.search(line[:m.start()]):
-            i += 1                                # executed: its body is more commands
+        header = line[:m.start()]
+        target = _WRITER_TARGET.search(header)
+        if not target and not _COMMIT_STDIN.search(header):
+            i += 1                                # may be executed: its body is more commands
             continue
-        target = _WRITER_TARGET.search(line[:m.start()])
-        found.append({"header": line, "body": "\n".join(lines[i + 1:j]),
-                      "target": target.group(1) if target else None})
+        body = "\n".join(lines[i + 1:j])
+        found.append({"header": line, "body": body, "target": target.group(1) if target else None})
+        if not m.group(1):                        # unquoted: $( ) in the body still runs
+            kept.extend(substitutions(body, in_heredoc=True))
         i = j + 1
     return "\n".join(kept), found
+
+
+def substitutions(text, in_heredoc=False):
+    """The inner text of every top-level `$( )` and backtick substitution in `text`.
+
+    Single-quoted text is inert; double-quoted text is not, which is why a
+    tokenizer alone misses `echo "$(git push origin main)"`. Arithmetic `$((`
+    is skipped. With `in_heredoc`, quotes are literal characters, as they are
+    in an unquoted heredoc body.
+    """
+    found, quote, i, n = [], None, 0, len(text)
+    while i < n:
+        ch = text[i]
+        if quote == "'":
+            if ch == "'":
+                quote = None
+            i += 1
+            continue
+        if ch == "\\" and i + 1 < n:
+            i += 2
+            continue
+        if not in_heredoc and ch == "'" and quote is None:
+            quote = "'"
+        elif not in_heredoc and ch == '"':
+            quote = None if quote == '"' else '"'
+        elif text.startswith("$((", i):
+            i += 3
+            continue
+        elif text.startswith("$(", i):
+            end = _closing_paren(text, i + 2)
+            found.append(text[i + 2:end])
+            i = end + 1
+            continue
+        elif ch == "`":
+            end = text.find("`", i + 1)
+            end = n if end == -1 else end
+            found.append(text[i + 1:end])
+            i = end + 1
+            continue
+        i += 1
+    return [f for f in found if f.strip()]
+
+
+def _closing_paren(text, start):
+    depth, quote, i = 1, None, start
+    while i < len(text):
+        ch = text[i]
+        if quote:
+            if ch == quote:
+                quote = None
+            elif ch == "\\" and quote == '"':
+                i += 1
+        elif ch in "'\"":
+            quote = ch
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return len(text)
 
 
 def _newlines_to_separators(cmd):
     # shlex folds newlines into whitespace, which once merged `git add -A` and a
     # following `git push origin main` into one command judged by its first word.
+    # Comments end at their own newline: left to shlex (whose commenter runs to
+    # the end of the whole input once newlines are separators), `ls # x` hid
+    # every later line, and an apostrophe in one aborted the parse.
     res, quote, k, n = [], None, 0, len(cmd)
     while k < n:
         ch = cmd[k]
@@ -129,6 +203,10 @@ def _newlines_to_separators(cmd):
             continue
         if ch in ("'", '"'):
             quote = ch
+        elif ch == "#" and (k == 0 or cmd[k - 1].isspace() or cmd[k - 1] in ";&|()"):
+            while k < n and cmd[k] != "\n":
+                k += 1
+            continue
         elif ch == "\\" and k + 1 < n and cmd[k + 1] == "\n":
             res.append(" ")
             k += 2
@@ -145,15 +223,16 @@ def _newlines_to_separators(cmd):
 def segments(cmd, shell="bash", _depth=0):
     """Split `cmd` into the token lists of the commands it runs.
 
-    Subshells, braces and if/while bodies are flattened; `bash -c "..."` is
-    parsed recursively. Returns None when the quoting is unbalanced: such a
-    command cannot be judged reliably, and each caller decides whether that
-    fails open or closed.
+    Subshells, braces and if/while bodies are flattened; `bash -c "..."` and
+    every `$( )` / backtick substitution are parsed recursively. Returns None
+    when the quoting is unbalanced: such a command cannot be judged reliably,
+    and each caller decides whether that fails open or closed.
     """
     text = _split_heredocs(normalize(cmd, shell))[0]
     try:
         lexer = shlex.shlex(_newlines_to_separators(text), posix=True, punctuation_chars=";&|()")
         lexer.whitespace_split = True
+        lexer.commenters = ""
         tokens = list(lexer)
     except ValueError:
         return None
@@ -177,6 +256,12 @@ def segments(cmd, shell="bash", _depth=0):
             nested = segments(inner, "bash", _depth + 1)
             if nested:
                 result.extend(nested)
+    if _depth < 3:
+        for inner in substitutions(_newlines_to_separators(text)):
+            nested = segments(inner, "bash", _depth + 1)
+            if nested is None:
+                return None
+            result.extend(s for s in nested if s not in result)
     return result
 
 
