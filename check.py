@@ -381,11 +381,11 @@ def _():
                              f"{m.group(1)} is wired on {tool}, but no matrix that runs it sends a "
                              f'"{tool}" payload')
 
-    # changelog-reminder fires on Stop, where `decision: "block"`, exit 2 AND
+    # turn-end-notice fires on Stop, where `decision: "block"`, exit 2 AND
     # hookSpecificOutput.additionalContext all CONTINUE the turn. Its matrix is
     # only a net if it asserts the hook emits none of them — "it printed
     # something" would pass on a version that silently resumes every turn.
-    stop_matrix = "tests/changelog-reminder-cases.py"
+    stop_matrix = "tests/turn-end-notice-cases.py"
     if os.path.exists(os.path.join(REPO, stop_matrix)):
         # Strip docstrings and comments first: the field names appear in this
         # matrix's own prose explaining why they must not be emitted, so a

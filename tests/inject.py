@@ -82,11 +82,11 @@ def unwire_shell_hook(repo):
 
 def reinject_to_stderr(repo):
     """A Stop notice that delivers as additionalContext resumes every turn."""
-    path = os.path.join(repo, "global/.claude/hooks/changelog-reminder.py")
+    path = os.path.join(repo, "global/.claude/hooks/turn-end-notice.py")
     with open(path) as fh:
         text = fh.read()
     if "hookio.notice(" not in text:
-        raise SystemExit("inject: changelog-reminder.py no longer speaks through hookio.notice")
+        raise SystemExit("inject: turn-end-notice.py no longer speaks through hookio.notice")
     with open(path, "w") as fh:
         fh.write(text.replace("hookio.notice(", 'hookio.context("Stop", ', 1))
 
@@ -375,11 +375,11 @@ def stop_hook_starts_blocking(repo):
     and the hook cannot tell a finished task from a half-done one. The matrix
     asserts none of those appear; dropping the assertion must not pass green.
     """
-    path = os.path.join(repo, "tests/changelog-reminder-cases.py")
+    path = os.path.join(repo, "tests/turn-end-notice-cases.py")
     with open(path) as fh:
         text = fh.read()
     if '"decision"' not in text:
-        raise SystemExit("inject: changelog-reminder matrix no longer asserts on `decision`")
+        raise SystemExit("inject: turn-end-notice matrix no longer asserts on `decision`")
     # Strip every mention, the way a rewrite that stops caring would.
     with open(path, "w") as fh:
         fh.write(text.replace('"decision"', '"_dropped"'))

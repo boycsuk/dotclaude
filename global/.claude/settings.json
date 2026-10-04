@@ -188,7 +188,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$HOME\"/.claude/hooks/changelog-reminder.py",
+            "command": "python3 \"$HOME\"/.claude/hooks/turn-end-notice.py",
             "timeout": 5
           }
         ]

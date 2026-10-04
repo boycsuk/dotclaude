@@ -5,7 +5,9 @@
     {"match": "hooks\\prefer-graphify.", "reason": "Graphify was removed from dotclaude"},
     {"match": "hooks/prefer-serena-bash.", "reason": "Serena was removed from dotclaude"},
     {"match": "hooks\\prefer-serena-bash.", "reason": "Serena was removed from dotclaude"},
-    {"match": "serena-hooks ", "reason": "Serena was removed from dotclaude"}
+    {"match": "serena-hooks ", "reason": "Serena was removed from dotclaude"},
+    {"match": "hooks/changelog-reminder.", "reason": "renamed to turn-end-notice, which also flags untested edits and uncited sources"},
+    {"match": "hooks\\changelog-reminder.", "reason": "renamed to turn-end-notice, which also flags untested edits and uncited sources"}
   ],
   "gitHooks": [
     {"file": "post-commit", "start": "# graphify-hook-start", "end": "# graphify-hook-end", "reason": "installed by `graphify hook install` (old init --serena); fails on every commit once Graphify is uninstalled"},
