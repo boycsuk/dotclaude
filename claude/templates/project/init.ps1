@@ -212,7 +212,7 @@ if (-not (Test-Path $DstRoot)) { New-Item -ItemType Directory -Path $DstRoot -Fo
 # settings.json: per-project stub (base config is central). Seed only if absent.
 Seed-Copy (Join-Path $SrcRoot "settings.json") (Join-Path $DstRoot "settings.json")
 
-# settings.local.json.example: refresh if untouched, drift-report if edited.
+# settings.local.json.example: seeded when absent, drift-reported when it differs.
 $localExample = Join-Path $SrcRoot "settings.local.json.example"
 $localExampleDst = Join-Path $DstRoot "settings.local.json.example"
 if (Test-Path $localExample) {

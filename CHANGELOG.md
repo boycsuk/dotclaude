@@ -230,6 +230,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `check.py` no longer reads a code-extension list from a hook (check 6 compares the two path-scoped rules only).
 
 ### Fixed
+- `init.sh` and `init.ps1` comments no longer claim `settings.local.json.example` is refreshed when untouched: both seed it when absent and only report drift when it differs.
 - The project `.gitignore` template ignores `/SPEC.md` and `/SPEC-*.md`, as `/plan-feature` already claimed it did; specs archived under `docs/` stay committable. `/plan-feature` declares `argument-hint: [feature description]` and seeds its interview with that text.
 - `/init-project` no longer says feature branches are merged to main via PR; it matches `/commit`'s local `--no-ff` merge.
 - `/resume-context` no longer aborts on a repository with no commits (`git log` moved out of the injected block), and sets `background: false` so its summary arrives in the same turn instead of as a later notification, like `/verify` and `/changes`.

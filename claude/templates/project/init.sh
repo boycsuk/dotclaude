@@ -47,7 +47,7 @@
 #              behaves this way. Per-project files are user-owned: CLAUDE.md,
 #              CHANGELOG.md, docs/* and settings.json are only seeded when
 #              absent, never overwritten. settings.local.json.example is
-#              refreshed if untouched, drift-reported if edited. (There is no
+#              seeded when absent, drift-reported when it differs. (There is no
 #              hooks/agents/skills/rules drift here anymore — those are central;
 #              update them with `git pull && ./install.sh` in the dotclaude repo.)
 #   --update --recursive [dir]  Update EVERY dotclaude project under dir
@@ -210,7 +210,7 @@ mkdir -p "$DST_CLAUDE"
 # absent — never overwrite the user's project-specific permissions.
 seed_copy "$SRC_CLAUDE/settings.json" "$DST_CLAUDE/settings.json"
 
-# settings.local.json.example: documentary. Refresh if untouched, drift if edited.
+# settings.local.json.example: documentary. Seeded when absent, drift-reported when it differs.
 if [ -f "$SRC_CLAUDE/settings.local.json.example" ]; then
   ex_dst="$DST_CLAUDE/settings.local.json.example"
   if [ ! -f "$ex_dst" ]; then
