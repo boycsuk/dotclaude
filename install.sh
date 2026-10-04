@@ -245,6 +245,11 @@ else
   exit 1
 fi
 
+# --- Smoke test: every guard blocks, run through the command just written ----
+# A mistyped path or a broken launch form fails open without a word; compiling
+# the hooks cannot see it. Lockstep with install.ps1.
+python3 "$SCRIPT_DIR/scripts/smoke-guards.py" "$TARGET/settings.json" sh || exit 1
+
 echo ""
 echo "Done. Central config is in ~/.claude/ and applies to every project."
 echo "Open Claude Code in any project and run /init-project to deploy the"

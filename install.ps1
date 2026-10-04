@@ -465,6 +465,16 @@ try {
     exit 1
 }
 
+# --- Smoke test: every guard blocks, run through the command just written ----
+# A mistyped path or a broken launch form fails open without a word; compiling
+# the hooks cannot see it. Lockstep with install.sh. The commands are run by
+# this same PowerShell, the way a "shell": "powershell" hook is.
+$smokeArgs = @()
+if ($PythonArgs) { $smokeArgs += $PythonArgs }
+$smokeArgs += @((Join-Path $ScriptDir "scripts/smoke-guards.py"), $settingsPath, "powershell", (Get-Process -Id $PID).Path)
+& $PythonExe @smokeArgs
+if ($LASTEXITCODE -ne 0) { exit 1 }
+
 Write-Host ""
 Write-Host "Done. Central config is in $Target and applies to every project."
 Write-Host "Open Claude Code in any project and run /init-project to deploy the"

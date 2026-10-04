@@ -207,7 +207,7 @@ def case_python_hook_installed_and_runs(home, pwsh):
     # the installed command actually runs, through the shell that runs it.
     repo = tempfile.mkdtemp(prefix="install-repo-")
     try:
-        for item in ("install.sh", "install.ps1", "global", "templates", "skills"):
+        for item in ("install.sh", "install.ps1", "global", "templates", "skills", "scripts"):
             src = os.path.join(REPO, item)
             dst = os.path.join(repo, item)
             (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, dst)
@@ -456,7 +456,7 @@ def case_broken_hook_aborts_before_copying(home, pwsh):
                           "\nif ($x) {\n" if pwsh else "\nif true; then\n")):
         repo = tempfile.mkdtemp(prefix="install-repo-")
         try:
-            for item in ("install.sh", "install.ps1", "global", "templates", "skills"):
+            for item in ("install.sh", "install.ps1", "global", "templates", "skills", "scripts"):
                 src = os.path.join(REPO, item)
                 (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, os.path.join(repo, item))
             with open(os.path.join(repo, "global/.claude/hooks", broken), "a") as fh:
@@ -504,7 +504,7 @@ def case_hook_fields_and_permission_keys_carry_over(home, pwsh):
     # later reached Unix and silently vanished on Windows.
     repo = tempfile.mkdtemp(prefix="install-repo-")
     try:
-        for item in ("install.sh", "install.ps1", "global", "templates", "skills"):
+        for item in ("install.sh", "install.ps1", "global", "templates", "skills", "scripts"):
             src = os.path.join(REPO, item)
             (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, os.path.join(repo, item))
         settings_src = os.path.join(repo, "global/.claude/settings.json")

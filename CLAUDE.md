@@ -26,6 +26,7 @@ dotclaude/
 ├── DESIGN.md                    # rationale for every architectural choice
 ├── README.md                    # human-facing install/usage doc
 ├── check.py                     # the coherence validator — run before EVERY commit
+├── scripts/smoke-guards.py      # run by both installers last: each guard must block a canned case through its wired command
 ├── tests/                       # the behavioural net (see "Operating in this repo")
 │   ├── <hook>-cases.py                 # one matrix per hook (pyhook.py runs them as production does)
 │   ├── install-cases.py / init-seed-cases.py / mcp-merge-cases.py / …   # installer + deployer
