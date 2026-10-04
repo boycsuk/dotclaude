@@ -302,16 +302,15 @@ def python_hooks(installed):
 
 def install_with_claude(home, pwsh, version_output):
     """Run install.ps1 with a PATH whose only `claude` prints `version_output` (None: no claude at all)."""
-    bindir = tempfile.mkdtemp(prefix="install-claude-")
-    try:
-        if version_output is not None:
-            stubs.write_stub(bindir, "claude", out=version_output)
-        if run_install(home, pwsh, path=stubs.minimal_path(bindir, ["python3", "python"])) != 0:
-            return None
-        with open(claude(home, "settings.json"), encoding="utf-8") as fh:
-            return json.load(fh)
-    finally:
-        shutil.rmtree(bindir, ignore_errors=True)
+    # Inside the case's home, which outlives the install: on POSIX the PATH
+    # holds a python3 symlink, and the hooks are wired to that path.
+    bindir = os.path.join(home, f"bin-{len(os.listdir(home)) if os.path.isdir(home) else 0}")
+    if version_output is not None:
+        stubs.write_stub(bindir, "claude", out=version_output)
+    if run_install(home, pwsh, path=stubs.minimal_path(bindir, ["python3", "python"])) != 0:
+        return None
+    with open(claude(home, "settings.json"), encoding="utf-8") as fh:
+        return json.load(fh)
 
 
 def case_exec_form_on_recent_claude(home, pwsh):
