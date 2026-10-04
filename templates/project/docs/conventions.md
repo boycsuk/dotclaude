@@ -107,6 +107,10 @@
   needs a host prerequisite, has no native Windows support, and is incompatible
   with Docker. Enable per machine with `{"sandbox": {"enabled": true}}` in
   `~/.claude/settings.json` on a supported host.
+- **Limit what a leak could take.** SSH keys carry a passphrase (loaded into
+  `ssh-agent`), so a process that reads `~/.ssh/id_*` gets an unusable key; a
+  project's `.env` holds development values, never production secrets, which
+  come from a secret manager or the session's environment.
 - **Limit resources.** Timeouts on external calls, input size limits, rate
   limiting where applicable.
 - **TOCTOU.** If a check and its action must be inseparable, use atomic ops or

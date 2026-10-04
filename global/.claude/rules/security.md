@@ -93,4 +93,10 @@ Turn it on per machine in `~/.claude/settings.json` when the host supports it an
 { "sandbox": { "enabled": true } }
 ```
 
-Then narrow it with `sandbox.filesystem` (`allowRead`/`denyRead`/`allowWrite`/`denyWrite`), `sandbox.network.allowedDomains`, and `sandbox.credentials`. Add any Docker or container command you need to the documented exclusions, or the sandbox will block it. Run `/sandbox` in a session to check the current state.
+Then narrow it with `sandbox.filesystem` (`allowRead`/`denyRead`/`allowWrite`/`denyWrite`), `sandbox.network.allowedDomains`, and `sandbox.credentials`. Add any Docker or container command you need to the documented exclusions, or the sandbox will block it. Run `/sandbox` in a session to check the current state. The installers end with one line saying whether the sandbox can run on the machine and the exact command to install what it needs; they never install it.
+
+## Limit what a leak could take, with or without the sandbox
+
+The guards and deny rules judge commands, and a script can still read a file once it runs. Two habits shrink what it could take, on every OS and with no configuration:
+- **SSH keys carry a passphrase**, loaded once into `ssh-agent`. A process that reads `~/.ssh/id_*` gets an encrypted key it cannot use.
+- **A project's `.env` holds development values, never production secrets.** Production credentials come from a secret manager or are injected into the environment for the session that needs them, so a leaked `.env` exposes nothing that matters.
