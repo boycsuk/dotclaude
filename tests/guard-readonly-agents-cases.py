@@ -75,7 +75,10 @@ CASES = [
     ("researcher", "git branch feature/x",                DENY, "creating a branch"),
     ("researcher", "git branch -D old",                   DENY, "deleting a branch"),
     ("researcher", "git config user.name x",              DENY, "writing config"),
-    ("researcher", "git fetch origin",                    DENY, "fetch updates refs (fail closed until decided)"),
+    ("researcher", "git fetch origin",                    ALLOW, "fetch updates remote-tracking refs, not the working tree"),
+    ("researcher", "git fetch --prune",                   ALLOW, "pruning remote-tracking refs"),
+    ("researcher", "git fetch origin main:main",          DENY, "a refspec with a destination writes a local branch"),
+    ("researcher", "git fetch origin +refs/heads/x:refs/heads/x", DENY, "a forced local-branch refspec"),
     ("researcher", "git pull",                            DENY, "pulling"),
     # --- installs ----------------------------------------------------------
     ("researcher", "npm install left-pad",                DENY, "an npm install"),

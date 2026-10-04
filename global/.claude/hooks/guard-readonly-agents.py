@@ -150,6 +150,10 @@ def git_writes(seg):
             return None
     if sub == "symbolic-ref" and len(positional) <= 1:
         return None
+    # fetch moves only remote-tracking refs, which a reviewer needs to compare
+    # with origin; a refspec with a destination (main:main) writes a local branch.
+    if sub == "fetch" and not any(":" in p for p in positional) and "--update-head-ok" not in flags:
+        return None
     return sub
 
 
