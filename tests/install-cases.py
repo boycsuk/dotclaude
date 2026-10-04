@@ -12,7 +12,7 @@ None of it had a net: the BSD-find manifest break shipped precisely because
 nothing executed install.sh outside the author's machine.
 
 Each case runs the real installer against a throwaway HOME (set in the parent
-environment — $HOME is read-only INSIDE a PowerShell session, see CLAUDE.md).
+environment — $HOME is read-only INSIDE a PowerShell session).
 """
 
 import argparse

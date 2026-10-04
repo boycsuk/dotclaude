@@ -2,7 +2,7 @@
 """SessionStart hook (matcher "compact"): re-inject the non-negotiable conventions after compaction.
 
 CLAUDE.md and rules/ are re-read by the harness, but adherence to advisory
-prose decays when the transcript is summarized (DESIGN.md §10). Keep the digest
+prose decays when the transcript is summarized. Keep the digest
 SHORT and limited to rules whose only enforcement is prose: the guard hooks
 fire regardless and need no restating here.
 

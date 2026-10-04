@@ -3,7 +3,7 @@
 
 The mirrors exist so tools that do not run Claude Code still follow the same
 conventions; docs/conventions.md is the repo-versioned copy and the rules file
-is the copy Claude Code loads (DESIGN.md §17). Delivered as additionalContext:
+is the copy Claude Code loads. Delivered as additionalContext:
 editing a rule is legitimate and must never be gated, and stderr with exit 0
 never reaches the model. Fires only on rule edits, which are rare and each one
 genuinely carries the sync obligation, so there is no debounce.

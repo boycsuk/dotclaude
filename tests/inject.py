@@ -3,7 +3,7 @@
 
 Used by tests/check-selftest.sh to verify that check.py actually fails on the
 things it claims to catch. Kept as a file rather than inline heredocs because
-guard-destructive blocks inline interpreters (DESIGN.md §5).
+guard-destructive blocks inline interpreters.
 
 Usage: python3 tests/inject.py <repo-copy> <regression-name>
 """
@@ -119,7 +119,7 @@ def drop_hook_matrix(repo):
 
 
 def readd_if_gate(repo):
-    """A prefix `if` gate reopens the wrapped-form bypasses (DESIGN.md §27b)."""
+    """A prefix `if` gate reopens the wrapped-form bypasses."""
     path = os.path.join(repo, "global/.claude/settings.json")
     with open(path) as fh:
         settings = json.load(fh)
@@ -154,7 +154,7 @@ def break_frontmatter(repo):
 
 
 def pin_model_on_reviewer(repo):
-    """A reasoning agent pinning a model is the §7 drift the audit found."""
+    """A reasoning agent pinning a model is a reasoning downgrade check.py forbids."""
     path = os.path.join(repo, "global/.claude/agents/code-reviewer.md")
     with open(path) as fh:
         text = fh.read()
@@ -274,7 +274,7 @@ def unwire_py_hook(repo):
 
 
 def heredoc_back_into_subshell(repo):
-    """Fold the python heredoc back inside a $( ), the DESIGN.md §32 defect.
+    """Fold the python heredoc back inside a $( ), which bash -n on bash 4.2+ cannot see.
 
     Bash 4.1 and older (macOS /bin/bash is 3.2) mishandle a heredoc opened
     within a command substitution: they lex the quoted body for parens, quotes

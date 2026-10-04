@@ -17,7 +17,7 @@ behind a wrapper. This hook asks the user whenever:
     pipx run|install, cargo install, go install of a remote module.
 The reason names the packages, flags unpinned version specs, and gives the
 ecosystem's audit command. It never denies: adding a dependency is often
-right; it is the user's call (DESIGN.md §36).
+right; it is the user's call.
 """
 
 import json

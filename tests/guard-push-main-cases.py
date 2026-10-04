@@ -5,7 +5,7 @@ Run:  python3 tests/guard-push-main-cases.py
       python3 tests/guard-push-main-cases.py --pwsh PATH # also through PowerShell
 
 This exists because the hook was twice wrong in ways that reading it did not
-reveal (DESIGN.md §18):
+reveal:
   - v1 grepped for the literal string "main" and the --force flag, and let
     seven of ten dangerous push forms through.
   - v2 fixed those but judged the whole command line, so a commit message
@@ -238,7 +238,7 @@ def main():
     # session project let a project with allowPushToMain push main of any
     # other repo through `git -C`, and a bare `git -C other push` resolved HEAD
     # in the wrong repository. Found pushing eight projects from a dotclaude
-    # session (DESIGN.md §18).
+    # session.
     print("\n=== pushing another repo")
     session = make_repo()                       # the session's project...
     subprocess.run(["git", "-C", session, "checkout", "-q", "-B", "feature/s"], check=True)

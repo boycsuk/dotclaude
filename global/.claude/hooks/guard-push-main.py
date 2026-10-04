@@ -13,8 +13,8 @@ Deny unless the target repository opts out with "allowPushToMain": true in its
 
 Everything is decided from the parsed `git push` invocation (shellwords), never
 from the raw string: matching text blocked a commit message containing "+main",
-and matching surface syntax missed `HEAD:main` and glued operators
-(DESIGN.md §18). The repository judged is the one the push acts on — the
+and matching surface syntax missed `HEAD:main` and glued operators.
+The repository judged is the one the push acts on — the
 payload's cwd, then any `cd` and `-C` — so a session project's opt-out never
 covers another repo. A command that cannot be parsed but looks like a push is
 blocked: an unbalanced quote must not be a way around the guard.

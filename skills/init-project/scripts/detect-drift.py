@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Detect per-project drift for /init-project --update (update-mode.md §1e).
+"""Detect per-project drift for /init-project --update.
 
 Lives in a FILE, not an inline `python3 -c`, because the central
-guard-destructive hook blocks inline interpreters (DESIGN.md §5 justifies
-`python3 -c` inside hooks, where no PreToolUse runs — not inside skills,
-which are subject to it). Run from the project root:
+guard-destructive hook blocks inline interpreters (hooks may use
+them because no PreToolUse runs on a hook; skills are subject to it). Run from the project root:
 
     python3 ~/.claude/skills/init-project/scripts/detect-drift.py
 
@@ -77,7 +76,7 @@ def check_obsolete(prune):
 
 
 def check_allow_push_main(prune):
-    """§8 verification: did the "todo en main" choice actually land?"""
+    """Post-deploy check: did the "todo en main" choice actually land?"""
     local, ok = read_json(prune, os.path.join(".claude", "settings.local.json"))
     if not ok or (local is not None and not isinstance(local, dict)):
         return UNKNOWN
@@ -87,7 +86,7 @@ def check_allow_push_main(prune):
 
 
 def check_mcp_servers(prune):
-    """§8 verification: the servers actually in .mcp.json (a failed merge only WARNs)."""
+    """Post-deploy check: the servers actually in .mcp.json (a failed merge only WARNs)."""
     data, ok = read_json(prune, ".mcp.json")
     if not ok or (data is not None and not isinstance(data, dict)):
         return UNKNOWN
@@ -96,7 +95,7 @@ def check_mcp_servers(prune):
 
 
 def check_example_drift():
-    """§1c: the deploy reports example drift on the user's terminal, which the skill never sees."""
+    """Report example drift here: the deploy prints it example drift on the user's terminal, which the skill never sees."""
     mine = os.path.join(".claude", "settings.local.json.example")
     ours = os.path.join(template_dir(), ".claude", "settings.local.json.example")
     try:

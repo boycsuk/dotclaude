@@ -14,9 +14,9 @@ design mixed the two models — `--serena` did `cp` + a whole-file `cmp`, while
                                                       --update --serena -> exit 3
 
 The second one is the dangerous shape: the project ends up correct, and only
-the NEXT re-deploy fails, which is exactly the path update-mode.md §1e uses to
-reconcile drift. Neither was caught by reading the scripts, so the cases go in
-the matrix before the fix (DESIGN.md §26).
+the NEXT re-deploy fails, which is exactly the path /init-project --update uses
+to reconcile drift. Neither was caught by reading the scripts, so the cases go in
+the matrix before the fix.
 
 (--serena itself was removed later; the composition contract it exposed is
 pinned below with the flags that remain.)

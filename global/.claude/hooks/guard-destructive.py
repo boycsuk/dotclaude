@@ -21,7 +21,7 @@ Ask:
 Every rule judges the command the shell will actually run (shellwords): a
 heredoc body written to a file is data, a commit message that names a
 pattern is not the pattern, but an unquoted heredoc's $( ) and a quoted
-"$( )" do run (DESIGN.md §26, §38). A command whose quoting cannot be parsed
+"$( )" do run. A command whose quoting cannot be parsed
 falls back to the text patterns, so an unbalanced quote fails closed.
 """
 

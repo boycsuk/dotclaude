@@ -28,7 +28,7 @@ echo "==> Installing dotclaude into $TARGET"
 # offers to install the Command Line Tools.
 if ! python3 --version >/dev/null 2>&1; then
   # python3 is required: the .py hooks are Python, the .sh hooks parse Claude
-  # Code's JSON input with it (DESIGN.md §5), and the settings merge below uses
+  # Code's JSON input with it (never jq, which is not installed everywhere), and the settings merge below uses
   # it. Without it the central guard hooks fail silently.
   echo "  ! python3 not found — it is required: the hooks run on it or parse hook input with it," >&2
   echo "    and this installer merges settings with it. Install python3 (e.g. apt install python3) and re-run." >&2
@@ -40,7 +40,7 @@ fi
 # guards run on PreToolUse for Bash, so an unparseable one makes EVERY Bash call
 # in EVERY project fail. That state is also unrecoverable from inside Claude
 # Code — the broken hook blocks the `install.sh` that would replace it, and
-# guard-central-config blocks editing the installed copy (DESIGN.md §32). So
+# guard-central-config blocks editing the installed copy. So
 # check before copying: abort with the source tree untouched and the previously
 # installed (working) hooks still in place.
 for hook in "$SCRIPT_DIR"/global/.claude/hooks/*.sh; do
@@ -158,7 +158,7 @@ echo "  - central hooks/agents/skills/rules/output-styles installed (Python hook
 #            legitimately change (outputStyle, /rewind snapshots). Written ONLY
 #            when absent, so `git pull && ./install.sh` never reverts a choice
 #            made with /config. Owning them would violate the installer's
-#            contract that it never touches user content (CLAUDE.md §3).
+#            contract that it never touches user content.
 #   everything else - the user's, preserved untouched.
 # install.ps1 rebuilds this object key by key, so both lists live there too;
 # check.py asserts all three sites agree.

@@ -17,7 +17,7 @@ Ask (legitimate, but the user decides):
 
 Everything is judged on the parsed `git commit` invocation (shellwords), so a
 message that merely mentions these words, or a heredoc that only writes a file,
-is never mistaken for the real thing (DESIGN.md §18, §36). Known gap: a
+is never mistaken for the real thing. Known gap: a
 message piped in from another command (`printf ... | git commit -F -`) is not
 read.
 """

@@ -6,7 +6,7 @@ Run:  python3 tests/verify-on-edit-cases.py
 
 This hook runs the project's linter/typechecker after edits. It joined the
 matrix club because its old .sh/.ps1 twins diverged in ways reading them did
-not reveal (same story as guard-push-main and detect-secrets, DESIGN.md §26):
+not reveal (same story as guard-push-main and detect-secrets):
 
   - The .ps1 accepted sibling directories sharing a prefix (root C:\\proj also
     matched C:\\proj-other\\x.ts) where the .sh required a separator.

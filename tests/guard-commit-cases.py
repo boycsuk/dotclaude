@@ -7,7 +7,7 @@ Run:  python3 tests/guard-commit-cases.py
 The hook turns the commit conventions into decisions: deny trailers, emoji
 and Spanish messages; ask on --amend, on main, on a missing CHANGELOG entry
 and on a .sh/.ps1 pair committed half. Every guard hook in this repo shipped
-defects that reading it did not reveal (DESIGN.md §18, §27), so the false-
+defects that reading it did not reveal, so the false-
 positive controls matter as much as the catches: a hook that blocks innocent
 commits teaches the model to route around it.
 """

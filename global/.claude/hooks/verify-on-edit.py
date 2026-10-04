@@ -4,8 +4,8 @@
 Auto-detects the stack (JS/TS scripts `typecheck`/`lint` with the runner the
 lockfile names, ruff/mypy, clippy, go vet). Silent when nothing applies, when a
 tool is missing, and when a check times out: a timeout is the budget's fault,
-not the code's, and reporting it makes Claude "fix" errors that do not exist —
-the cry-wolf failure DESIGN.md §26 warns about. Failures go back to Claude
+not the code's, and reporting it makes Claude "fix" errors that do not exist.
+Failures go back to Claude
 through hookio.feedback (exit 2), so it corrects them on the next turn.
 
 Each check is bounded by VERIFY_TIMEOUT seconds (default 15; the matrix

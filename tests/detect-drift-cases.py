@@ -4,7 +4,7 @@
 Run:  python3 tests/detect-drift-cases.py
 
 The skill reads this script's KEY=VALUE lines to decide what to offer in
---update mode and to verify the §8 choices landed. It promises never to raise
+--update mode and to verify the deploy choices landed. It promises never to raise
 and to answer UNKNOWN for a file it cannot read — before these cases a
 `null` hook event crashed it, a BOM-prefixed file (Notepad, PowerShell 5.1)
 read as clean, and a corrupt settings.local.json read as ABSENT. Each case

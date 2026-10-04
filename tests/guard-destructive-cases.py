@@ -5,11 +5,11 @@ Run:  python3 tests/guard-destructive-cases.py
       python3 tests/guard-destructive-cases.py --pwsh PATH   # also through PowerShell
 
 This hook is the safety net for everything the permission allowlist cannot
-inspect (DESIGN.md §9), so loosening it demands proof that the dangerous cases
+inspect, so loosening it demands proof that the dangerous cases
 still block. It also has a real false-positive cost: it matches the command
 TEXT, so writing documentation that merely mentions `rm -rf` or an inline
 interpreter was blocked — measured three times in one session while writing
-this repo's own docs and commit messages (DESIGN.md §26). Heredoc bodies are
+this repo's own docs and commit messages. Heredoc bodies are
 now stripped before matching, which is exactly the kind of change that needs a
 regression matrix rather than a careful read. The 2026-10-03 audit added the
 forms the old text-regex pair let through (quoted and braced $HOME, find
@@ -84,8 +84,8 @@ CASES = [
     # --- central-config writes via Bash (see guard-central-config) ----------
     # Edit/Write against ~/.claude are blocked by guard-central-config, but a
     # redirect, tee, sed -i, cp/mv-into or rm reaches the same files through
-    # the tool that hook never sees. DESIGN.md §23's "the only way to change a
-    # central artifact is the repo source" was prose until these cases.
+    # the tool that hook never sees. "The only way to change a central
+    # artifact is the repo source" was prose until these cases.
     ("echo '{}' > ~/.claude/settings.json",         BLOCK, "redirect into the registry"),
     ("sed -i 's/deny/allow/' ~/.claude/settings.json", BLOCK, "in-place edit of the registry"),
     ("cp evil.sh $HOME/.claude/hooks/guard-destructive.sh", BLOCK, "overwrite a central hook"),

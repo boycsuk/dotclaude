@@ -4,7 +4,7 @@
 The edit already happened (PostToolUse cannot undo it); the warning reaches
 Claude through hookio.feedback so it can revert on the next turn.
 
-Calibration, each rule learned from a measured false result (DESIGN.md §26):
+Calibration, each rule learned from a measured false result:
   - Placeholder files (*.example, *.sample, *.template, *.dist, infix forms)
     and markup prose (*.md, *.rst) are exempt from the PATH rule — warning on
     every edit of a `.env.example` teaches the model this hook is noise — but

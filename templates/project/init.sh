@@ -143,8 +143,8 @@ fi
 # what makes re-runs idempotent and the flags order-independent. See
 # tests/mcp-merge-cases.py for the cases that pin this.
 #
-# Usage: merge_mcp_servers <fragment.json> [...]  — JSON via python3, never jq
-# (DESIGN.md §5). Never fatal: a broken .mcp.json warns and the deploy continues.
+# Usage: merge_mcp_servers <fragment.json> [...]  — JSON via python3, never jq,
+# which is not installed everywhere. Never fatal: a broken .mcp.json warns and the deploy continues.
 merge_mcp_servers() {
   is_link ./.mcp.json && return 0
   # One implementation for init.sh and init.ps1 (scripts/merge-mcp.py).
@@ -319,7 +319,7 @@ fi
 # --- codebase-memory-mcp (opt-in) ---------------------------------------------
 # A persistent code graph for structural questions. Opt-in, not default: its
 # authors' own benchmark scores it below plain file exploration on answer
-# quality (it wins on tokens) — DESIGN.md §34. Only the binary is a
+# quality (it wins on tokens). Only the binary is a
 # prerequisite; dotclaude wires the server and permissions itself.
 if [ "$INSTALL_CODEBASE_MEMORY" = "true" ]; then
   if ! command -v codebase-memory-mcp >/dev/null 2>&1; then

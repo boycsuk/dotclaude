@@ -26,7 +26,7 @@ $Target = Join-Path $HOME ".claude"
 Write-Host "==> Installing dotclaude into $Target"
 
 # Prerequisite check, mirroring install.sh: the .ps1 hooks and this installer
-# need PowerShell 5.1+, and the .py hooks run on Python (DESIGN.md section 5).
+# need PowerShell 5.1+, and the .py hooks run on Python.
 if ($PSVersionTable.PSVersion.Major -lt 5) {
     [Console]::Error.WriteLine("ERROR: PowerShell 5.1 or newer is required (found $($PSVersionTable.PSVersion)).")
     exit 1
@@ -57,7 +57,7 @@ if (-not $PythonExe) {
 # Lockstep with install.sh. A hook that fails to parse is a wall, not a degraded
 # hook: the central guards run on PreToolUse, so an unparseable one breaks every
 # session, and that state cannot be repaired from inside Claude Code (the broken
-# hook blocks the installer that would replace it). See DESIGN.md section 32. Abort
+# hook blocks the installer that would replace it). Abort
 # before copying, leaving the previously installed working hooks in place.
 $hookDir = Join-Path $ScriptDir "global/.claude/hooks"
 if (Test-Path $hookDir) {
@@ -81,7 +81,7 @@ if (Test-Path $hookDir) {
 function New-Hook($src, $name, $isPython) {
     # No `if` parameter on purpose: hook entries carry no `if` gates (a
     # prefix-anchored pattern reopens the wrapped-form bypasses the hooks'
-    # own parsers close - DESIGN.md section 27b). check.py enforces the same on the
+    # own parsers close). check.py enforces the same on the
     # source JSON; the guard below keeps Windows from reintroducing one.
     # Claude Code launches a "shell": "powershell" hook as `powershell -Command
     # <command>`, and -Command converts a script's or program's exit 2 into
@@ -165,7 +165,7 @@ function Convert-Rule($rule) {
     # suffix. A pattern that also ate a lone trailing `*` turned the wildcard
     # rule `Bash(mkfs.*)` into the verb `mkfs.` (unmapped), and the older
     # `Bash(mkfs.*:*)` spelling it replaced matched nothing at all on Unix:
-    # Claude Code reads `*` before `:*` literally (DESIGN.md section 35).
+    # Claude Code reads `*` before `:*` literally.
     if ($rule -notmatch '^Bash\((.*?)(?::\*)?\)$') { return $rule }
     $verb = $Matches[1]
     if ($verbMap.ContainsKey($verb)) {

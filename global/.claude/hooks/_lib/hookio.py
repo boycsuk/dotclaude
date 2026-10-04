@@ -3,7 +3,7 @@
 Every Python hook reads one JSON payload on stdin and answers on stdout with a
 `hookSpecificOutput` object, or prints nothing. Keeping the encoding here means
 each hook states only its decision, and the stdout channel (the one the model
-actually sees — DESIGN.md §17) cannot be swapped for stderr by accident.
+actually sees; stderr at exit 0 reaches only the debug log) cannot be swapped for stderr by accident.
 """
 
 import io
@@ -40,7 +40,7 @@ def local_opt_out(payload, key, root=None):
     """True only when .claude/settings.local.json sets `key` to literal true.
 
     Opt-outs live in the gitignored local file so the choice stays personal
-    and is never forced onto teammates (DESIGN.md §18). `root` is the
+    and is never forced onto teammates. `root` is the
     repository the command acts on; it defaults to the session's project, but
     a guard judging `git -C ../other ...` must read ../other's choice.
     """

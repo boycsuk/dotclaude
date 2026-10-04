@@ -164,7 +164,7 @@ def _():
     for rule in rules:
         # Claude Code reads a `*` placed before the `:*` prefix suffix
         # literally, so `Bash(mkfs.*:*)` matched only commands containing a
-        # literal `mkfs.*` — mkfs.ext4 ran unblocked (DESIGN.md §35).
+        # literal `mkfs.*` — mkfs.ext4 ran unblocked.
         if re.search(r"\*.*:\*\)$", rule):
             fail("install.ps1 derives from settings.json",
                  f"{rule} mixes a `*` wildcard with the `:*` prefix suffix — Claude Code "
@@ -347,12 +347,12 @@ def _():
 @check("hooks have case matrices")
 def _():
     # Each of these hooks shipped a real defect that reading them did not
-    # reveal (DESIGN.md §18, §26, §27). Their matrices are the regression net;
+    # reveal. Their matrices are the regression net;
     # a hook silently losing its matrix would be invisible in a passing run.
     #
     # The shell advisory hooks share ONE matrix: their failure mode is silence,
     # not a wrong verdict, so nothing else would notice them breaking — which
-    # is how three advisory hooks sat on a dead delivery channel for months (§17).
+    # is how three advisory hooks sat on a dead delivery channel (stderr) for months.
     advisory = "tests/advisory-hooks-cases.py"
     for hook, matrix in (("guard-push-main", "tests/guard-push-main-cases.py"),
                          ("guard-destructive", "tests/guard-destructive-cases.py"),
@@ -411,7 +411,7 @@ def _():
 def _():
     cases = read("tests/guard-push-main-cases.py")
     # Each of these forms was a real bypass or a real false positive at some
-    # point (DESIGN.md §18). Dropping one from the matrix would let the same
+    # point. Dropping one from the matrix would let the same
     # bug ship again, and a dropped case is invisible in a passing run.
     required = [
         "+main:main",                 # force via refspec, no --force flag
@@ -434,8 +434,8 @@ def _():
     # check 5 derives its inventories FROM disk, so deleting an agent or a
     # whole skill directory just shrinks the glob and passes green. The
     # expected set is therefore hardcoded here: this is what every project
-    # gets, and losing one silently is exactly the "mechanism that never ran"
-    # class DESIGN.md §27a names.
+    # gets, and losing one silently means a mechanism that never runs while
+    # every check stays green.
     expected = {
         "agents": ["code-reviewer.md", "db-inspector.md", "debugger.md", "researcher.md"],
         "rules": ["ai-collaboration.md", "code-quality.md", "security.md", "workflow.md"],
@@ -483,9 +483,9 @@ def _():
     # un-loadable or un-invokable — no error anywhere, it just never fires.
     paths = (glob.glob(os.path.join(REPO, "global/.claude/agents/*.md"))
              + glob.glob(os.path.join(REPO, "global/.claude/skills/*/SKILL.md")))
-    # model: is scoped to mechanical components (DESIGN.md §7). Anything else
-    # pinning a model is a downgrade of reasoning work — the exact drift the
-    # §27 audit found on code-reviewer and debugger.
+    # model: is scoped to mechanical components. Anything else pinning a
+    # model is a downgrade of reasoning work — the drift once found on
+    # code-reviewer and debugger.
     model_allowed = {"verify", "changes", "resume-context"}
     for path in paths:
         rel = os.path.relpath(path, REPO)
@@ -509,7 +509,7 @@ def _():
                  f"{rel} pins model: {model} — §7 allows an override only for "
                  f"mechanical components ({', '.join(sorted(model_allowed))})")
         # A skill's model applies to the rest of the caller's turn unless the
-        # skill forks (DESIGN.md §27): resume-context ran without the fork, so
+        # skill forks: resume-context ran without the fork, so
         # every session's first turn dropped to haiku after it.
         if (path.endswith("SKILL.md") and model and model != "inherit"
                 and keys.get("context") != "fork"):
@@ -525,7 +525,7 @@ def _():
     # An `if` pattern is prefix-anchored, so it reopens exactly the wrapped
     # forms the hooks' parsers exist to catch: "if": "Bash(git push *)" let
     # `git -C /repo push origin main` through unjudged, and the matrix passed
-    # because it invokes the hook directly (DESIGN.md §27b). Hooks self-gate.
+    # because it invokes the hook directly. Hooks self-gate.
     for event, groups in settings.get("hooks", {}).items():
         for group in groups:
             for entry in group.get("hooks", []):
@@ -537,7 +537,7 @@ def _():
 
     # An advisory hook must deliver via hookSpecificOutput.additionalContext on
     # stdout: with exit 0, stderr reaches the debug log only, so three hooks
-    # were inert for months (DESIGN.md §17, 2026-08-15).
+    # were inert for months.
     # (Advisory delivery is checked per hook-kind below.)
 
     hook_entries = [h for groups in settings.get("hooks", {}).values()

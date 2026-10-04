@@ -1,7 +1,7 @@
 # hook-kind: advisory
 """SessionStart + SubagentStart hook: tell the model which code-intelligence tools exist.
 
-Replaces guidance that used to live in CLAUDE.md prose (DESIGN.md §34):
+Replaces guidance that used to live in CLAUDE.md prose:
 prose decays under compaction and never reaches subagents, while this fires
 at every session start and resume, after every compaction, and at the start of
 every code-reading subagent. Silent (no output) when the project has neither

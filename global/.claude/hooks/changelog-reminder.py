@@ -10,7 +10,7 @@ still honoured so a future blocking path cannot forget it.
 
 A repo without CHANGELOG.md has not opted into keeping one, and docs, config
 and lockfiles are not the "code changed" this is about: saying so anyway would
-be the cry-wolf failure DESIGN.md §26 warns about.
+cry wolf and teach the model to ignore the reminder.
 """
 
 import os

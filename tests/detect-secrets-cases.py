@@ -5,8 +5,8 @@ Run:  python3 tests/detect-secrets-cases.py
       python3 tests/detect-secrets-cases.py --pwsh PATH   # also through PowerShell
 
 This hook warns on edits that touch a secret-bearing file or that contain a
-literal credential. Both halves were miscalibrated in opposite directions
-(DESIGN.md §26), which is why the matrix covers both:
+literal credential. Both halves were miscalibrated in opposite directions,
+which is why the matrix covers both:
 
   - False positives: the path rule fired on `.env.example` — a file the
     template itself ships and .gitignore explicitly whitelists — on prose about

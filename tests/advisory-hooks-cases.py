@@ -5,11 +5,11 @@ Run:  python3 tests/advisory-hooks-cases.py
       python3 tests/advisory-hooks-cases.py --pwsh PATH   # also through PowerShell
 
 Covers reinject-rules and sync-mirror-docs (prefer-serena-bash and prefer-graphify
-were removed with Serena and Graphify, DESIGN.md §33) — the hooks check.py's matrix requirement silently exempted, and the only ones
+were removed with Serena and Graphify) — the hooks check.py's matrix requirement silently exempted, and the only ones
 whose failure mode is SILENCE. A guard hook that breaks is noticed within
 seconds (it blocks everything). An advisory hook that breaks is indistinguish-
 able from one with nothing to say, which is exactly how three of them sat on a
-dead channel (stderr + exit 0) for months before DESIGN.md §17 caught it.
+dead channel (stderr + exit 0) for months before anyone noticed.
 
 So these cases assert the DELIVERY CONTRACT, not merely that something was
 printed:
@@ -18,10 +18,10 @@ printed:
     rule, grepping, or reading a file are all legitimate.
   - the nudge arrives on STDOUT as hookSpecificOutput.additionalContext, with
     the right hookEventName. stderr at exit 0 goes to the debug log only, so a
-    hook "warning" there reaches nobody (§27a).
+    hook "warning" there reaches nobody.
   - silence when there is nothing to say, so the nudges stay credible. A hook
     that fires on every call is noise, and noise teaches the model to ignore
-    it (the cry-wolf failure DESIGN.md §26 warns about).
+    it.
 """
 
 import argparse
@@ -80,8 +80,8 @@ def case_reinject(runner):
     check(f"[{runner}] digest covers the prose-only workflow rules",
           all(k in out for k in ("branch", "CHANGELOG.md", "AskUserQuestion")),
           "a non-negotiable convention went missing from the digest")
-    # --amend and attribution trailers are enforced by guard-commit since
-    # DESIGN.md §36, so restating them here is the unbounded growth above.
+    # --amend and attribution trailers are enforced by guard-commit,
+    # so restating them here is the unbounded growth above.
     check(f"[{runner}] digest leaves hook-enforced rules to the hooks",
           not any(k in out for k in ("--amend", "Co-Authored-By")),
           "the digest restates a rule guard-commit already enforces")

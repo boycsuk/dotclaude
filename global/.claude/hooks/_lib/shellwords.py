@@ -1,6 +1,6 @@
 """Shell-aware command parsing shared by dotclaude's Python guard hooks.
 
-A regex over the raw command line is wrong in both directions (DESIGN.md §18):
+A regex over the raw command line is wrong in both directions:
 it blocks innocent text (a commit message that mentions "git push") and misses
 real commands written in a wrapped form (`git -C /repo push`). These helpers
 split a command into the commands it actually runs, with quotes resolved, so a
@@ -16,8 +16,7 @@ import shlex
 # A heredoc body is DATA only when the command it feeds is known to read it as
 # data: a file writer (`cat > f`, `tee f`) or `git commit -F -`. Anything else
 # — a shell, ssh, docker exec, an interpreter, an unknown program — may run it,
-# so its body stays in the parsed text (DESIGN.md §26: unknown shapes fail
-# closed). Even a data body runs its $( ) and backticks when the delimiter is
+# so its body stays in the parsed text: unknown shapes fail closed. Even a data body runs its $( ) and backticks when the delimiter is
 # unquoted; those are extracted and parsed as commands.
 _HEREDOC = re.compile(r"(?<!<)<<-?\s*([\"']?)([A-Za-z_][A-Za-z0-9_]*)\1")
 _WRITER_TARGET = re.compile(r"(?:\bcat\s*>{1,2}\s*|\btee\s+(?:-a\s+)?)([^\s|;&<>()]+)")
