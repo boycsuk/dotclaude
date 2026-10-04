@@ -12,13 +12,11 @@ much as when it fires; and it must stay quiet everywhere else, or the reminder
 becomes noise.
 """
 
-import argparse
 import atexit
 import os
 import shutil
 import sys
 import tempfile
-import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pyhook  # noqa: E402
@@ -64,8 +62,7 @@ def project(with_design=True):
 
 
 def payload(file_path, tool="Edit"):
-    return {"hook_event_name": "PostToolUse", "tool_name": tool,
-            "tool_input": {"file_path": file_path, "old_string": "a", "new_string": "b"}}
+    return pyhook.payload(tool, pyhook.edit_input(file_path, "b", tool), event="PostToolUse")
 
 
 # (label, with_design, file_path or a callable(root) -> file_path, tool, expected spec paths or [] for silence)
@@ -95,16 +92,12 @@ def run_case(runner, with_design, file_path, tool):
                       pwsh=PWSH if runner == "ps" else None, env=pyhook.home_env(scratch()))
 
 
-def context_of(out):
-    specific = (out or {}).get("hookSpecificOutput") or {}
-    return specific.get("additionalContext"), specific.get("hookEventName")
+context_of = pyhook.context
 
 
 def main():
     global PWSH
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
-    args = ap.parse_args()
+    args = pyhook.cli()
     PWSH = args.pwsh
 
     failures, checked = 0, 0
@@ -136,7 +129,7 @@ def main():
     for runner, _ in pyhook.runners(args.pwsh):
         checked += 1
         root = project()
-        repeat = dict(payload("src/components/data-table.css"), session_id=uuid.uuid4().hex)
+        repeat = payload("src/components/data-table.css")
         notes = []
         for _ in range(2):
             code, out, err = pyhook.run("design-sync", repeat, cwd=root,
@@ -158,13 +151,7 @@ def main():
                 failures += 1
                 print(f"  FAIL [{runner}] malformed payload {bad!r}: rc={code} out={out!r} err={err[:80]!r}")
 
-    print(f"\n{checked} cases checked")
-    if failures:
-        print(f"{failures} FAILED")
-        return 1
-    scope = "python + powershell" if args.pwsh else "python only (pass --pwsh for the Windows form)"
-    print(f"All cases pass — {scope}.")
-    return 0
+    return pyhook.finish("design-sync", failures, checked, args.pwsh)
 
 
 PWSH = None

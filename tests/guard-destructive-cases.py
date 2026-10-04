@@ -21,7 +21,6 @@ Dangerous strings are assembled at runtime so this file does not trip the very
 hook it tests when someone edits it.
 """
 
-import argparse
 import os
 import sys
 
@@ -259,18 +258,14 @@ POWERSHELL = [
 
 
 def invoke(pwsh, cmd, tool="Bash"):
-    payload = {"tool_name": tool, "tool_input": {"command": cmd}, "cwd": os.getcwd()}
+    payload = pyhook.payload(tool, {"command": cmd}, cwd=os.getcwd())
     code, out, err = pyhook.run("guard-destructive", payload, pwsh=pwsh)
-    if code != 0 or err.strip():
-        return f"CRASH(rc={code}, {err.strip()[-120:]!r})"
-    return {"deny": BLOCK, "ask": ASK}.get(pyhook.decision(out), ALLOW)
+    got = pyhook.verdict(code, out, err)
+    return {"deny": BLOCK, "ask": ASK, "allow": ALLOW}.get(got, got)
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run every case through PowerShell too")
-    args = ap.parse_args()
-
+    args = pyhook.cli()
     failures = 0
     for cmd, want, why, tool in ([c + ("Bash",) for c in CASES]
                                  + [c + ("PowerShell",) for c in POWERSHELL]):
@@ -281,13 +276,7 @@ def main():
             shown = cmd.replace("\n", "\\n")[:60]
             print(f"  FAIL want {want} got {detail} | {shown}   ({why})")
 
-    print(f"\n{len(CASES) + len(POWERSHELL)} cases checked")
-    if failures:
-        print(f"{failures} FAILED")
-        return 1
-    scope = "python + powershell" if args.pwsh else "python only (pass --pwsh for the Windows form)"
-    print(f"All cases pass — {scope}.")
-    return 0
+    return pyhook.finish("guard-destructive", failures, len(CASES) + len(POWERSHELL), args.pwsh)
 
 
 if __name__ == "__main__":

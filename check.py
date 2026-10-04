@@ -346,34 +346,40 @@ def _():
 # --- 8. Every safety hook that has a case matrix keeps it ---------------------
 @check("hooks have case matrices")
 def _():
-    # Each of these hooks shipped a real defect that reading them did not
-    # reveal. Their matrices are the regression net;
-    # a hook silently losing its matrix would be invisible in a passing run.
-    #
-    # The shell advisory hooks share ONE matrix: their failure mode is silence,
-    # not a wrong verdict, so nothing else would notice them breaking — which
-    # is how three advisory hooks sat on a dead delivery channel (stderr) for months.
-    advisory = "tests/advisory-hooks-cases.py"
-    for hook, matrix in (("guard-push-main", "tests/guard-push-main-cases.py"),
-                         ("guard-destructive", "tests/guard-destructive-cases.py"),
-                         ("detect-secrets", "tests/detect-secrets-cases.py"),
-                         ("comment-hygiene", "tests/comment-hygiene-cases.py"),
-                         ("guard-central-config", "tests/guard-central-config-cases.py"),
-                         ("verify-on-edit", "tests/verify-on-edit-cases.py"),
-                         ("guard-commit", "tests/guard-commit-cases.py"),
-                         ("guard-dependencies", "tests/guard-dependencies-cases.py"),
-                         ("reinject-rules", advisory),
-                         ("sync-mirror-docs", advisory),
-                         ("design-sync", "tests/design-sync-cases.py"),
-                         ("changelog-reminder", "tests/changelog-reminder-cases.py"),
-                         # Not a hook, but the same lockstep .sh/.ps1 pair, and
-                         # its failure mode is worse than silence: whatever it
-                         # emits lands in the status bar, so a traceback becomes
-                         # permanent UI noise.
-                         ("statusline", "tests/statusline-cases.py")):
-        if not os.path.exists(os.path.join(REPO, matrix)):
-            fail("hooks have case matrices",
-                 f"{hook} has no case matrix at {matrix}")
+    # Every hook shipped defects reading it did not reveal, so each must be
+    # run by some matrix; a hook silently losing its matrix would be invisible
+    # in a passing run. Derived from use rather than a hand-kept list, which
+    # had already missed code-intel-context (tested only because another
+    # matrix happened to call it). The status line is held to the same bar:
+    # whatever it emits lands in the status bar.
+    matrices = {os.path.basename(p): code_only(read(os.path.relpath(p, REPO)))
+                for p in sorted(glob.glob(os.path.join(REPO, "tests", "*-cases.py")))}
+
+    def runs(code, hook):
+        return any(token in code for token in (f'"{hook}"', f"'{hook}'", f"{hook}.py"))
+
+    covering = {hook: [m for m, code in matrices.items() if runs(code, hook)]
+                for hook in py_hooks() + sorted(NOT_HOOKS)}
+    for hook, found in covering.items():
+        if not found:
+            fail("hooks have case matrices", f"{hook} is not run by any tests/*-cases.py")
+
+    # A hook wired for PowerShell or NotebookEdit must be fed that tool by a
+    # matrix that runs it: the matrices once proved only the Bash payload,
+    # and guard-dependencies was wired on NotebookEdit it never handled.
+    settings = json.loads(read("global/.claude/settings.json"))
+    for groups in settings.get("hooks", {}).values():
+        for group in groups:
+            tools = [t for t in ("PowerShell", "NotebookEdit") if t in (group.get("matcher") or "").split("|")]
+            for entry in group.get("hooks", []):
+                m = re.search(r"hooks/([\w-]+)\.py", entry.get("command", ""))
+                if not m or m.group(1) not in covering:
+                    continue
+                for tool in tools:
+                    if not any(f'"{tool}"' in matrices[name] for name in covering[m.group(1)]):
+                        fail("hooks have case matrices",
+                             f"{m.group(1)} is wired on {tool}, but no matrix that runs it sends a "
+                             f'"{tool}" payload')
 
     # changelog-reminder fires on Stop, where `decision: "block"`, exit 2 AND
     # hookSpecificOutput.additionalContext all CONTINUE the turn. Its matrix is
@@ -397,14 +403,19 @@ def _():
 
     # The advisory matrix is only a net if it asserts the DELIVERY channel.
     # Asserting "something was printed" would pass on the stderr form that was
-    # inert, so pin the two strings that make the assertion real.
-    if os.path.exists(os.path.join(REPO, advisory)):
-        body = read(advisory)
-        for needle in ("additionalContext", "hookEventName"):
-            if needle not in body:
-                fail("hooks have case matrices",
-                     f"{advisory} does not assert {needle} — it would pass on "
-                     f"the dead stderr channel (DESIGN.md §17)")
+    # inert: it must read the output through pyhook.context, which must read
+    # the two fields that make the assertion real.
+    advisory = "tests/advisory-hooks-cases.py"
+    context_fn = re.search(r"^def context\(.*?(?=^def |\Z)", read("tests/pyhook.py"), re.S | re.M)
+    if advisory in [f"tests/{m}" for m in matrices] and "pyhook.context(" not in matrices["advisory-hooks-cases.py"]:
+        fail("hooks have case matrices",
+             f"{advisory} does not read the output through pyhook.context — it would pass on "
+             f"the dead stderr channel (DESIGN.md §17)")
+    for needle in ("additionalContext", "hookEventName"):
+        if not context_fn or needle not in context_fn.group(0):
+            fail("hooks have case matrices",
+                 f"tests/pyhook.py context() does not read {needle} — every advisory "
+                 f"matrix would pass on the dead stderr channel (DESIGN.md §17)")
 
 
 # --- 9. The guard-push-main matrix still covers the known bypasses -----------

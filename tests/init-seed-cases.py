@@ -12,7 +12,6 @@ making CLAUDE.md, CHANGELOG.md, docs/ or the scaffolds overwrite, sorting the
 every matrix. These cases run the real init script in a throwaway project.
 """
 
-import argparse
 import json
 import os
 import shutil
@@ -21,6 +20,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pyhook  # noqa: E402
 import stubs  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -237,9 +237,7 @@ CASES = [
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run init.ps1 too")
-    args = ap.parse_args()
+    args = pyhook.cli()
     total = bad = 0
     for pwsh, label in stubs.shell_targets(args.pwsh):
         for name, fn in CASES:
@@ -251,8 +249,7 @@ def main():
             total += 1
             bad += bool(problem)
             print(f"  {'ok  ' if not problem else 'BAD '}[{label}] {name}" + (f" — {problem}" if problem else ""))
-    print(f"\ninit-seed: {total - bad} ok, {bad} bad")
-    return 1 if bad else 0
+    return pyhook.finish("init-seed", bad, total, args.pwsh)
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pyhook  # noqa: E402
 import stubs  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -207,8 +208,7 @@ def main():
                 problem = f"got {wrong}, want {dict((k, want[k]) for k in wrong)}"
         bad += bool(problem)
         print(f"  {'ok  ' if not problem else 'BAD '}{name}" + (f" — {problem}" if problem else ""))
-    print(f"\ndetect-drift: {len(CASES) - bad} ok, {bad} bad")
-    return 1 if bad else 0
+    return pyhook.finish("detect-drift", bad, len(CASES), has_windows_form=False)
 
 
 if __name__ == "__main__":

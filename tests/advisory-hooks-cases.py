@@ -24,7 +24,6 @@ printed:
     it.
 """
 
-import argparse
 import atexit
 import os
 import shutil
@@ -43,21 +42,27 @@ def scratch():
 
 
 def run(runner, hook, payload, cwd):
-    """Run the hook as production does; return an object with returncode, out (parsed) and stderr."""
+    """Run the hook as production does; return an object with returncode, out (parsed) and stderr.
+
+    Every run is also checked against the shared crash rule (stderr at exit 0
+    is a swallowed traceback), as its own case.
+    """
     code, out, err = pyhook.run(hook, payload, cwd=cwd, pwsh=PWSH if runner == "ps1" else None,
                                 env=pyhook.home_env(scratch()))
+    got = pyhook.verdict(code, out, err)
+    check(f"[{runner}] {hook} runs clean", not got.startswith(("CRASH", "TIMEOUT")), got)
     return SimpleNamespace(returncode=code, out=out, stderr=err)
 
 
 def delivered_context(out):
     """The additionalContext string and event if the output carries the documented shape."""
-    specific = (out or {}).get("hookSpecificOutput") or {}
-    ctx = specific.get("additionalContext")
-    return (ctx, specific.get("hookEventName")) if ctx else (None, None)
+    ctx, event = pyhook.context(out)
+    return (ctx, event) if ctx else (None, None)
 
 
 def check(label, cond, detail=""):
-    global failures
+    global failures, total
+    total += 1
     if cond:
         print(f"  ok  {label}")
     else:
@@ -93,7 +98,7 @@ def case_sync_mirror(runner):
 
     edited = os.path.join(cwd, "global/.claude/rules/workflow.md")
     proc = run(runner, "sync-mirror-docs",
-               {"tool_name": "Edit", "tool_input": {"file_path": edited}}, cwd)
+               pyhook.payload("Edit", pyhook.edit_input(edited, "x"), event="PostToolUse"), cwd)
     ctx, event = delivered_context(proc.out)
     check(f"[{runner}] sync-mirror-docs exits 0 on a rule edit",
           proc.returncode == 0, f"rc={proc.returncode}")
@@ -110,7 +115,7 @@ def case_sync_mirror(runner):
 
     other = os.path.join(cwd, "src/main.py")
     proc = run(runner, "sync-mirror-docs",
-               {"tool_name": "Edit", "tool_input": {"file_path": other}}, cwd)
+               pyhook.payload("Edit", pyhook.edit_input(other, "x"), event="PostToolUse"), cwd)
     ctx, _ = delivered_context(proc.out)
     check(f"[{runner}] a non-rule edit stays silent", ctx is None, repr(ctx))
     check(f"[{runner}] silent path still exits 0", proc.returncode == 0,
@@ -118,7 +123,7 @@ def case_sync_mirror(runner):
 
     ai = os.path.join(cwd, ".claude/rules/ai-collaboration.md")
     proc = run(runner, "sync-mirror-docs",
-               {"tool_name": "Edit", "tool_input": {"file_path": ai}}, cwd)
+               pyhook.payload("Edit", pyhook.edit_input(ai, "x"), event="PostToolUse"), cwd)
     ctx, _ = delivered_context(proc.out)
     check(f"[{runner}] ai-collaboration.md names the output style",
           bool(ctx) and "output-styles" in ctx, repr(ctx))
@@ -127,29 +132,24 @@ def case_sync_mirror(runner):
           bool(ctx) and "reinject-rules" in ctx, repr(ctx))
     security = os.path.join(cwd, ".claude/rules/security.md")
     proc = run(runner, "sync-mirror-docs",
-               {"tool_name": "Edit", "tool_input": {"file_path": security}}, cwd)
+               pyhook.payload("Edit", pyhook.edit_input(security, "x"), event="PostToolUse"), cwd)
     ctx, _ = delivered_context(proc.out)
     check(f"[{runner}] security.md names the mirror but not the digest",
           bool(ctx) and "conventions.md" in ctx and "reinject-rules" not in ctx, repr(ctx))
 
 
 def main():
-    global failures, PWSH
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
-    args = ap.parse_args()
+    global failures, total, PWSH
+    args = pyhook.cli()
     PWSH = args.pwsh
-    failures = 0
+    failures = total = 0
 
     runners = ["py"] + (["ps1"] if args.pwsh else [])
     for runner in runners:
         print(f"\n=== {runner}")
         case_reinject(runner)
         case_sync_mirror(runner)
-
-    scope = "python + powershell" if args.pwsh else "python only (pass --pwsh for the Windows form)"
-    print(f"\nadvisory-hooks: {failures} bad — {scope}")
-    return 1 if failures else 0
+    return pyhook.finish("advisory-hooks", failures, total, args.pwsh)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 # hook-kind: guard
-"""PreToolUse hook on Bash and Edit|Write: ask before any new dependency.
+"""PreToolUse hook on Bash and Edit|Write|NotebookEdit: ask before any new dependency.
 
 Every dependency is attack surface (rules/security.md), and the old safety
 net — prefix `ask` rules such as `Bash(npm install:*)` — missed `npm i`,
@@ -14,7 +14,9 @@ behind a wrapper. This hook asks the user whenever:
   - a runner fetches a package to execute or install it outside any
     manifest: npx / bunx / pnpm dlx / yarn dlx / npm exec (unless the tool
     is in node_modules/.bin or --no-install is given), uvx / uv tool,
-    pipx run|install, cargo install, go install of a remote module.
+    pipx run|install, cargo install, go install of a remote module;
+  - a NotebookEdit writes a cell whose `!pip install x` / `%pip install x`
+    line would add a package, judged exactly as that command in Bash.
 The reason names the packages, flags unpinned version specs, and gives the
 ecosystem's audit command. It never denies: adding a dependency is often
 right; it is the user's call.
@@ -63,6 +65,7 @@ TOOLS = {
     "composer": ("php", {"require"}, {"-d", "--working-dir"}),
 }
 LOCAL_SPEC = re.compile(r"^(\.|/|~|file:|link:|workspace:)|\.(tgz|tar\.gz|whl|gem)$")
+NOTEBOOK_SHELL = re.compile(r"^\s*[!%]+\s*(\S.*)$")   # Jupyter's `!cmd` shell escape and `%pip` magic
 
 
 def split_options(args, valued):
@@ -326,6 +329,19 @@ def edit_additions(tool, tool_input):
     return (ecosystem, added) if added else None
 
 
+def notebook_additions(tool_input):
+    """(ecosystem, [packages]) from a cell's `!pip install x` / `%pip install x` lines, judged as Bash."""
+    source = tool_input.get("new_source")
+    if tool_input.get("cell_type") == "markdown" or not isinstance(source, str):
+        return []
+    found = []
+    for line in source.splitlines():
+        m = NOTEBOOK_SHELL.match(line)
+        if m:
+            found += [f for f in map(bash_additions, shellwords.segments(m.group(1)) or []) if f]
+    return found
+
+
 def pinned(ecosystem, spec):
     """True when `spec` (a command token or a manifest entry) names one exact version."""
     if ecosystem == "go":
@@ -374,6 +390,11 @@ def main():
         found = edit_additions(tool, tool_input)
         if found:
             hookio.ask(reason(found[0], found[1], f"in {os.path.basename(str(tool_input.get('file_path')))}"))
+    elif tool == "NotebookEdit":
+        found = notebook_additions(tool_input)
+        if found:
+            where = f"in a cell of {os.path.basename(str(tool_input.get('notebook_path')))}"
+            hookio.ask(reason(found[0][0], [p for _, pkgs in found for p in pkgs], where))
     return 0
 
 

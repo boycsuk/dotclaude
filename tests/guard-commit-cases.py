@@ -12,11 +12,8 @@ positive controls matter as much as the catches: a hook that blocks innocent
 commits teaches the model to route around it.
 """
 
-import argparse
-import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 
@@ -24,8 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pyhook  # noqa: E402
 
 DENY, ASK, ALLOW = "deny", "ask", "allow"
-GIT_ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
-               GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+git = pyhook.git
 HEREDOC = "git commit -m \"$(cat <<'EOF'\n{}\nEOF\n)\""
 
 # Default state: on a feature branch, app.py and CHANGELOG.md both staged —
@@ -184,23 +180,10 @@ SECRET_CASES = [
 ]
 
 
-def git(repo, *args):
-    subprocess.run(["git", "-C", repo] + list(args), check=True, env=GIT_ENV,
-                   capture_output=True)
-
-
 def make_repo():
-    repo = tempfile.mkdtemp(prefix="guard-commit-")
-    subprocess.run(["git", "init", "-q", "-b", "main", repo], check=True)
-    for rel, body in (("app.py", "x = 1\n"), ("CHANGELOG.md", "# Changelog\n"),
-                      ("hooks/x.sh", "echo\n"), ("hooks/x.ps1", "echo\n")):
-        os.makedirs(os.path.dirname(os.path.join(repo, rel)) or repo, exist_ok=True)
-        with open(os.path.join(repo, rel), "w") as fh:
-            fh.write(body)
-    with open(os.path.join(repo, "msg.txt"), "w") as fh:
-        fh.write("feat: x\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n")
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "init")
+    repo = pyhook.git_repo(prefix="guard-commit-", files={
+        "app.py": "x = 1\n", "CHANGELOG.md": "# Changelog\n", "hooks/x.sh": "echo\n", "hooks/x.ps1": "echo\n",
+        "msg.txt": "feat: x\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"})
     git(repo, "checkout", "-q", "-b", "feature/x")
     return repo
 
@@ -222,32 +205,18 @@ def set_state(repo, branch="feature/x", staged=("app.py", "CHANGELOG.md"),
             fh.write(text)
     if staged:
         git(repo, "add", *staged)
-    local_path = os.path.join(repo, ".claude", "settings.local.json")
-    if os.path.exists(local_path):
-        os.remove(local_path)
-    if local:
-        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-        with open(local_path, "w") as fh:
-            json.dump(local, fh)
+    pyhook.local_settings(repo, local)
 
 
 def decide(repo, command, pwsh, tool="Bash", cwd=None, with_reason=False):
-    payload = {"hook_event_name": "PreToolUse", "tool_name": tool, "cwd": cwd or repo,
-               "tool_input": {"command": command}}
+    payload = pyhook.payload(tool, {"command": command}, cwd=cwd or repo)
     code, out, err = pyhook.run("guard-commit", payload, cwd=cwd or repo, pwsh=pwsh)
-    if code != 0:
-        got = f"exit {code}: {err.strip()[-200:]}"
-        return (got, "") if with_reason else got
-    if not with_reason:
-        return pyhook.decision(out)
-    reason = ((out or {}).get("hookSpecificOutput") or {}).get("permissionDecisionReason", "")
-    return pyhook.decision(out), reason
+    got = pyhook.verdict(code, out, err)
+    return (got, pyhook.reason(out)) if with_reason else got
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
-    args = ap.parse_args()
+    args = pyhook.cli()
     repo = make_repo()
     git(repo, "branch", "-q", "main-copy")
     git(repo, "branch", "-q", "master", "main")
@@ -349,20 +318,14 @@ def main():
                 shutil.rmtree(session, ignore_errors=True)
             # Malformed payloads never crash.
             for bad in ({"tool_input": "git commit -s"}, {"tool_input": None}, {}):
-                code, out, _ = pyhook.run("guard-commit", bad, cwd=repo, pwsh=pwsh)
+                code, out, err = pyhook.run("guard-commit", bad, cwd=repo, pwsh=pwsh)
                 total += 1
-                if code != 0 or out is not None:
+                if pyhook.verdict(code, out, err) != ALLOW or out is not None:
                     failures += 1
-                    print(f"  FAIL malformed payload {bad}: exit {code}, out {out}")
-            print(f"  {len(MESSAGE_CASES) + len(PS_CASES) + len(STATE_CASES) + len(SECRET_CASES) + 11} cases checked")
+                    print(f"  FAIL malformed payload {bad}: exit {code}, out {out}, err {err.strip()[-120:]!r}")
     finally:
         shutil.rmtree(repo, ignore_errors=True)
-    print()
-    if failures:
-        print(f"{failures} of {total} case(s) FAILED")
-        return 1
-    print(f"All {total} cases pass.")
-    return 0
+    return pyhook.finish("guard-commit", failures, total, args.pwsh)
 
 
 if __name__ == "__main__":

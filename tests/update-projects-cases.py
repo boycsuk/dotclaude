@@ -12,7 +12,6 @@ server, permission and directory the user owns, and derive each project's
 flags from what that project already has.
 """
 
-import argparse
 import hashlib
 import json
 import os
@@ -22,6 +21,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pyhook  # noqa: E402
 import stubs  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -196,11 +196,10 @@ def check_failure_exit(tmp, pwsh):
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run init.ps1 too")
-    args = ap.parse_args()
-    bad = 0
+    args = pyhook.cli()
+    bad = runs = 0
     for pwsh, label in stubs.shell_targets(args.pwsh):
+        runs += 1
         tmp = tempfile.mkdtemp(prefix="update-projects-")
         try:
             problems = check(tmp, pwsh)
@@ -215,8 +214,7 @@ def main():
         print(f"  {'ok  ' if not problems else 'BAD '}[{label}] recursive update")
         for p in problems:
             print(f"        - {p}")
-    print(f"\nupdate-projects: {'all checks pass' if not bad else f'{bad} problem(s)'}")
-    return 1 if bad else 0
+    return pyhook.finish("update-projects", bad, runs, args.pwsh)
 
 
 if __name__ == "__main__":

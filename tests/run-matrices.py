@@ -36,8 +36,12 @@ def main():
         name = os.path.basename(path)
         cmd = [sys.executable, "-u", path]
         with open(path, encoding="utf-8") as fh:
-            if args.pwsh and "--pwsh" in fh.read():
-                cmd += ["--pwsh", args.pwsh]
+            text = fh.read()
+        # pyhook.cli() defines --pwsh for the matrices that use it; the text
+        # "--pwsh" no longer appears in them, and missing it would silently
+        # drop the Windows form from CI.
+        if args.pwsh and ("--pwsh" in text or "pyhook.cli(" in text):
+            cmd += ["--pwsh", args.pwsh]
         start = time.monotonic()
         proc = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace")
         lines = proc.stdout.strip().splitlines()

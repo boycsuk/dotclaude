@@ -15,7 +15,6 @@ Each case runs the real installer against a throwaway HOME (set in the parent
 environment — $HOME is read-only INSIDE a PowerShell session).
 """
 
-import argparse
 import glob
 import json
 import os
@@ -616,9 +615,7 @@ CASES = [
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to verify install.ps1 too")
-    args = ap.parse_args()
+    args = pyhook.cli()
 
     targets = stubs.shell_targets(args.pwsh)
 
@@ -636,8 +633,7 @@ def main():
             status = "ok  " if problem is None else "BAD "
             print(f"  {status}[{label}] {name}" + (f" — {problem}" if problem else ""))
 
-    print(f"\ninstall: {total - bad} ok, {bad} bad")
-    return 1 if bad else 0
+    return pyhook.finish("install", bad, total, args.pwsh)
 
 
 if __name__ == "__main__":

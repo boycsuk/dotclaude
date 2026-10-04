@@ -18,7 +18,6 @@ filesystem does (Windows, macOS) and matches exactly on Linux, where
 ~/.Claude genuinely is a different path.
 """
 
-import argparse
 import os
 import shutil
 import sys
@@ -87,18 +86,14 @@ OPT_OUT_CASES = [
 
 
 def invoke(pwsh, home, tool_input, tool="Edit"):
-    payload = {"tool_name": tool, "tool_input": tool_input, "cwd": home}
-    code, out, err = pyhook.run("guard-central-config", payload, cwd=home, pwsh=pwsh,
-                                env=pyhook.home_env(home))
-    if code != 0 or err.strip():
-        return f"CRASH(rc={code}, {err.strip()[-120:]!r})"
-    return {"deny": BLOCK, "ask": ASK}.get(pyhook.decision(out), ALLOW)
+    code, out, err = pyhook.run("guard-central-config", pyhook.payload(tool, tool_input, cwd=home),
+                                cwd=home, pwsh=pwsh, env=pyhook.home_env(home))
+    got = pyhook.verdict(code, out, err)
+    return {"deny": BLOCK, "ask": ASK, "allow": ALLOW}.get(got, got)
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run every case through PowerShell too")
-    args = ap.parse_args()
+    args = pyhook.cli()
 
     home = tempfile.mkdtemp(prefix="fakehome-")
     os.makedirs(os.path.join(home, ".claude", "hooks"), exist_ok=True)
@@ -141,14 +136,8 @@ def main():
                 failures += 1
                 print(f"  FAIL want {want} got {got} ({name}) | {tool} {path}   ({why})")
     shutil.rmtree(home, ignore_errors=True)
-
-    print(f"\n{len(CASES) + len(OPT_OUT_CASES)} cases checked")
-    if failures:
-        print(f"{failures} FAILED")
-        return 1
-    scope = "python + powershell" if args.pwsh else "python only (pass --pwsh for the Windows form)"
-    print(f"All cases pass — {scope}.")
-    return 0
+    total = len(CASES) - len(skipped) + len(OPT_OUT_CASES)
+    return pyhook.finish("guard-central-config", failures, total, args.pwsh)
 
 
 if __name__ == "__main__":

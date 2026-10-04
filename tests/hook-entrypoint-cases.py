@@ -12,7 +12,6 @@ purpose stand in for a real crash, run in the exact command forms production
 uses.
 """
 
-import argparse
 import json
 import os
 import shutil
@@ -56,16 +55,15 @@ def run(script, pwsh):
         cmd = pyhook.powershell_hook(pwsh, f"& {pyhook.ps_quote(sys.executable)} {pyhook.ps_quote(script)}")
     else:
         cmd = [sys.executable, script]
-    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}}
-    proc = subprocess.run(cmd, input=json.dumps(payload), capture_output=True, text=True, encoding="utf-8")
+    payload = pyhook.payload("Bash", {"command": "ls"})
+    proc = subprocess.run(cmd, input=json.dumps(payload), capture_output=True, text=True, encoding="utf-8",
+                          timeout=60)
     out = proc.stdout.strip()
     return proc.returncode, (json.loads(out) if out else None), proc.stderr
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
-    args = ap.parse_args()
+    args = pyhook.cli()
 
     work = tempfile.mkdtemp(prefix="hook-entrypoint-")
     failures = 0
@@ -90,12 +88,7 @@ def main():
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
-    suffix = "" if args.pwsh else " — python only (pass --pwsh for the Windows form)"
-    if failures:
-        print(f"{failures} case(s) FAILED")
-        return 1
-    print(f"hook-entrypoint: {len(CASES)} cases pass{suffix}")
-    return 0
+    return pyhook.finish("hook-entrypoint", failures, len(CASES), args.pwsh)
 
 
 if __name__ == "__main__":

@@ -21,11 +21,8 @@ Secret-looking values are assembled at runtime so this file is not itself
 flagged by the hook it tests.
 """
 
-import argparse
-import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 
@@ -165,14 +162,15 @@ def invoke(runner, file_path, content):
     # plain Write/Edit `content` field.
     if isinstance(content, dict):
         tool_input = dict(content)
-        if "notebook_path" not in tool_input:
+        tool = "NotebookEdit" if "notebook_path" in tool_input else "Edit"
+        if tool == "Edit":
             tool_input["file_path"] = file_path
     else:
-        tool_input = {"file_path": file_path, "content": content}
-    payload = {"tool_input": tool_input}
-    proc = subprocess.run(runner, input=json.dumps(payload),
-                          capture_output=True, text=True, timeout=30)
-    return WARN if proc.returncode == 2 else QUIET if proc.returncode == 0 else f"CRASH(rc={proc.returncode})"
+        tool, tool_input = "Write", pyhook.edit_input(file_path, content, "Write")
+    code, out, err = pyhook.run("detect-secrets", pyhook.payload(tool, tool_input, event="PostToolUse"),
+                                pwsh=runner)
+    got = pyhook.verdict(code, out, err, feedback=True)
+    return {"feedback": WARN, "quiet": QUIET}.get(got, got)
 
 
 def message_cases(runners):
@@ -180,7 +178,7 @@ def message_cases(runners):
     repo = tempfile.mkdtemp(prefix="detect-secrets-")
     failures = 0
     try:
-        subprocess.run(["git", "init", "-q", repo], check=True)
+        pyhook.git(repo, "init", "-q")
         with open(os.path.join(repo, ".gitignore"), "w") as fh:
             fh.write(".env\n")
         os.makedirs(os.path.join(repo, "config"))
@@ -207,59 +205,44 @@ def message_cases(runners):
         except OSError:
             pass
         for path, content, want_code, must, must_not, why in cases:
-            payload = {"tool_name": "Write", "tool_input": {"file_path": path, "content": content}}
-            for name, runner in runners:
-                proc = subprocess.run(runner, input=json.dumps(payload), capture_output=True,
-                                      text=True, encoding="utf-8", timeout=30, cwd=repo)
+            payload = pyhook.payload("Write", pyhook.edit_input(path, content, "Write"), event="PostToolUse",
+                                     cwd=repo)
+            for name, pwsh in runners:
+                code, out, err = pyhook.run("detect-secrets", payload, cwd=repo, pwsh=pwsh)
                 problems = []
-                if proc.returncode != want_code:
-                    problems.append(f"exit {proc.returncode}")
-                if must and must not in proc.stderr:
+                if code != want_code:
+                    problems.append(f"exit {code}")
+                if must and must not in err:
                     problems.append(f"no {must!r}")
-                if must_not and must_not in proc.stderr:
+                if must_not and must_not in err:
                     problems.append("the secret value is echoed")
-                if want_code == 2 and "was written" not in proc.stderr:
+                if want_code == 2 and "was written" not in err:
                     problems.append("does not say the edit was written")
+                if want_code == 0 and err.strip():
+                    problems.append("stderr at exit 0")
                 if problems:
                     failures += 1
                     print(f"  FAIL ({name}) {os.path.basename(path)}: {', '.join(problems)}   ({why}) "
-                          f"{proc.stderr.strip()[:200]!r}")
+                          f"{err.strip()[:200]!r}")
     finally:
         shutil.rmtree(repo, ignore_errors=True)
         if os.path.islink(repo + "-link"):
             os.remove(repo + "-link")
-    return failures
+    return failures, len(cases)
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
-    args = ap.parse_args()
-
-    runners = [(label, pyhook.argv("detect-secrets", pwsh)) for label, pwsh in pyhook.runners(args.pwsh)]
-
+    args = pyhook.cli()
+    runners = pyhook.runners(args.pwsh)
     failures = 0
     for path, content, want, why in CASES:
-        results = {}
-        for name, runner in runners:
-            try:
-                results[name] = invoke(runner, path, content)
-            except subprocess.TimeoutExpired:
-                results[name] = "TIMEOUT"
+        results = {name: invoke(pwsh, path, content) for name, pwsh in runners}
         if any(got != want for got in results.values()):
             failures += 1
             detail = ", ".join(f"{n}={g}" for n, g in results.items())
             print(f"  FAIL want {want} got {detail} | {path}   ({why})")
-
-    failures += message_cases(runners)
-
-    print(f"\n{len(CASES) + 4} cases checked")
-    if failures:
-        print(f"{failures} FAILED")
-        return 1
-    scope = "python + powershell" if args.pwsh else "python only (pass --pwsh for the Windows form)"
-    print(f"All cases pass — {scope}.")
-    return 0
+    message_failures, message_total = message_cases(runners)
+    return pyhook.finish("detect-secrets", failures + message_failures, len(CASES) + message_total, args.pwsh)
 
 
 if __name__ == "__main__":

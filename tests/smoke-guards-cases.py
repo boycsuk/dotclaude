@@ -51,7 +51,7 @@ def smoke(home, data):
         json.dump(data, fh)
     mode = ["powershell", POWERSHELL] if POWERSHELL else ["sh"]
     return subprocess.run([sys.executable, SMOKE, path] + mode, capture_output=True, text=True,
-                          env=dict(os.environ, **pyhook.home_env(home)))
+                          env=dict(os.environ, **pyhook.home_env(home)), timeout=300)
 
 
 def main():
@@ -76,11 +76,7 @@ def main():
                 print(f"  FAIL {label}: exit {proc.returncode}, stderr {proc.stderr.strip()[-300:]!r}")
     finally:
         shutil.rmtree(home, ignore_errors=True)
-    if failures:
-        print(f"{failures} case(s) FAILED")
-        return 1
-    print("smoke-guards: 3 cases pass")
-    return 0
+    return pyhook.finish("smoke-guards", failures, len(cases), POWERSHELL)
 
 
 if __name__ == "__main__":

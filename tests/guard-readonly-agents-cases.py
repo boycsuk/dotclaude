@@ -16,7 +16,6 @@ The fixture keeps the project OUTSIDE the hook's temp folder (TMPDIR/TEMP/TMP
 point at a sibling), since a project under temp would be writable by design.
 """
 
-import argparse
 import os
 import shutil
 import sys
@@ -131,21 +130,17 @@ def expand(command, home, project, hooktmp, scratch):
 
 def decide(runner, agent, command, tool, dirs):
     base, home, project, hooktmp, scratch = dirs
-    payload = {"hook_event_name": "PreToolUse", "tool_name": tool, "cwd": project, "session_id": "s",
-               "scratchpad_dir": scratch, "tool_input": {"command": expand(command, home, project, hooktmp, scratch)}}
+    payload = pyhook.payload(tool, {"command": expand(command, home, project, hooktmp, scratch)},
+                             cwd=project, scratchpad_dir=scratch)
     if agent:
         payload.update(agent_id="a1", agent_type=agent)
     env = dict(pyhook.home_env(home), TMPDIR=hooktmp, TEMP=hooktmp, TMP=hooktmp)
     code, out, err = pyhook.run("guard-readonly-agents", payload, cwd=project, env=env, pwsh=runner)
-    if code != 0 or err.strip():
-        return f"CRASH(rc={code}, {err.strip()[-160:]!r})"
-    return pyhook.decision(out)
+    return pyhook.verdict(code, out, err)
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run every case through PowerShell too")
-    args = ap.parse_args()
+    args = pyhook.cli()
 
     dirs = build()
     failures = 0
@@ -160,13 +155,7 @@ def main():
     finally:
         shutil.rmtree(dirs[0], ignore_errors=True)
 
-    total = len(CASES) + len(POWERSHELL)
-    if failures:
-        print(f"{failures} of {total} case(s) FAILED")
-        return 1
-    scope = "python + powershell" if args.pwsh else "python only (pass --pwsh for the Windows form)"
-    print(f"All {total} cases pass — {scope}.")
-    return 0
+    return pyhook.finish("guard-readonly-agents", failures, len(CASES) + len(POWERSHELL), args.pwsh)
 
 
 if __name__ == "__main__":

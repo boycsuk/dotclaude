@@ -10,10 +10,7 @@ The hook warns when a newly written code comment cites the plan ("Step 7",
 code, strings, prose files or a URL teaches the model to ignore the hook.
 """
 
-import argparse
-import json
 import os
-import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -80,42 +77,27 @@ def invoke(runner, file_path, content):
     # string is the Write `content` field.
     if isinstance(content, dict):
         tool_input = dict(content)
-        if "notebook_path" not in tool_input:
+        tool = "NotebookEdit" if "notebook_path" in tool_input else "Edit"
+        if tool == "Edit":
             tool_input["file_path"] = file_path
     else:
-        tool_input = {"file_path": file_path, "content": content}
-    proc = subprocess.run(runner, input=json.dumps({"tool_input": tool_input}),
-                          capture_output=True, text=True, timeout=30)
-    return WARN if proc.returncode == 2 else QUIET if proc.returncode == 0 else f"CRASH(rc={proc.returncode})"
+        tool, tool_input = "Write", pyhook.edit_input(file_path, content, "Write")
+    code, out, err = pyhook.run("comment-hygiene", pyhook.payload(tool, tool_input, event="PostToolUse"),
+                                pwsh=runner)
+    got = pyhook.verdict(code, out, err, feedback=True)
+    return {"feedback": WARN, "quiet": QUIET}.get(got, got)
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
-    args = ap.parse_args()
-
-    runners = [(label, pyhook.argv("comment-hygiene", pwsh)) for label, pwsh in pyhook.runners(args.pwsh)]
-
+    args = pyhook.cli()
     failures = 0
     for path, content, want, why in CASES:
-        results = {}
-        for name, runner in runners:
-            try:
-                results[name] = invoke(runner, path, content)
-            except subprocess.TimeoutExpired:
-                results[name] = "TIMEOUT"
+        results = {name: invoke(pwsh, path, content) for name, pwsh in pyhook.runners(args.pwsh)}
         if any(got != want for got in results.values()):
             failures += 1
             detail = ", ".join(f"{n}={g}" for n, g in results.items())
             print(f"  FAIL want {want} got {detail} | {path}   ({why})")
-
-    print(f"\n{len(CASES)} cases checked")
-    if failures:
-        print(f"{failures} FAILED")
-        return 1
-    scope = "python + powershell" if args.pwsh else "python only (pass --pwsh for the Windows form)"
-    print(f"All cases pass — {scope}.")
-    return 0
+    return pyhook.finish("comment-hygiene", failures, len(CASES), args.pwsh)
 
 
 if __name__ == "__main__":

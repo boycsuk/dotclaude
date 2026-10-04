@@ -17,11 +17,9 @@ Each case builds a throwaway git repo, pipes one Stop payload through the hook,
 and asserts on the parsed stdout.
 """
 
-import argparse
 import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 import uuid
@@ -32,13 +30,11 @@ import pyhook  # noqa: E402
 
 
 def git(repo, *args):
-    subprocess.run(["git", "-C", repo, *args], capture_output=True, check=False)
+    pyhook.git(repo, *args, check=False)
 
 
 def make_repo(tmp, files, changelog=True, commit_first=True):
     git(tmp, "init", "-q")
-    git(tmp, "config", "user.email", "t@t.t")
-    git(tmp, "config", "user.name", "t")
     if changelog:
         with open(os.path.join(tmp, "CHANGELOG.md"), "w") as fh:
             fh.write("# Changelog\n")
@@ -54,7 +50,7 @@ def make_repo(tmp, files, changelog=True, commit_first=True):
 
 
 def run_hook(repo, pwsh=None, stop_hook_active=False, session_cwd=None, session=None):
-    payload = json.dumps({
+    payload = {
         "cwd": session_cwd or repo,
         "hook_event_name": "Stop",
         "stop_hook_active": stop_hook_active,
@@ -62,10 +58,13 @@ def run_hook(repo, pwsh=None, stop_hook_active=False, session_cwd=None, session=
         # speaks once per change set within a session.
         "session_id": session or uuid.uuid4().hex,
         "last_assistant_message": "done",
-    })
-    cmd = pyhook.argv("changelog-reminder", pwsh)
-    p = subprocess.run(cmd, input=payload, capture_output=True, text=True, cwd=repo)
-    return p.returncode, p.stdout.strip(), p.stderr.strip()
+    }
+    code, parsed, err = pyhook.run("changelog-reminder", payload, cwd=repo, pwsh=pwsh)
+    if code == 0 and err.strip():
+        code = f"0 with stderr {err.strip()[-120:]!r}"
+    raw = parsed.get("_unparseable", "") if isinstance(parsed, dict) and "_unparseable" in parsed else \
+        (json.dumps(parsed) if parsed else "")
+    return code, raw, err.strip()
 
 
 def parse(out):
@@ -170,11 +169,9 @@ def case_lockfile_only(tmp, pwsh):
 
 def case_missing_cwd(tmp, pwsh):
     """A payload without cwd must not crash or warn about the wrong repo."""
-    cmd = pyhook.argv("changelog-reminder", pwsh)
-    p = subprocess.run(cmd, input='{"hook_event_name":"Stop"}',
-                       capture_output=True, text=True, cwd=tmp)
-    if p.returncode != 0:
-        return f"payload without cwd: exited {p.returncode}, must exit 0"
+    code, _, err = pyhook.run("changelog-reminder", '{"hook_event_name":"Stop"}', cwd=tmp, pwsh=pwsh)
+    if code != 0 or err.strip():
+        return f"payload without cwd: exited {code}, stderr {err.strip()[-120:]!r}; must exit 0 silently"
     return None
 
 
@@ -192,11 +189,9 @@ def case_once_per_change_set(tmp, pwsh):
 
 
 def case_garbage_input(tmp, pwsh):
-    cmd = pyhook.argv("changelog-reminder", pwsh)
-    p = subprocess.run(cmd, input="not json at all", capture_output=True,
-                       text=True, cwd=tmp)
-    if p.returncode != 0:
-        return f"garbage stdin: exited {p.returncode}, must exit 0"
+    code, _, err = pyhook.run("changelog-reminder", "not json at all", cwd=tmp, pwsh=pwsh)
+    if code != 0 or err.strip():
+        return f"garbage stdin: exited {code}, stderr {err.strip()[-120:]!r}; must exit 0 silently"
     return None
 
 
@@ -218,10 +213,7 @@ CASES = [
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
-    args = ap.parse_args()
-
+    args = pyhook.cli()
     targets = [(None, "py")]
     if args.pwsh:
         targets.append((args.pwsh, "ps1"))
@@ -240,9 +232,7 @@ def main():
             status = "ok  " if problem is None else "BAD "
             print(f"  {status}[{label}] {name}" + (f" — {problem}" if problem else ""))
 
-    suffix = "" if args.pwsh else " — python only (pass --pwsh for the Windows form)"
-    print(f"\nchangelog-reminder: {total - bad} ok, {bad} bad{suffix}")
-    return 1 if bad else 0
+    return pyhook.finish("changelog-reminder", bad, total, args.pwsh)
 
 
 if __name__ == "__main__":

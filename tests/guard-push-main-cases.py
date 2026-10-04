@@ -21,10 +21,8 @@ here first. `--pwsh` runs every case through the exact PowerShell command
 form install.ps1 writes.
 """
 
-import argparse
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 
@@ -164,43 +162,27 @@ OPTOUT_ON_MAIN = [
 
 
 def make_repo():
-    path = tempfile.mkdtemp()
-    env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
-               GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
-    subprocess.run(["git", "init", "-q", "-b", "main", path], check=True)
-    subprocess.run(["git", "-C", path, "commit", "-q", "--allow-empty", "-m", "x"],
-                   check=True, env=env)
-    return path
+    return pyhook.git_repo(prefix="guard-push-main-")
 
 
 def set_optout(repo, enabled):
-    claude = os.path.join(repo, ".claude")
-    os.makedirs(claude, exist_ok=True)
-    path = os.path.join(claude, "settings.local.json")
-    if enabled:
-        with open(path, "w") as fh:
-            fh.write('{"allowPushToMain": true}')
-    elif os.path.exists(path):
-        os.remove(path)
+    pyhook.local_settings(repo, {"allowPushToMain": True} if enabled else None)
 
 
 def invoke(pwsh, cmd, cwd, tool="Bash", payload_cwd=None):
-    payload = {"tool_name": tool, "tool_input": {"command": cmd}, "cwd": payload_cwd or cwd}
+    payload = pyhook.payload(tool, {"command": cmd}, cwd=payload_cwd or cwd)
     code, out, err = pyhook.run("guard-push-main", payload, cwd=cwd, pwsh=pwsh)
-    if code != 0 or err.strip():
-        return f"CRASH(rc={code}, {err.strip()[-120:]!r})"
-    return BLOCK if pyhook.decision(out) == "deny" else ALLOW
+    got = pyhook.verdict(code, out, err)
+    return {"deny": BLOCK, "allow": ALLOW}.get(got, got)
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run every case through PowerShell too")
-    args = ap.parse_args()
+    args = pyhook.cli()
 
     runners = pyhook.runners(args.pwsh)
 
     repo = make_repo()
-    failures = 0
+    failures = total = 0
 
     suites = [("on main", ON_MAIN, "main", False),
               ("on feature/z", ON_FEATURE, "feature/z", False),
@@ -208,9 +190,9 @@ def main():
 
     for title, cases, branch, optout in suites:
         if branch == "main":
-            subprocess.run(["git", "-C", repo, "checkout", "-q", "main"], check=True)
+            pyhook.git(repo, "checkout", "-q", "main")
         else:
-            subprocess.run(["git", "-C", repo, "checkout", "-q", "-B", branch], check=True)
+            pyhook.git(repo, "checkout", "-q", "-B", branch)
         set_optout(repo, optout)
         print(f"\n=== {title}")
         for cmd, want, why in cases:
@@ -220,10 +202,11 @@ def main():
                 failures += 1
                 detail = ", ".join(f"{n}={results[n]}" for n in results)
                 print(f"  FAIL want {want} got {detail} | {cmd}   ({why})")
+        total += len(cases)
         print(f"  {len(cases)} cases checked")
 
     print("\n=== PowerShell tool, on feature/z")
-    subprocess.run(["git", "-C", repo, "checkout", "-q", "-B", "feature/z"], check=True)
+    pyhook.git(repo, "checkout", "-q", "-B", "feature/z")
     set_optout(repo, False)
     for cmd, want, why in POWERSHELL_ON_FEATURE:
         for name, runner in runners:
@@ -232,13 +215,14 @@ def main():
                 failures += 1
                 print(f"  FAIL want {want} got {got} ({name}) | {cmd}   ({why})")
     # An alias defined in the repo's own config, not on the command line.
-    subprocess.run(["git", "-C", repo, "config", "alias.pp", "push"], check=True)
+    pyhook.git(repo, "config", "alias.pp", "push")
     for name, runner in runners:
         got = invoke(runner, "git pp origin main", repo)
         if got != BLOCK:
             failures += 1
             print(f"  FAIL want BLOCK got {got} ({name}) | git pp origin main   (configured alias for push)")
-    subprocess.run(["git", "-C", repo, "config", "--unset", "alias.pp"], check=True)
+    pyhook.git(repo, "config", "--unset", "alias.pp")
+    total += len(POWERSHELL_ON_FEATURE) + 1
     print(f"  {len(POWERSHELL_ON_FEATURE) + 1} cases checked")
 
     # Pushing a DIFFERENT repo than the session's project. The opt-out and the
@@ -249,7 +233,7 @@ def main():
     # session.
     print("\n=== pushing another repo")
     session = make_repo()                       # the session's project...
-    subprocess.run(["git", "-C", session, "checkout", "-q", "-B", "feature/s"], check=True)
+    pyhook.git(session, "checkout", "-q", "-B", "feature/s")
     set_optout(session, True)                   # ...lives on main by choice
     other = make_repo()                         # target: on main, no opt-out
     # As typed into Git Bash on Windows: an unquoted backslash is an escape
@@ -291,6 +275,7 @@ def main():
             if got != want:
                 failures += 1
                 print(f"  FAIL want {want} got {got} ({name}) | {cmd}   ({why})")
+    total += len(cross) + len(cross_ps) + 2
     print(f"  {len(cross) + len(cross_ps) + 2} cases checked")
 
     # The hook runs where the harness starts it, which need not be the
@@ -302,6 +287,7 @@ def main():
         if got != BLOCK:
             failures += 1
             print(f"  FAIL want BLOCK got {got} ({name}) | git push   (payload cwd is a repo on main)")
+    total += 1
     print("  1 case checked")
 
     # A non-git directory must not hang or crash.
@@ -313,17 +299,11 @@ def main():
             if got != want:
                 failures += 1
                 print(f"  FAIL want {want} got {got} ({name}) | {cmd}")
+    total += 3
     print("  3 cases checked")
     for path in (repo, session, other, nongit):
         shutil.rmtree(path, ignore_errors=True)
-
-    print()
-    if failures:
-        print(f"{failures} case(s) FAILED")
-        return 1
-    scope = "python + powershell" if args.pwsh else "python only (pass --pwsh for the Windows form)"
-    print(f"All cases pass — {scope}.")
-    return 0
+    return pyhook.finish("guard-push-main", failures, total, args.pwsh)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,6 @@ nothing but the prompt — a dropped key would silently change what the
 subagent runs.
 """
 
-import argparse
 import json
 import os
 import shutil
@@ -38,10 +37,16 @@ def project(tmp, graph=False, lsp=None, local_lsp_off=False):
     return tmp
 
 
+def run(hook, payload, cwd=None, pwsh=None):
+    """pyhook.run, with the shared crash rule folded into the exit code the checks already test."""
+    code, out, err = pyhook.run(hook, payload, cwd=cwd, pwsh=pwsh)
+    verdict = pyhook.verdict(code, out, err)
+    return (verdict if verdict.startswith(("CRASH", "TIMEOUT")) else code), out, err
+
+
 def agent_payload(subagent="Explore", prompt="find callers of foo"):
-    return {"hook_event_name": "PreToolUse", "tool_name": "Agent",
-            "tool_input": {"subagent_type": subagent, "prompt": prompt,
-                           "description": "find callers", "run_in_background": False}}
+    return pyhook.payload("Agent", {"subagent_type": subagent, "prompt": prompt,
+                                    "description": "find callers", "run_in_background": False})
 
 
 def rewritten(out):
@@ -54,7 +59,7 @@ def context(out):
 
 def check_rewrite_with_graph(tmp, pwsh):
     payload = agent_payload()
-    code, out, _ = pyhook.run("explore-graph-prompt", payload, cwd=project(tmp, graph=True), pwsh=pwsh)
+    code, out, _ = run("explore-graph-prompt", payload, cwd=project(tmp, graph=True), pwsh=pwsh)
     new = rewritten(out)
     if code != 0 or not new:
         return f"no rewrite (exit {code}, out {out})"
@@ -69,7 +74,7 @@ def check_rewrite_with_graph(tmp, pwsh):
 
 
 def check_rewrite_lsp_only(tmp, pwsh):
-    code, out, _ = pyhook.run("explore-graph-prompt", agent_payload(),
+    code, out, _ = run("explore-graph-prompt", agent_payload(),
                               cwd=project(tmp, lsp="pyright-lsp"), pwsh=pwsh)
     prompt = (rewritten(out) or {}).get("prompt", "")
     if "pyright-lsp" not in prompt or "trace_path" in prompt:
@@ -78,26 +83,26 @@ def check_rewrite_lsp_only(tmp, pwsh):
 
 
 def check_silent_without_tools(tmp, pwsh):
-    code, out, _ = pyhook.run("explore-graph-prompt", agent_payload(), cwd=project(tmp), pwsh=pwsh)
+    code, out, _ = run("explore-graph-prompt", agent_payload(), cwd=project(tmp), pwsh=pwsh)
     return None if code == 0 and out is None else f"spoke in a project with no tools: {out}"
 
 
 def check_other_agents_untouched(tmp, pwsh):
-    code, out, _ = pyhook.run("explore-graph-prompt", agent_payload("general-purpose"),
+    code, out, _ = run("explore-graph-prompt", agent_payload("general-purpose"),
                               cwd=project(tmp, graph=True), pwsh=pwsh)
     return None if out is None else f"rewrote a non-Explore agent: {out}"
 
 
 def check_idempotent(tmp, pwsh):
     payload = agent_payload(prompt=f"x\n\n{MARKER}\nalready there")
-    code, out, _ = pyhook.run("explore-graph-prompt", payload, cwd=project(tmp, graph=True), pwsh=pwsh)
+    code, out, _ = run("explore-graph-prompt", payload, cwd=project(tmp, graph=True), pwsh=pwsh)
     return None if out is None else "appended the guidance twice"
 
 
 def check_malformed_input(tmp, pwsh):
     for payload in ({}, {"tool_name": "Agent", "tool_input": "not a dict"},
                     {"tool_name": "Agent", "tool_input": {"subagent_type": "Explore"}}):
-        code, out, _ = pyhook.run("explore-graph-prompt", payload, cwd=project(tmp, graph=True), pwsh=pwsh)
+        code, out, _ = run("explore-graph-prompt", payload, cwd=project(tmp, graph=True), pwsh=pwsh)
         if code != 0 or out is not None:
             return f"malformed input {payload} -> exit {code}, out {out}"
     return None
@@ -106,7 +111,7 @@ def check_malformed_input(tmp, pwsh):
 def check_context_session_and_subagent(tmp, pwsh):
     proj = project(tmp, graph=True, lsp="gopls-lsp")
     for event in ("SessionStart", "SubagentStart"):
-        code, out, _ = pyhook.run("code-intel-context", {"hook_event_name": event}, cwd=proj, pwsh=pwsh)
+        code, out, _ = run("code-intel-context", {"hook_event_name": event}, cwd=proj, pwsh=pwsh)
         text = context(out)
         if out.get("hookSpecificOutput", {}).get("hookEventName") != event:
             return f"{event}: wrong hookEventName in {out}"
@@ -116,14 +121,14 @@ def check_context_session_and_subagent(tmp, pwsh):
 
 
 def check_context_silent_without_tools(tmp, pwsh):
-    code, out, _ = pyhook.run("code-intel-context", {"hook_event_name": "SessionStart"},
+    code, out, _ = run("code-intel-context", {"hook_event_name": "SessionStart"},
                               cwd=project(tmp), pwsh=pwsh)
     return None if code == 0 and out is None else f"spoke in a project with no tools: {out}"
 
 
 def check_context_local_disable_wins(tmp, pwsh):
     proj = project(tmp, lsp="pyright-lsp", local_lsp_off=True)
-    code, out, _ = pyhook.run("code-intel-context", {"hook_event_name": "SessionStart"}, cwd=proj, pwsh=pwsh)
+    code, out, _ = run("code-intel-context", {"hook_event_name": "SessionStart"}, cwd=proj, pwsh=pwsh)
     return None if out is None else f"a plugin disabled in settings.local.json was still announced: {out}"
 
 
@@ -134,7 +139,7 @@ def check_graph_added_with_claude_mcp_add(tmp, pwsh):
     with open(state, "w") as fh:
         json.dump({"projects": {proj: {"mcpServers": {"codebase-memory-mcp": {"command": "x"}}}}}, fh)
     try:
-        code, out, _ = pyhook.run("code-intel-context", {"hook_event_name": "SessionStart"}, cwd=proj, pwsh=pwsh)
+        code, out, _ = run("code-intel-context", {"hook_event_name": "SessionStart"}, cwd=proj, pwsh=pwsh)
     finally:
         os.remove(state)
     return None if "trace_path" in context(out) else f"local-scope server not detected: {out}"
@@ -148,7 +153,7 @@ def check_user_scope_plugin(tmp, pwsh):
     with open(os.path.join(user, "settings.json"), "w") as fh:
         json.dump({"enabledPlugins": {"rust-analyzer-lsp@claude-plugins-official": True}}, fh)
     try:
-        code, out, _ = pyhook.run("code-intel-context", {"hook_event_name": "SessionStart"}, cwd=proj, pwsh=pwsh)
+        code, out, _ = run("code-intel-context", {"hook_event_name": "SessionStart"}, cwd=proj, pwsh=pwsh)
     finally:
         os.remove(os.path.join(user, "settings.json"))
     return None if "rust-analyzer-lsp" in context(out) else f"user-scope plugin not detected: {out}"
@@ -161,7 +166,7 @@ def check_user_scope_server(tmp, pwsh):
     with open(state, "w") as fh:
         json.dump({"mcpServers": {"codebase-memory-mcp": {"command": "x"}}}, fh)
     try:
-        code, out, _ = pyhook.run("code-intel-context", {"hook_event_name": "SessionStart"}, cwd=proj, pwsh=pwsh)
+        code, out, _ = run("code-intel-context", {"hook_event_name": "SessionStart"}, cwd=proj, pwsh=pwsh)
     finally:
         os.remove(state)
     return None if "trace_path" in context(out) else f"user-scope server not detected: {out}"
@@ -184,9 +189,7 @@ CASES = [
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
-    args = ap.parse_args()
+    args = pyhook.cli()
     total = bad = 0
     # A HOME without settings, so the user's own enabledPlugins cannot leak in.
     home = tempfile.mkdtemp(prefix="codeintel-home-")
@@ -208,8 +211,7 @@ def main():
                       + (f" — {problem}" if problem else ""))
     finally:
         shutil.rmtree(home, ignore_errors=True)
-    print(f"\ncode-intel hooks: {total - bad} ok, {bad} bad")
-    return 1 if bad else 0
+    return pyhook.finish("code-intel hooks", bad, total, args.pwsh)
 
 
 if __name__ == "__main__":

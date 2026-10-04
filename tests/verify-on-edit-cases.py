@@ -21,41 +21,17 @@ hermetic; VERIFY_TIMEOUT shrinks the per-check budget so the timeout case
 does not take 15 real seconds.
 """
 
-import argparse
 import atexit
-import json
 import os
 import shutil
-import stat
-import subprocess
 import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pyhook  # noqa: E402
+from stubs import write_stub  # noqa: E402
 
 FAIL, QUIET = "FAIL", "QUIET"          # FAIL = exit 2 (errors surfaced)
-
-
-def write_stub(bindir, name, out="", code=0, sleep=0):
-    """A fake binary on PATH that prints `out`, waits `sleep` seconds and exits `code`.
-
-    Written in Python so it runs on every OS: an executable `name` with a
-    shebang on POSIX, a `name.cmd` launcher on Windows (which neither runs a
-    `#!/bin/sh` script nor finds a file without a PATHEXT extension).
-    """
-    body = (f"import sys, time\ntime.sleep({sleep})\nsys.stdout.write({out!r})\n"
-            f"sys.stdout.flush()\nsys.exit({code})\n")
-    if os.name == "nt":
-        with open(os.path.join(bindir, name + ".stub.py"), "w") as fh:
-            fh.write(body)
-        with open(os.path.join(bindir, name + ".cmd"), "w") as fh:
-            fh.write(f'@"{sys.executable}" "%~dp0{name}.stub.py" %*\n')
-        return
-    path = os.path.join(bindir, name)
-    with open(path, "w") as fh:
-        fh.write(f"#!{sys.executable}\n" + body)
-    os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
 
 
 def build_fixture(kind):
@@ -170,28 +146,23 @@ CASES = [
 
 
 def invoke(runner, root, bindir, file_path, stderr=None):
-    env = dict(os.environ,
-               CLAUDE_PROJECT_DIR=root,
+    env = dict(CLAUDE_PROJECT_DIR=root,
                # Only the stubs: the machine's own npm/ruff would otherwise answer
                # and the "binary missing" cases would test nothing. The hook and
                # the stubs run on absolute interpreter paths, so nothing else is needed.
                PATH=bindir,
                VERIFY_TIMEOUT="2")
-    payload = {"tool_input": {"file_path": file_path}}
-    proc = subprocess.run(runner, input=json.dumps(payload),
-                          capture_output=True, text=True, timeout=60,
-                          cwd=root, env=env)
+    payload = pyhook.payload("Edit", pyhook.edit_input(file_path, "x"), event="PostToolUse")
+    code, out, err = pyhook.run("verify-on-edit", payload, cwd=root, env=env, pwsh=runner)
     if stderr is not None:
-        stderr.append(proc.stderr)
-    return FAIL if proc.returncode == 2 else QUIET
+        stderr.append(err)
+    got = pyhook.verdict(code, out, err, feedback=True)
+    return {"feedback": FAIL, "quiet": QUIET}.get(got, got)
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
-    args = ap.parse_args()
-
-    runners = [(label, pyhook.argv("verify-on-edit", pwsh)) for label, pwsh in pyhook.runners(args.pwsh)]
+    args = pyhook.cli()
+    runners = pyhook.runners(args.pwsh)
 
     failures = 0
     for name, kind, rel, want, why in CASES:
@@ -207,12 +178,7 @@ def main():
             os.makedirs(os.path.dirname(file_path) or root, exist_ok=True)
             with open(file_path, "w") as fh:
                 fh.write("// x\n")
-        results = {}
-        for rname, runner in runners:
-            try:
-                results[rname] = invoke(runner, root, bindir, file_path)
-            except subprocess.TimeoutExpired:
-                results[rname] = "TIMEOUT"
+        results = {rname: invoke(runner, root, bindir, file_path) for rname, runner in runners}
         # `want` is a dict when the two runners legitimately differ, the way
         # guard-central-config-cases.py expresses platform-dependent verdicts.
         bad = any(got != (want[n] if isinstance(want, dict) else want)
@@ -262,13 +228,7 @@ def main():
             failures += 1
             print(f"  FAIL ({rname}) ruff must be labelled as checking this file: {err[0][:200]!r}")
 
-    print(f"\n{len(CASES) + 3} cases checked")
-    if failures:
-        print(f"{failures} FAILED")
-        return 1
-    scope = "python + powershell" if args.pwsh else "python only (pass --pwsh for the Windows form)"
-    print(f"All cases pass — {scope}.")
-    return 0
+    return pyhook.finish("verify-on-edit", failures, len(CASES) + 3, args.pwsh)
 
 
 if __name__ == "__main__":

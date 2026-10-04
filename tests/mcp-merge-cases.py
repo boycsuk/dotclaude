@@ -28,7 +28,6 @@ down to a minimal tail so "omit a stub" really removes the binary — otherwise
 the machine's own npx leaks in and exit 7 is untestable.
 """
 
-import argparse
 import atexit
 import json
 import os
@@ -38,6 +37,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pyhook  # noqa: E402
 import stubs  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -227,9 +227,7 @@ def seed_hand_added_playwright(tmp):
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh")
-    args = ap.parse_args()
+    args = pyhook.cli()
 
     targets = stubs.shell_targets(args.pwsh)
 
@@ -327,8 +325,7 @@ def main():
             shutil.rmtree(tmp, ignore_errors=True)
         report(label, "--ui adopts a hand-added playwright", problem)
 
-    print(f"\nmcp-merge: {total - bad} ok, {bad} bad")
-    return 1 if bad else 0
+    return pyhook.finish("mcp-merge", bad, total, args.pwsh)
 
 
 if __name__ == "__main__":

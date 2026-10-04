@@ -11,7 +11,6 @@ of those, stay silent on lockfile installs and lookalikes, and catch a
 dependency added by editing a manifest — the path no Bash rule can see.
 """
 
-import argparse
 import json
 import os
 import shutil
@@ -121,6 +120,7 @@ def edit_cases(tmp):
     cargo = os.path.join(tmp, "Cargo.toml")
     reqs = os.path.join(tmp, "requirements-dev.txt")
     readme = os.path.join(tmp, "README.md")
+    nb = os.path.join(tmp, "analysis.ipynb")
     write(pkg, json.dumps(PACKAGE_JSON, indent=2))
     write(pyproj, PYPROJECT)
     write(cargo, CARGO)
@@ -176,6 +176,21 @@ def edit_cases(tmp):
          ASK, "an optional-dependencies group"),
         ("Edit", {"file_path": cargo, "old_string": 'serde = "1"', "new_string": 'serde = "1"\nrand = "0.8"',
                   "replace_all": True}, ASK, "replace_all still adds the crate"),
+        # A notebook cell installs with a shell or magic line; judged like the same command in Bash.
+        ("NotebookEdit", {"notebook_path": nb, "new_source": "!pip install requests\nimport requests\n"},
+         ASK, "a !pip install line in a cell"),
+        ("NotebookEdit", {"notebook_path": nb, "new_source": "%pip install -q httpx==0.27.0"},
+         ASK, "a %pip magic, pinned or not"),
+        ("NotebookEdit", {"notebook_path": nb, "new_source": "!uv pip install rich"}, ASK, "!uv pip install"),
+        ("NotebookEdit", {"notebook_path": nb, "new_source": "%pip install -r requirements.txt"},
+         ALLOW, "installing from a manifest adds nothing, as in Bash"),
+        ("NotebookEdit", {"notebook_path": nb, "new_source": "import requests\nrequests.get(url)\n"},
+         ALLOW, "code that imports a package"),
+        ("NotebookEdit", {"notebook_path": nb, "cell_type": "markdown",
+                          "new_source": "Run `pip install requests` first.\n"},
+         ALLOW, "prose that mentions pip install"),
+        ("NotebookEdit", {"notebook_path": nb, "new_source": "# pip install requests\n"},
+         ALLOW, "a commented-out install"),
     ]
 
 
@@ -186,10 +201,14 @@ PS_CASES = [
 ]
 
 
+def judge(pwsh, tmp, tool, tool_input, env=None):
+    code, out, err = pyhook.run("guard-dependencies", pyhook.payload(tool, tool_input, cwd=tmp),
+                                cwd=tmp, pwsh=pwsh, env=env)
+    return pyhook.verdict(code, out, err), out
+
+
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
-    args = ap.parse_args()
+    args = pyhook.cli()
     failures = total = 0
     for label, pwsh in pyhook.runners(args.pwsh):
         tmp = tempfile.mkdtemp(prefix="guard-deps-")
@@ -197,34 +216,20 @@ def main():
         open(os.path.join(tmp, "node_modules", ".bin", "localtool"), "w").close()
         try:
             print(f"\n=== {label}")
-            for command, want, why in BASH_CASES:
-                payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": tmp,
-                           "tool_input": {"command": command}}
-                code, out, err = pyhook.run("guard-dependencies", payload, cwd=tmp, pwsh=pwsh)
-                got = pyhook.decision(out) if code == 0 else f"exit {code}: {err.strip()[-150:]}"
+            for tool, cases in (("Bash", BASH_CASES), ("PowerShell", PS_CASES)):
+                for command, want, why in cases:
+                    got, _ = judge(pwsh, tmp, tool, {"command": command})
+                    total += 1
+                    if got != want:
+                        failures += 1
+                        print(f"  FAIL [{tool}] want {want} got {got} | {command!r}  ({why})")
+            for tool, tool_input, want, why in edit_cases(tmp):
+                got, _ = judge(pwsh, tmp, tool, tool_input)
                 total += 1
                 if got != want:
                     failures += 1
-                    print(f"  FAIL want {want} got {got} | {command!r}  ({why})")
-            for command, want, why in PS_CASES:
-                payload = {"hook_event_name": "PreToolUse", "tool_name": "PowerShell", "cwd": tmp,
-                           "tool_input": {"command": command}}
-                code, out, err = pyhook.run("guard-dependencies", payload, cwd=tmp, pwsh=pwsh)
-                got = pyhook.decision(out) if code == 0 else f"exit {code}: {err.strip()[-150:]}"
-                total += 1
-                if got != want:
-                    failures += 1
-                    print(f"  FAIL [PowerShell tool] want {want} got {got} | {command!r}  ({why})")
-            cases = edit_cases(tmp)
-            for tool, tool_input, want, why in cases:
-                payload = {"hook_event_name": "PreToolUse", "tool_name": tool, "cwd": tmp,
-                           "tool_input": tool_input}
-                code, out, err = pyhook.run("guard-dependencies", payload, cwd=tmp, pwsh=pwsh)
-                got = pyhook.decision(out) if code == 0 else f"exit {code}: {err.strip()[-150:]}"
-                total += 1
-                if got != want:
-                    failures += 1
-                    print(f"  FAIL want {want} got {got} | {tool} {os.path.basename(tool_input['file_path'])}  ({why})")
+                    target = tool_input.get("file_path") or tool_input.get("notebook_path")
+                    print(f"  FAIL want {want} got {got} | {tool} {os.path.basename(target)}  ({why})")
             # Without tomllib (Python < 3.11) a version bump must not read as a new
             # dependency, and a real addition must still be caught.
             no_toml = os.path.join(tmp, "no-tomllib")
@@ -244,37 +249,27 @@ def main():
                 ({"file_path": pyproj, "old_string": '  "httpx==0.27.0",\n', "new_string": '  "httpx==0.27.0",\n  "rich>=13",\n'},
                  ASK, "new entry in the dependencies array"),
             ):
-                payload = {"tool_name": "Edit", "cwd": tmp, "tool_input": tool_input}
-                code, out, err = pyhook.run("guard-dependencies", payload, cwd=tmp, pwsh=pwsh,
-                                            env={"PYTHONPATH": no_toml})
-                got = pyhook.decision(out) if code == 0 else f"exit {code}: {err.strip()[-150:]}"
+                got, _ = judge(pwsh, tmp, "Edit", tool_input, env={"PYTHONPATH": no_toml})
                 total += 1
                 if got != want:
                     failures += 1
                     print(f"  FAIL [no tomllib] want {want} got {got} ({why})")
             for bad in ({"tool_name": "Bash", "tool_input": "npm i x"}, {"tool_name": "Edit", "tool_input": None}):
-                code, out, _ = pyhook.run("guard-dependencies", bad, cwd=tmp, pwsh=pwsh)
+                code, out, err = pyhook.run("guard-dependencies", bad, cwd=tmp, pwsh=pwsh)
                 total += 1
-                if code != 0 or out is not None:
+                if pyhook.verdict(code, out, err) != ALLOW or out is not None:
                     failures += 1
-                    print(f"  FAIL malformed payload {bad}: exit {code}, out {out}")
+                    print(f"  FAIL malformed payload {bad}: exit {code}, out {out}, err {err.strip()[-120:]!r}")
             # The reason must be actionable: names, pinning, the audit command.
-            payload = {"tool_name": "Bash", "cwd": tmp, "tool_input": {"command": "npm i lodash"}}
-            _, out, _ = pyhook.run("guard-dependencies", payload, cwd=tmp, pwsh=pwsh)
-            text = (out or {}).get("hookSpecificOutput", {}).get("permissionDecisionReason", "")
+            _, out = judge(pwsh, tmp, "Bash", {"command": "npm i lodash"})
+            text = pyhook.reason(out)
             total += 1
             if not all(s in text for s in ("lodash", "Not pinned", "npm audit")):
                 failures += 1
                 print(f"  FAIL reason not actionable: {text!r}")
-            print(f"  {len(BASH_CASES) + len(PS_CASES) + len(cases) + 7} cases checked")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-    print()
-    if failures:
-        print(f"{failures} of {total} case(s) FAILED")
-        return 1
-    print(f"All {total} cases pass.")
-    return 0
+    return pyhook.finish("guard-dependencies", failures, total, args.pwsh)
 
 
 if __name__ == "__main__":

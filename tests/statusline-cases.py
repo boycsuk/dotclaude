@@ -18,7 +18,6 @@ permission-mode changes. Two invariants matter more than what it prints:
 Both are invisible to a test that only checks the happy path.
 """
 
-import argparse
 import json
 import os
 import shutil
@@ -37,8 +36,11 @@ def run(payload, pwsh=None, cwd=None):
     # On Windows install.ps1 seeds `powershell -NoProfile -Command "& '<python>' '<script>'"`.
     cmd = ([pwsh, "-NoProfile", "-Command", f"& {pyhook.ps_quote(sys.executable)} {pyhook.ps_quote(SCRIPT)}"]
            if pwsh else [sys.executable, SCRIPT])
-    p = subprocess.run(cmd, input=payload, capture_output=True, text=True,
-                       cwd=cwd or REPO)
+    try:
+        p = subprocess.run(cmd, input=payload, capture_output=True, text=True,
+                           cwd=cwd or REPO, timeout=60)
+    except subprocess.TimeoutExpired:
+        return "TIMEOUT", "", ""
     return p.returncode, p.stdout.strip(), p.stderr.strip()
 
 
@@ -156,10 +158,7 @@ CASES = [
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pwsh", help="path to pwsh, to run it the way Windows does too")
-    args = ap.parse_args()
-
+    args = pyhook.cli()
     targets = [(None, "py")]
     if args.pwsh:
         targets.append((args.pwsh, "ps1"))
@@ -178,9 +177,7 @@ def main():
             status = "ok  " if problem is None else "BAD "
             print(f"  {status}[{label}] {name}" + (f" — {problem}" if problem else ""))
 
-    suffix = "" if args.pwsh else " — python only (pass --pwsh for the Windows form)"
-    print(f"\nstatusline: {total - bad} ok, {bad} bad{suffix}")
-    return 1 if bad else 0
+    return pyhook.finish("statusline", bad, total, args.pwsh)
 
 
 if __name__ == "__main__":

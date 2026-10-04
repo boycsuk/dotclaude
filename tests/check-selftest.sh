@@ -100,7 +100,15 @@ expect_fail "guard-push-main case coverage" "the guard-push-main matrix drops a 
 
 setup
 inject drop-hook-matrix
-expect_fail "hooks have case matrices" "a safety hook loses its case matrix entirely"
+expect_fail "hook wiring" "a safety hook loses its case matrix entirely"
+
+setup
+inject drop-advisory-matrix
+expect_fail "hooks have case matrices" "the only matrix that runs two advisory hooks is deleted"
+
+setup
+inject drop-matcher-tool-case
+expect_fail "hooks have case matrices" "a hook wired on NotebookEdit is never fed one"
 
 setup
 printf 'not json' > "$WORK/repo/templates/project/.claude/settings.json"

@@ -118,6 +118,22 @@ def drop_hook_matrix(repo):
     os.remove(os.path.join(repo, "tests/guard-destructive-cases.py"))
 
 
+def drop_advisory_matrix(repo):
+    """reinject-rules and sync-mirror-docs are run by one matrix only; losing it leaves both unrun."""
+    os.remove(os.path.join(repo, "tests/advisory-hooks-cases.py"))
+
+
+def drop_matcher_tool_case(repo):
+    """guard-dependencies is wired on NotebookEdit; a matrix that stops sending one must fail check.py."""
+    path = os.path.join(repo, "tests/guard-dependencies-cases.py")
+    with open(path) as fh:
+        text = fh.read()
+    if '"NotebookEdit"' not in text:
+        raise SystemExit("inject: guard-dependencies-cases.py no longer sends a NotebookEdit payload")
+    with open(path, "w") as fh:
+        fh.write(text.replace('"NotebookEdit"', '"Notebook"'))
+
+
 def readd_if_gate(repo):
     """A prefix `if` gate reopens the wrapped-form bypasses."""
     path = os.path.join(repo, "global/.claude/settings.json")
@@ -470,6 +486,8 @@ REGRESSIONS = {
     "add-permissions-key": add_permissions_key,
     "heredoc-back-into-subshell": heredoc_back_into_subshell,
     "drop-hook-matrix": drop_hook_matrix,
+    "drop-advisory-matrix": drop_advisory_matrix,
+    "drop-matcher-tool-case": drop_matcher_tool_case,
     "delete-central-agent": delete_central_agent,
     "break-frontmatter": break_frontmatter,
     "pin-model-on-reviewer": pin_model_on_reviewer,
