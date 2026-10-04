@@ -346,6 +346,10 @@ def judge(command, payload):
             return verdict
         if verdict:
             asks.append(verdict[1])
+    key = hookio.granted_opt_out(command)
+    if key:
+        asks.append(f"it sets \"{key}\": true, which switches a guard off for this project — "
+                    f"that is the user's decision, not the model's")
     if asks:
         return "ask", "; ".join(asks)
     return None, None

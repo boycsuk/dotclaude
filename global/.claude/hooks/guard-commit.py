@@ -206,9 +206,9 @@ def judge(segment_args, opts, docs, cwd, payload, earlier_adds):
                                   for t in trailers)
         if TRAILER_LINE.search(message) or flags & {"-s", "--signoff"} or attribution_trailer:
             denials.append("it adds an attribution trailer (Co-Authored-By / Signed-off-by / "
-                           "--signoff). Remove it — commits carry no AI or sign-off trailer "
-                           "(set \"allowCommitTrailers\": true in .claude/settings.local.json "
-                           "if this project requires one)")
+                           "--signoff). Remove it — commits carry no AI or sign-off trailer. A "
+                           "project that requires one is the user's call: they set "
+                           "\"allowCommitTrailers\": true in .claude/settings.local.json themselves")
     if EMOJI.search(message):
         denials.append("the message contains an emoji; commit messages are plain text")
     if is_spanish(message):

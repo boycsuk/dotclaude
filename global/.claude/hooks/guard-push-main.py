@@ -209,9 +209,10 @@ def judge(command, payload):
             root = git_out(repo, "rev-parse", "--show-toplevel") or repo
             if hookio.local_opt_out(payload, "allowPushToMain", root=root):
                 continue
-            return (f"BLOCKED: direct push to main/master (target branch: {detail}). Use a feature "
-                    "branch and a PR instead. If this project intentionally lives on main, set "
-                    "\"allowPushToMain\": true in .claude/settings.local.json.")
+            return (f"BLOCKED: direct push to main/master (target branch: {detail}). Pushing main is "
+                    "the user's decision: they push it from their own terminal, or, if this project "
+                    "lives on main, set \"allowPushToMain\": true in .claude/settings.local.json "
+                    "themselves. Do not push the feature branch instead, and do not edit that file.")
     return None
 
 

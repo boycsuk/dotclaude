@@ -27,7 +27,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pyhook  # noqa: E402
 
-BLOCK, ALLOW = "BLOCK", "ALLOW"
+BLOCK, ASK, ALLOW = "BLOCK", "ASK", "ALLOW"
 FOLDS_CASE = sys.platform == "darwin" or os.name == "nt"
 
 # (file_path relative to fake HOME unless a special marker, expected, why)
@@ -63,6 +63,28 @@ CASES = [
      "NotebookEdit sends notebook_path, not file_path"),
 ]
 
+# The opt-outs switch a guard off for one project; they are the user's choice,
+# so a write that grants one asks even though the file itself is editable.
+# (file_path relative to fake HOME, tool, extra tool_input, expected, why)
+OPT_OUT_CASES = [
+    ("~/app/.claude/settings.local.json", "Write", {"content": '{\n  "allowPushToMain": true\n}'},
+     ASK, "Write granting allowPushToMain"),
+    ("~/app/.claude/settings.local.json", "Edit",
+     {"old_string": "{", "new_string": '{\n  "allowCommitTrailers":true,'},
+     ASK, "Edit granting allowCommitTrailers"),
+    ("~/app/.claude/settings.json", "Edit", {"old_string": "{", "new_string": '{"disableAllHooks": true,'},
+     ASK, "disableAllHooks turns every hook off"),
+    ("~/.claude/settings.local.json", "Write", {"content": '{"disableAllHooks": true}'},
+     ASK, "the personal file too"),
+    ("~/app/.claude/settings.local.json", "Edit",
+     {"old_string": '"allowPushToMain": true', "new_string": '"allowPushToMain": false'},
+     ALLOW, "revoking an opt-out"),
+    ("~/app/.claude/settings.local.json", "Write", {"content": '{"permissions": {"allow": []}}'},
+     ALLOW, "an unrelated settings change"),
+    ("~/app/docs/opt-outs.md", "Write", {"content": '`"allowPushToMain": true` in settings.local.json'},
+     ALLOW, "documentation that quotes the key"),
+]
+
 
 def invoke(pwsh, home, tool_input, tool="Edit"):
     payload = {"tool_name": tool, "tool_input": tool_input, "cwd": home}
@@ -70,7 +92,7 @@ def invoke(pwsh, home, tool_input, tool="Edit"):
                                 env=pyhook.home_env(home))
     if code != 0 or err.strip():
         return f"CRASH(rc={code}, {err.strip()[-120:]!r})"
-    return BLOCK if pyhook.decision(out) == "deny" else ALLOW
+    return {"deny": BLOCK, "ask": ASK}.get(pyhook.decision(out), ALLOW)
 
 
 def main():
@@ -111,9 +133,16 @@ def main():
             if got != want:
                 failures += 1
                 print(f"  FAIL want {want} got {got} ({name}) | {path}   ({why})")
+    for path, tool, extra, want, why in OPT_OUT_CASES:
+        tool_input = dict(extra, file_path=path.replace("~", home))
+        for name, pwsh in pyhook.runners(args.pwsh):
+            got = invoke(pwsh, home, tool_input, tool)
+            if got != want:
+                failures += 1
+                print(f"  FAIL want {want} got {got} ({name}) | {tool} {path}   ({why})")
     shutil.rmtree(home, ignore_errors=True)
 
-    print(f"\n{len(CASES)} cases checked")
+    print(f"\n{len(CASES) + len(OPT_OUT_CASES)} cases checked")
     if failures:
         print(f"{failures} FAILED")
         return 1

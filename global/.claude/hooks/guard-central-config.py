@@ -8,6 +8,10 @@ everywhere, and install.sh overwrites templates/ wholesale. The source of truth
 is the dotclaude repo (global/.claude/): change it there and run ./install.sh.
 ~/.claude/settings.local.json, CLAUDE.md and projects/ stay editable.
 
+A write to any .claude/settings*.json that sets an opt-out (allowPushToMain,
+allowCommitTrailers, disableAllHooks) to true asks: the guards' own deny
+messages name those keys, and turning a guard off is the user's call.
+
 The path is resolved the way the filesystem will resolve the write — `~`,
 `..`, and every symlink along the way, including a symlinked parent directory
 the old .ps1 twin never followed — and compared case-insensitively where the
@@ -63,7 +67,21 @@ def main():
     reason = verdict(file_path)
     if reason:
         hookio.deny(f"BLOCKED: '{tool_input.get('file_path') or tool_input.get('notebook_path')}' {reason}.")
+        return 0
+    key = granted_opt_out(file_path, tool_input)
+    if key:
+        hookio.ask(f"Confirm: this sets \"{key}\": true in {os.path.basename(file_path)}, which switches "
+                   f"a guard off for this project. That is the user's decision, not the model's.")
     return 0
+
+
+def granted_opt_out(file_path, tool_input):
+    """The opt-out key a write to a Claude Code settings file turns on, or None."""
+    name = os.path.basename(file_path).lower()
+    parent = os.path.basename(os.path.dirname(os.path.abspath(os.path.expanduser(file_path)))).lower()
+    if parent != ".claude" or name not in ("settings.json", "settings.local.json"):
+        return None
+    return hookio.granted_opt_out(tool_input.get("content") or tool_input.get("new_string"))
 
 
 if __name__ == "__main__":

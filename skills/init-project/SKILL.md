@@ -261,6 +261,8 @@ The central `guard-push-main` hook is always on: it blocks force push (always) a
 - If the file does NOT exist: create it with `{ "allowPushToMain": true }`.
 - If it DOES exist: read it, parse the JSON, add/update `"allowPushToMain": true` preserving every other field, and rewrite. **Never delete existing fields.**
 
+The `guard-central-config` hook asks before that write, since it switches a guard off; the user approving it is the same choice they just made.
+
 **If they answer "Branches"**, don't touch `settings.local.json`. The hook is already active by default.
 
 **On a re-run**: if `settings.local.json` already defines `allowPushToMain`, respect the earlier decision; only ask if the field does not exist yet.

@@ -144,6 +144,11 @@ CASES = [
     ("cp ~/.claude/templates/project/init.sh /tmp/i.sh", ALLOW,
      "copying FROM central config is reading, not writing"),
     ("echo x > ~/.claude/settings.local.json",      ALLOW, "personal override stays writable"),
+    ("""echo '{"allowPushToMain": true}' > .claude/settings.local.json""", ASK,
+     "granting an opt-out is the user's choice"),
+    ("""jq '.allowCommitTrailers = true' s.json > .claude/settings.local.json""", ASK,
+     "the jq assignment form"),
+    ("grep -n allowPushToMain .claude/settings.local.json", ALLOW, "reading the key"),
     ("grep -r deny ~/.claude/settings.json",        ALLOW, "searching is reading"),
 
     # --- must allow: ordinary work ------------------------------------------

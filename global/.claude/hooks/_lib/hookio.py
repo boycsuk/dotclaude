@@ -9,7 +9,13 @@ actually sees; stderr at exit 0 reaches only the debug log) cannot be swapped fo
 import io
 import json
 import os
+import re
 import sys
+
+# Settings keys that switch a guard (or every hook) off. Granting one is the
+# user's decision, so the guards ask before any write that sets one to true.
+OPT_OUT_KEYS = ("allowPushToMain", "allowCommitTrailers", "disableAllHooks")
+_GRANT = re.compile(r"\b(%s)[\"']?\s*[:=]\s*\$?true\b" % "|".join(OPT_OUT_KEYS))
 
 
 def read_payload():
@@ -47,6 +53,12 @@ def local_opt_out(payload, key, root=None):
     base = root or project_dir(payload)
     data = load_json(os.path.join(base, ".claude", "settings.local.json"))
     return isinstance(data, dict) and data.get(key) is True
+
+
+def granted_opt_out(text):
+    """The opt-out key `text` sets to true (JSON, jq or PowerShell form), or None."""
+    m = _GRANT.search(text) if isinstance(text, str) else None
+    return m.group(1) if m else None
 
 
 def _emit(obj):
