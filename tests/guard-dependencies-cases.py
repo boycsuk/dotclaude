@@ -70,6 +70,11 @@ BASH_CASES = [
     ("composer require guzzlehttp/guzzle", ASK, "composer require"),
     ("dotnet add package Newtonsoft.Json", ASK, "dotnet add package"),
     ("env CI=1 npm install left-pad", ASK, "env wrapper"),
+    # `time` is both a shell keyword and a wrapper with options; skipped as a
+    # keyword, its flag was read as the program.
+    ("time -p npm install leftpad", ASK, "time with a flag"),
+    ("env time -p npm install leftpad", ASK, "time with a flag behind env"),
+    ("sudo time -p pip install requests", ASK, "time with a flag behind sudo"),
     ("cd web && npm install axios", ASK, "after cd in a compound command"),
     ("git pull\nnpm i lodash", ASK, "second line of a multi-line command"),
     ("/usr/bin/pip3 install requests", ASK, "absolute path to pip"),

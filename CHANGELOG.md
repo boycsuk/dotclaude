@@ -219,6 +219,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `check.py` no longer reads a code-extension list from a hook (check 6 compares the two path-scoped rules only).
 
 ### Fixed
+- `guard-destructive`, `guard-dependencies` and `guard-push-main` see the real program behind a shell keyword or a `time` flag: `for …; do python3 - <<'EOF'`, `if …; then`, `{ … }`, `! …` and `time -p …` hid it, so a heredoc-fed interpreter in a loop, `curl … | time -p bash`, `time -p rm -rf ~`, `time -p npm install x` and `time -p git push origin main` all ran unjudged. `unwrap()` now skips keywords, and `time` is stripped as a wrapper with its flags instead of as a bare keyword.
 - `guard-readonly-agents` resolves `$VAR`, `${VAR}`, `${VAR:-default}` and `$env:VAR` before judging a write, so a read-only agent's write to `"${TMPDIR:-/tmp}/x"` is recognised as the temp folder instead of denied; an unresolvable variable is still not assumed to be scratch space.
 - `turn-end-notice` counts only edits inside the repo it judges: an edit to a file elsewhere no longer raises the untested-code notice about the session's repo.
 - `prune-obsolete.py` and check.py's obsolete-manifest check now match a hook entry's `args` as well as its `command`, so a retired hook wired in exec form is pruned.

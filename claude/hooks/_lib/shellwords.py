@@ -35,7 +35,8 @@ _PS_ESCAPES = {"n": "\n", "t": "\t", '"': '\\"'}
 SEPARATOR_CHARS = set(";&|()")
 GIT_VALUED_GLOBALS = ("-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path")
 SHELLS = ("bash", "sh", "zsh", "dash", "ksh")
-KEYWORDS = {"if", "then", "else", "elif", "do", "while", "until", "!", "{", "}", "fi", "done", "time"}
+# `time` is not here: it takes flags (`time -p cmd`), so WRAPPERS strips it with them.
+KEYWORDS = {"if", "then", "else", "elif", "do", "while", "until", "!", "{", "}", "fi", "done"}
 # Prefix commands that run another command, with the options of each that
 # consume a value (`timeout -s KILL 60 cmd`, `nice -n 5 cmd`, `env -u X cmd`).
 WRAPPERS = {
@@ -495,12 +496,12 @@ def _echoed_into_shell(producer, consumer):
 
 
 def unwrap(seg):
-    """Drop leading env assignments and wrapper commands (`env`, `timeout 60`, `xargs`, ...)."""
+    """Drop leading shell keywords, env assignments and wrappers (`do`, `env`, `timeout 60`, ...)."""
     i = 0
     while i < len(seg):
         w = seg[i]
         name = basename(w)
-        if _ASSIGNMENT.match(w):
+        if _ASSIGNMENT.match(w) or w in KEYWORDS:
             i += 1
             continue
         if name not in WRAPPERS:
