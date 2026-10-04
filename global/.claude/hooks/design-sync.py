@@ -24,14 +24,14 @@ CODE_LINE = re.compile(r"^\s*-\s*Code:\s*(.+?)\s*$")
 
 def relative(path, root):
     """`path` relative to `root` with forward slashes, or None when it lies outside."""
-    path = path.replace("\\", "/")
-    root = root.replace("\\", "/").rstrip("/")
-    if os.path.isabs(path) or re.match(r"^[A-Za-z]:/", path):
-        if os.path.normcase(path).startswith(os.path.normcase(root) + "/"):
-            path = path[len(root) + 1:]
-        else:
+    if os.path.isabs(path):
+        try:
+            path = os.path.relpath(path, root)
+        except ValueError:                        # another drive on Windows
             return None
-    return os.path.normcase(os.path.normpath(path)).replace("\\", "/")
+        if path == os.pardir or path.startswith(os.pardir + os.sep):
+            return None
+    return os.path.normcase(os.path.normpath(path.replace("\\", "/"))).replace("\\", "/")
 
 
 def code_paths(value):
