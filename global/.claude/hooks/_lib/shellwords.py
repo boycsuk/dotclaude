@@ -395,22 +395,26 @@ def segments(cmd, shell="bash", _depth=0):
         tokens = list(lexer)
     except ValueError:
         return None
-    out, current = [], []
+    out, separators, current = [], [], []
     for tok in tokens:
         if tok and set(tok) <= SEPARATOR_CHARS:
             out.append(current)
+            separators.append(tok)
             current = []
         else:
             current.append(tok)
     out.append(current)
+    separators.append(";")
     result = []
-    for seg in out:
+    for k, seg in enumerate(out):
         while seg and seg[0] in KEYWORDS:
             seg = seg[1:]
         if not seg:
             continue
         result.append(seg)
         inner = _shell_c_argument(seg)
+        if inner is None and separators[k] in ("|", "|&") and k + 1 < len(out):
+            inner = _echoed_into_shell(seg, out[k + 1])
         if inner is not None and _depth < 3:
             nested = segments(inner, "bash", _depth + 1)
             if nested:
@@ -470,6 +474,19 @@ def _shell_c_argument(seg):
         if re.fullmatch(r"-[a-z]*c[a-z]*", arg) and i + 1 < len(seg):
             return seg[i + 1]
     return None
+
+
+def _echoed_into_shell(producer, consumer):
+    """The text `echo`/`printf` pipes into a shell, which runs it as commands; else None."""
+    producer, consumer = unwrap(producer), unwrap(consumer)
+    if not producer or basename(producer[0]) not in ("echo", "printf") \
+            or not consumer or basename(consumer[0]) not in SHELLS + ("fish",):
+        return None
+    args = producer[1:]
+    if basename(producer[0]) == "echo":
+        while args and re.fullmatch(r"-[neE]+", args[0]):
+            args = args[1:]
+    return " ".join(args).replace("\\n", "\n")
 
 
 def unwrap(seg):

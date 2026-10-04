@@ -87,6 +87,7 @@ ON_MAIN = [
      "an interpreter running a script passes the body through to a shell"),
     ("bash -s >&/tmp/python3 x <<'EOF'\ngit push origin main\nEOF", BLOCK,
      "a >& redirect target named like an interpreter is not the consumer"),
+    ('echo "git push origin main" | bash', BLOCK, "a push echoed into a shell"),
     ("git push origin HEAD:heads/main",          BLOCK, "git expands heads/main to refs/heads/main"),
     ("git push origin main 'x",                  BLOCK, "unparseable push fails closed"),
     # Legitimate — blocking these teaches the model the hook is noise.

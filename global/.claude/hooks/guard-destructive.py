@@ -13,9 +13,9 @@ Deny:
     here-string or echo/printf pipe feeding python/node/perl/ruby/php, or a
     file a heredoc writes and one of them runs in the same command. Code the
     allowlist cannot inspect belongs in a file written first. A shell fed a
-    heredoc is not blocked, because its body is judged as commands. Known
-    gaps: a runner the wrappers list does not know (`uv run python - <<EOF`),
-    and text echoed into a shell (`echo "…" | bash`), which is never parsed;
+    heredoc or echoed text is not blocked, because that text is judged as
+    commands. Known gap: a runner the wrappers list does not know
+    (`uv run python - <<EOF`);
   - a write into the installed central config (~/.claude settings.json,
     hooks, agents, skills, rules, output-styles, templates) through Bash —
     guard-central-config covers Edit/Write, this covers redirects, tee, sed
