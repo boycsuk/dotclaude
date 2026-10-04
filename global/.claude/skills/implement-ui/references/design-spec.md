@@ -33,7 +33,7 @@ same piece has the same name in the drawing, the spec and the code.
 
 - `Artifact` `read` with the canvas `url` and `path: "project/canvas.json"`.
   `boards` lists every artboard file, `pages` groups them, `designSystems`
-  names an installed token set.
+  names an installed token set, if any (tokens are normally inline: `design-tokens.md`).
 - Then read the `.dc.html` files with `paths`, one screen at a time while you
   write its spec. Do not load the whole canvas at once.
 - A canvas that breaks the rules in `design-canvas.md` (components drawn
@@ -51,7 +51,7 @@ Use the canvas's pages and paths (`design-canvas.md`). For a canvas laid out
 some other way:
 
 - **Component**: a `.dc.html` that another artboard mounts with
-  `<dc-import name="X">` (it mounts `X.dc.html`). Every `.dc.html` is also an
+  `<dc-import name="X">` or `name="../../components/x/X"` (it mounts `X.dc.html`, by a path relative to the importer). Every `.dc.html` is also an
   artboard of its own, so a component shows up in `boards` too.
 - **Variants sheet**: `<Name>Variants.dc.html`; its labelled mounts fill the
   component's `## Variants` and `## States`.

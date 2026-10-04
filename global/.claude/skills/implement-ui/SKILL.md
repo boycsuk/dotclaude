@@ -88,7 +88,7 @@ states (hover/active/disabled/focus). Follow `references/design-tokens.md`.
   write `design/tokens.json`.
 - Wire them into the project's mechanism: CSS custom properties, Tailwind
   config/theme, or the framework's theme file — whichever the project already
-  uses — and install them into the canvas when there is one.
+  uses; the canvas uses the same values inline.
 - From here on, **the spec and the code reference tokens, never raw hex or raw
   pixels**.
 

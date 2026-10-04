@@ -70,13 +70,12 @@ in code but missing from `tokens.json` goes into `tokens.json` first.
 
 ## Installing it into the canvas
 
-When the project has a canvas, the canvas uses these tokens instead of inline
-values: send `design/tokens.json` as the canvas file
-`project/ds/<folder>/tokens.json` (`<folder>` = the project's name in lower
-case, other characters as `-`) and add the `designSystems` record to
-`project/canvas.json`, per the Design type's install step.
+The canvas writes values inline in its artboards, as the Design type expects,
+taken only from `tokens.json`: every color, size and radius on an artboard is
+one token's value, so a reader maps it back by value. When a token changes,
+change it in `tokens.json` and then in every artboard that uses its old value.
 
-Whether the canvas accepts that record without a Design System artifact behind
-it is unverified. Until it is: if the install is refused or the Theme menu
-shows no tokens, keep the values inline in the artboards, taken from
-`tokens.json` only, and say so.
+Installing the file as the canvas's design system (`project/ds/<folder>/tokens.json`
+plus a `designSystems` record in `canvas.json`) is accepted by the server with
+no Design System artifact behind it (tested), but whether the canvas then
+offers those tokens in its editor was not confirmed. Do not rely on it.

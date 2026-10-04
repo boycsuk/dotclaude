@@ -33,6 +33,23 @@ one of three pages:
 unique across the canvas, so an exploration's artboard gets a distinct name
 (`CheckoutOneStep`, not a second `Checkout`).
 
+The type also wants an entry artboard, `Main.dc.html`, at the root: make it the
+canvas's cover (the product's name and one line per screen, each a link to its
+artboard) on the `screens` page.
+
+**Mounting across folders needs a relative path.** `<dc-import name="X">`
+resolves `X.dc.html` in the importer's own folder only, and a path from the
+canvas root (`/components/…`) does not resolve either (both tested: they draw
+an empty box). From a screen or an exploration, mount a component by its path
+relative to the importer, without the extension:
+
+```html
+<dc-import name="../../components/data-table/DataTable" page-size="20" hint-size="100%,480px"></dc-import>
+```
+
+A component's variants sheet, in the component's own folder, mounts it by bare
+name (`name="DataTable"`).
+
 ## Before drawing anything: reuse
 
 1. Read `design/README.md`'s component index and the spec of every component
@@ -50,13 +67,14 @@ Say which components you reused, extended or created before drawing.
 ## Rules
 
 1. **Reuse the project's tokens.** When `design/tokens.json` exists, the
-   canvas uses exactly those values (installed as `design-tokens.md` says).
+   canvas uses exactly those values, inline (`design-tokens.md`).
    Otherwise commit to a small system, taken from the chosen style when
    `design-research.md` ran; it becomes `design/tokens.json`. Inline styles
    use values from the scale only, so every size maps to one token.
 2. **One piece, one place.** Every element that appears more than once or has
    options (table, form, card, nav bar, modal, button with variants) is its own
-   component artboard, and screens mount it with `<dc-import name="Name" …>`.
+   component artboard, and screens mount it with `<dc-import>` by relative
+   path (Layout, above).
    A screen artboard holds layout, `dc-import`s and one-off content only.
    Changing a component means editing its artboard, never restyling it inside a
    screen.
@@ -111,7 +129,10 @@ drift into the screens page.
 
 `design/README.md` records the canvas version the spec was last written from:
 the `version <id>` that `Artifact` `list` with `scope: "files"` and the
-canvas `url` prints. After every publish, list again and write the new id.
+canvas `url` prints (a publish result prints it too, as `version id`). After
+every publish, write the new id. Every publish is a new id (tested). A save on
+the web is expected to be one as well, since the service stores each version
+and refuses a publish over a newer one; that part is not yet observed.
 
 Before any design work, list it and compare. A different id means the canvas
 was edited on the web since the spec was written: read the artboards that
