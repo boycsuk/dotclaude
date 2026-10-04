@@ -35,13 +35,16 @@ def command(script):
     return f'"{sys.executable}" "{script}"'
 
 
-def settings(hooks_dir, drop=None, break_path=None):
+def settings(hooks_dir, drop=None, break_path=None, exec_form=False):
     entries = []
     for guard in GUARDS:
         if guard == drop:
             continue
         script = os.path.join(hooks_dir, ("missing-" if guard == break_path else "") + f"{guard}.py")
-        entries.append({"type": "command", "command": command(script), "timeout": 20})
+        if exec_form:
+            entries.append({"type": "command", "command": sys.executable, "args": [script], "timeout": 20})
+        else:
+            entries.append({"type": "command", "command": command(script), "timeout": 20})
     return {"hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell|Edit|Write", "hooks": entries}]}}
 
 
@@ -68,6 +71,9 @@ def main():
             ("a guard whose script path is wrong", settings(pyhook.HOOKS, break_path="guard-push-main"),
              1, "guard-push-main"),
             ("a guard no entry runs", settings(pyhook.HOOKS, drop="guard-commit"), 1, "guard-commit"),
+            ("every guard in exec form (command + args)", settings(pyhook.HOOKS, exec_form=True), 0, None),
+            ("an exec-form guard whose script path is wrong",
+             settings(pyhook.HOOKS, break_path="guard-destructive", exec_form=True), 1, "guard-destructive"),
         ]
         for label, data, want, must_name in cases:
             proc = smoke(home, data)

@@ -708,6 +708,8 @@ def _():
         name = os.path.basename(c.replace("\\", "/").rstrip('"'))
         if name.endswith(".py"):
             live.append(f'& "C:\\Python\\python.exe" "{win_hooks}\\{name}"; exit $LASTEXITCODE')
+            # Exec form: prune-obsolete matches command and args joined.
+            live.append(f"C:\\Python\\python.exe {win_hooks}\\{name}")
         elif name.endswith(".sh"):
             live.append(f'& "{win_hooks}\\{name[:-3]}.ps1"; exit $LASTEXITCODE')
     for entry in manifest.get("hooks", []):

@@ -30,8 +30,10 @@ import stubs  # noqa: E402
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def run_install(home, pwsh=None, repo=REPO):
+def run_install(home, pwsh=None, repo=REPO, path=None):
     env = dict(os.environ, **pyhook.home_env(home))
+    if path:
+        env["PATH"] = path
     if pwsh:
         cmd = [pwsh, "-NoProfile", "-File", os.path.join(repo, "install.ps1")]
     else:
@@ -46,6 +48,20 @@ LAST_OUTPUT = [""]
 
 def claude(home, *parts):
     return os.path.join(home, ".claude", *parts)
+
+
+def wiring(hook):
+    """A hook entry's command and args as one string, to find which script it runs in either form."""
+    return " ".join([hook.get("command", "")] + [str(a) for a in hook.get("args") or []])
+
+
+def launch(hook, pwsh):
+    """argv that runs an installed hook entry as Claude Code does: exec form, PowerShell, or sh."""
+    if isinstance(hook.get("args"), list):
+        return [hook["command"]] + [str(a) for a in hook["args"]]
+    if pwsh:
+        return [pwsh, "-NoProfile", "-NonInteractive", "-Command", hook["command"]]
+    return ["bash", "-c", hook["command"]]
 
 
 def case_fresh_install(home, pwsh):
@@ -232,15 +248,11 @@ def case_python_hook_installed_and_runs(home, pwsh):
             return "hooks/_lib/ is not in the manifest, so a re-install could never clean it up"
         with open(claude(home, "settings.json"), encoding="utf-8") as fh:
             installed = json.load(fh)
-        commands = [h["command"] for g in installed["hooks"].get("SessionStart", [])
-                    for h in g["hooks"] if "fixture-echo" in h["command"]]
+        commands = [h for g in installed["hooks"].get("SessionStart", [])
+                    for h in g["hooks"] if "fixture-echo" in wiring(h)]
         if len(commands) != 1:
             return f"expected one wired fixture hook, found {commands}"
-        if pwsh:
-            runner = [pwsh, "-NoProfile", "-Command", commands[0]]
-        else:
-            runner = ["bash", "-c", commands[0]]
-        proc = subprocess.run(runner, input='{"probe": "x"}', capture_output=True,
+        proc = subprocess.run(launch(commands[0], pwsh), input='{"probe": "x"}', capture_output=True,
                               text=True, env=dict(os.environ, **pyhook.home_env(home)))
         if proc.returncode != 0 or "fixture-ok:x" not in proc.stdout:
             return (f"installed command did not run cleanly: rc={proc.returncode} "
@@ -270,20 +282,75 @@ def case_installed_guard_blocks(home, pwsh):
             "old_string": "a", "new_string": "b"}}),
     ]
     for name, payload in probes:
-        commands = [h["command"] for g in installed["hooks"].get("PreToolUse", [])
-                    for h in g["hooks"] if name in h["command"]]
+        commands = [h for g in installed["hooks"].get("PreToolUse", [])
+                    for h in g["hooks"] if name in wiring(h)]
         if len(commands) != 1:
             return f"expected one wired {name} hook, found {commands}"
-        if pwsh:
-            runner = [pwsh, "-NoProfile", "-NonInteractive", "-Command", commands[0]]
-        else:
-            runner = ["bash", "-c", commands[0]]
-        proc = subprocess.run(runner, input=json.dumps(payload), capture_output=True, encoding="utf-8", errors="replace",
+        proc = subprocess.run(launch(commands[0], pwsh), input=json.dumps(payload), capture_output=True, encoding="utf-8", errors="replace",
                               env=dict(os.environ, **pyhook.home_env(home)))
         denied = '"permissionDecision": "deny"' in proc.stdout
         if proc.returncode != 2 and not denied:
             return (f"installed {name} did not block (exit {proc.returncode}, no deny on stdout); "
                     f"err={proc.stderr.strip()[:200]!r}")
+    return None
+
+
+def python_hooks(installed):
+    return [h for groups in installed["hooks"].values() for g in groups for h in g["hooks"]
+            if ".py" in wiring(h)]
+
+
+def install_with_claude(home, pwsh, version_output):
+    """Run install.ps1 with a PATH whose only `claude` prints `version_output` (None: no claude at all)."""
+    bindir = tempfile.mkdtemp(prefix="install-claude-")
+    try:
+        if version_output is not None:
+            stubs.write_stub(bindir, "claude", out=version_output)
+        if run_install(home, pwsh, path=stubs.minimal_path(bindir, ["python3", "python"])) != 0:
+            return None
+        with open(claude(home, "settings.json"), encoding="utf-8") as fh:
+            return json.load(fh)
+    finally:
+        shutil.rmtree(bindir, ignore_errors=True)
+
+
+def case_exec_form_on_recent_claude(home, pwsh):
+    # Claude Code 2.1.139+ spawns `command` with `args` directly: no PowerShell
+    # per hook call (339 -> 102 ms per Bash call, measured on Windows).
+    if not pwsh:
+        return None
+    installed = install_with_claude(home, pwsh, "2.1.289 (Claude Code)\n")
+    if installed is None:
+        return f"installer exited non-zero: {LAST_OUTPUT[0][-300:]}"
+    for hook in python_hooks(installed):
+        args = hook.get("args")
+        if not (isinstance(args, list) and len(args) == 1 and str(args[0]).endswith(".py")):
+            return f"expected exec form with one .py argument, got {hook}"
+        if "shell" in hook or "WindowsApps" in hook["command"]:
+            return f"exec form still names a shell or the Store alias: {hook}"
+    guard = next(h for h in python_hooks(installed) if "guard-destructive" in wiring(h))
+    proc = subprocess.run(launch(guard, pwsh), capture_output=True, encoding="utf-8", errors="replace",
+                          input=json.dumps(pyhook.payload("Bash", {"command": "rm -rf /"})),
+                          env=dict(os.environ, **pyhook.home_env(home)))
+    if '"permissionDecision": "deny"' not in proc.stdout:
+        return f"the exec-form guard did not deny: rc={proc.returncode} err={proc.stderr.strip()[:200]!r}"
+    return None
+
+
+def case_shell_form_on_old_or_unknown_claude(home, pwsh):
+    # An older Claude Code ignores `args` and runs a bare python.exe that exits
+    # 1 on the payload, which does not block: every guard would be off.
+    if not pwsh:
+        return None
+    for output, note in (("2.1.100 (Claude Code)\n", "predates"), (None, "could not be read")):
+        installed = install_with_claude(home, pwsh, output)
+        if installed is None:
+            return f"installer exited non-zero: {LAST_OUTPUT[0][-300:]}"
+        for hook in python_hooks(installed):
+            if "args" in hook or hook.get("shell") != "powershell":
+                return f"claude {output!r}: expected the PowerShell form, got {hook}"
+        if note not in LAST_OUTPUT[0]:
+            return f"claude {output!r}: the installer did not say why it kept the PowerShell form"
     return None
 
 
@@ -296,7 +363,7 @@ def case_shell_guards_cover_both_tools(home, pwsh):
     with open(claude(home, "settings.json"), encoding="utf-8") as fh:
         installed = json.load(fh)
     guard_groups = [g for g in installed["hooks"].get("PreToolUse", [])
-                    if any("guard-destructive" in h["command"] for h in g["hooks"])]
+                    if any("guard-destructive" in wiring(h) for h in g["hooks"])]
     if len(guard_groups) != 1:
         return f"expected one group wiring guard-destructive, found {len(guard_groups)}"
     tools = set(guard_groups[0].get("matcher", "").split("|"))
@@ -602,6 +669,8 @@ CASES = [
     ("non-ASCII personal values survive, the manifest has no BOM", case_non_ascii_user_keys_survive),
     ("a status line seeded as the retired shell script is repaired", case_retired_shell_statusline_is_repaired),
     ("new hook fields and permission keys reach both platforms", case_hook_fields_and_permission_keys_carry_over),
+    ("Claude Code 2.1.139+ gets exec-form hooks on the real python.exe", case_exec_form_on_recent_claude),
+    ("an old or unreadable Claude Code keeps the PowerShell form", case_shell_form_on_old_or_unknown_claude),
     ("shell guards and rules cover both Bash and PowerShell", case_shell_guards_cover_both_tools),
     ("the status line runs under any shell, a broken seed is repaired", case_statusline_runs_under_any_shell),
     ("fresh install: settings, hooks, manifest", case_fresh_install),

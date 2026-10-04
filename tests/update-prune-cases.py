@@ -115,6 +115,24 @@ def case_prunes_powershell_form(project, pwsh):
     return None
 
 
+def case_prunes_exec_form(project, pwsh):
+    # install.ps1 wires hooks in exec form (python.exe + args) on a recent
+    # Claude Code: the hook's name is in `args`, not in `command`.
+    path = os.path.join(project, ".claude/settings.json")
+    write(path, {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+        {"type": "command", "command": "C:\\Python\\python.exe",
+         "args": ["C:\\Users\\u\\.claude\\hooks\\prefer-graphify.py"]},
+        USER_HOOK]}]}})
+    if run_init(project, pwsh).returncode != 0:
+        return "init exited non-zero"
+    commands = all_commands(read_json(path))
+    if "C:\\Python\\python.exe" in commands:
+        return f"an exec-form obsolete hook survived: {commands}"
+    if USER_HOOK["command"] not in commands:
+        return f"the user's own hook was removed: {commands}"
+    return None
+
+
 def case_prunes_settings_local(project, pwsh):
     path = os.path.join(project, ".claude/settings.local.json")
     write(path, {"allowPushToMain": True, "hooks": LEGACY_SH})
@@ -306,6 +324,7 @@ CASES = [
     ("a Microsoft Store python3 stub does not silence the prune", case_store_stub_python_is_skipped),
     ("sh-form obsolete hooks pruned, user hook kept", case_prunes_sh_form_keeps_user_hook),
     ("PowerShell-form obsolete hooks pruned", case_prunes_powershell_form),
+    ("exec-form obsolete hooks pruned by their args", case_prunes_exec_form),
     ("settings.local.json pruned, opt-outs kept", case_prunes_settings_local),
     ("second run is a no-op", case_idempotent),
     ("an obsolete allow rule is removed, a deny kept", case_obsolete_allow_rule_removed),

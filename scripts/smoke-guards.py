@@ -39,13 +39,14 @@ TIMEOUT = 30
 
 
 def commands_for(settings, guard):
-    """Every PreToolUse command string in `settings` that runs `guard`."""
+    """Every PreToolUse hook entry in `settings` that runs `guard` (its script in `command` or `args`)."""
     found = []
     for group in (settings.get("hooks") or {}).get("PreToolUse") or []:
         for hook in group.get("hooks") or []:
             command = hook.get("command")
-            if isinstance(command, str) and f"{guard}.py" in command:
-                found.append(command)
+            args = hook.get("args") if isinstance(hook.get("args"), list) else []
+            if isinstance(command, str) and any(f"{guard}.py" in str(part) for part in [command] + args):
+                found.append(hook)
     return found
 
 
@@ -57,8 +58,12 @@ def decision(stdout):
     return (out.get("hookSpecificOutput") or {}).get("permissionDecision")
 
 
-def run(command, payload, mode, shell_exe, cwd):
-    if mode == "powershell":
+def run(hook, payload, mode, shell_exe, cwd):
+    """Run one hook entry the way Claude Code does: exec form when it has `args`, else through the shell."""
+    command = hook["command"]
+    if isinstance(hook.get("args"), list):
+        argv = [command] + [str(a) for a in hook["args"]]
+    elif mode == "powershell":
         argv = [shell_exe, "-NoProfile", "-NonInteractive", "-Command", command]
     else:
         argv = ["sh", "-c", command]
@@ -89,8 +94,8 @@ def main():
                 continue
             payload = {"hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": tool_input,
                        "cwd": work, "session_id": uuid.uuid4().hex, **EXTRA.get(guard, {})}
-            for command in commands:
-                got, detail = run(command, payload, mode, shell_exe, work)
+            for hook in commands:
+                got, detail = run(hook, payload, mode, shell_exe, work)
                 if got != want:
                     problems.append(f"{guard}: answered {got or 'nothing'} instead of {want} ({detail})")
     finally:

@@ -14,9 +14,10 @@
 # when absent, and REPLACES the keys dotclaude owns (permissions, hooks,
 # attribution) - saving a backup first whenever your file had entries there.
 #
-# This is the lockstep sibling of install.sh. On Windows the .ps1 hooks run
-# under PowerShell, so the central settings.json points at the .ps1 files with
-# "shell": "powershell", and every Bash permission rule gets a PowerShell(...) twin.
+# This is the lockstep sibling of install.sh. Every hook is a .py file: on a
+# Claude Code that supports it (2.1.139+) it is wired in exec form, the real
+# python.exe spawned with the hook as its argument; otherwise through
+# "shell": "powershell". Every Bash permission rule gets a PowerShell(...) twin.
 
 $ErrorActionPreference = "Stop"
 
@@ -52,6 +53,46 @@ if (-not $PythonExe) {
     [Console]::Error.WriteLine("ERROR: no working Python found (tried python3, python, py -3) - the .py hooks run on it. Install Python and re-run.")
     exit 1
 }
+# The interpreter that answered may be the py launcher or the Store alias in
+# WindowsApps, each of which starts the real python.exe on every hook call
+# (about 90 ms each, measured). Ask it for its own path and wire that instead.
+try {
+    $launcher = @()
+    if ($PythonArgs) { $launcher += $PythonArgs }
+    $real = @(& $PythonExe @launcher -c "import sys; print(sys.executable)" 2>$null)[0]
+    if ($LASTEXITCODE -eq 0 -and $real -and (Test-Path -LiteralPath $real.Trim())) {
+        & $real.Trim() --version *> $null
+        if ($LASTEXITCODE -eq 0) { $PythonExe = $real.Trim(); $PythonArgs = "" }
+    }
+} catch { }
+
+# Exec form ("command": python.exe, "args": [hook]) spawns the hook directly,
+# without a PowerShell per call. Claude Code supports it from 2.1.139; an
+# older one ignores "args" and runs a bare python.exe that reads the payload
+# as code and exits 1, which does not block - every guard would be off. So it
+# is written only for a version known to support it, read with a timeout.
+$MinExecVersion = [version]"2.1.139"
+function Get-ClaudeVersion {
+    $cmd = @(Get-Command claude -CommandType Application -ErrorAction SilentlyContinue)[0]
+    if (-not $cmd) { return $null }
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $cmd.Source
+        $psi.Arguments = "--version"
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.UseShellExecute = $false
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        if (-not $proc.WaitForExit(10000)) {
+            try { $proc.Kill() } catch { }
+            return $null
+        }
+        if ($proc.StandardOutput.ReadToEnd() -match '(\d+\.\d+\.\d+)') { return [version]$Matches[1] }
+    } catch { }
+    return $null
+}
+$ClaudeVersion = Get-ClaudeVersion
+$ExecHooks = [bool]($ClaudeVersion -and $ClaudeVersion -ge $MinExecVersion)
 
 # --- Syntax pre-flight: never install a hook that cannot be parsed -----------
 # Lockstep with install.sh. A hook that fails to parse is a wall, not a degraded
@@ -83,6 +124,18 @@ function New-Hook($src, $name, $isPython) {
     # prefix-anchored pattern reopens the wrapped-form bypasses the hooks'
     # own parsers close). check.py enforces the same on the
     # source JSON; the guard below keeps Windows from reintroducing one.
+    # Every other field of the source entry is carried over as is (timeout,
+    # async, statusMessage, ...): re-typing a fixed set silently dropped any
+    # field added to settings.json later, and invented a 5s timeout.
+    $entry = [ordered]@{}
+    foreach ($p in $src.PSObject.Properties) {
+        if ($p.Name -notin @("command", "if", "shell", "args")) { $entry[$p.Name] = $p.Value }
+    }
+    if ($isPython -and $ExecHooks) {
+        $entry["command"] = $PythonExe
+        $entry["args"] = @(Join-Path (Join-Path $Target "hooks") "$name.py")
+        return $entry
+    }
     # Claude Code launches a "shell": "powershell" hook as `powershell -Command
     # <command>`, and -Command converts a script's or program's exit 2 into
     # process exit 1 - which does not block. Without the trailing
@@ -93,13 +146,6 @@ function New-Hook($src, $name, $isPython) {
         $command = "& '$($PythonExe -replace "'", "''")'$launcherArgs '$($script -replace "'", "''")'; exit `$LASTEXITCODE"
     } else {
         $command = "& '$("$Target\hooks\$name.ps1" -replace "'", "''")'; exit `$LASTEXITCODE"
-    }
-    # Every other field of the source entry is carried over as is (timeout,
-    # async, statusMessage, ...): re-typing a fixed set silently dropped any
-    # field added to settings.json later, and invented a 5s timeout.
-    $entry = [ordered]@{}
-    foreach ($p in $src.PSObject.Properties) {
-        if ($p.Name -notin @("command", "if")) { $entry[$p.Name] = $p.Value }
     }
     $entry["command"] = $command
     $entry["shell"] = "powershell"
@@ -439,6 +485,12 @@ foreach ($k in $seeded) {
 [System.IO.File]::WriteAllText($settingsPath, ($existing | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))
 $seedNote = if ($seededNow.Count -gt 0) { " seeded $($seededNow -join ', ');" } else { "" }
 Write-Host "  - $settingsPath merged (permissions, hooks, attribution set to dotclaude's;$seedNote your other keys kept)"
+if ($ExecHooks) {
+    Write-Host "  - hooks spawn $PythonExe directly (Claude Code $ClaudeVersion supports the exec form)"
+} else {
+    $why = if ($ClaudeVersion) { "Claude Code $ClaudeVersion predates $MinExecVersion" } else { "the Claude Code version could not be read" }
+    Write-Host "  - hooks run through PowerShell: $why. Re-run this installer after updating Claude Code for the faster direct form."
+}
 
 # --- Per-project template and the /init-project skill ------------------------
 $templateDest = Join-Path $Target "templates\project"

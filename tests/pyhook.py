@@ -1,8 +1,10 @@
 """Run hooks the way Claude Code does, for the case matrices.
 
 A `.py` hook has no `.sh`/`.ps1` twin, so there is no parity to check — but the
-Windows *invocation* still differs: install.ps1 wires it as
-`& "<python>" "<hook>.py"; exit $LASTEXITCODE` under PowerShell. With `pwsh`
+Windows *invocation* can differ. On Claude Code 2.1.139+ install.ps1 wires
+exec form (python.exe spawned with the hook as its argument), which is what
+the plain-python runner does. On an older or unknown version it falls back to
+`& "<python>" "<hook>.py"; exit $LASTEXITCODE` under PowerShell; with `pwsh`
 given, `run` goes through that exact command form, so quoting, stdin or exit
 code handling that breaks only under PowerShell fails the matrix instead of a
 user's session. `ps1_hook` gives the same form for the `.ps1` twins.

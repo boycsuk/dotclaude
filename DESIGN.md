@@ -720,6 +720,16 @@ A design was spread over a canvas on claude.ai, `docs/ui.md` (tokens and section
 
 **Deliberately not covered.** SQL (§14): db-inspector's queries stay a prompt rule. What a script does once run: the debugger must be able to reproduce a failure, and a scratch script can still write. MCP tools. `git fetch` is denied for now, failing closed, because it changes remote-tracking refs; a reviewer comparing with `origin/main` gets a deny until that is decided. A project that lives under the temp folder is writable by these agents, since its paths are inside temp.
 
+### 48. Windows hooks spawn python.exe directly when Claude Code supports it (revises §36/§38) (2026-10-04)
+
+**Problem.** Every Windows hook ran as `& '<python>' '<hook>.py'; exit $LASTEXITCODE` under `"shell": "powershell"`: a PowerShell per hook call, and the `exit $LASTEXITCODE` only because `-Command` turns exit 2 into a non-blocking 1 (§38). Measured on a Windows machine during the 2026-10-04 audit, one Bash call (four guards) waited 339 ms under PowerShell 5.1, 102 ms with python started directly, and 415 ms when the installer had picked the WindowsApps `python3.exe` alias, which starts the real interpreter on every call. That is roughly 96-130 s of a typical session spent launching hooks, against about 34 s.
+
+**Chosen.** Claude Code 2.1.139 added the exec form: with `"args"`, `command` is spawned directly with no shell, and `shell` is ignored. `install.ps1` writes it, `command` = the real `python.exe` and `args` = [the hook], when `claude --version` reads 2.1.139 or later. The probe has a 10 s timeout. The interpreter is resolved through `sys.executable`, so the Store alias and the `py -3` launcher are never wired, in either form.
+
+**Why gated, not always.** An older Claude Code ignores `args` and runs a bare `python.exe`, which reads the payload as code and exits 1. Exit 1 does not block, so every guard would be off with nothing to show it. When the version is older, or cannot be read (no `claude` on PATH, a timeout, unexpected output), the installer keeps the PowerShell form and says why. Re-running it after updating Claude Code switches to the direct form. A downgrade below 2.1.139 after installing in exec form is the remaining gap: re-install after a downgrade.
+
+**What follows from it.** `scripts/smoke-guards.py` runs an entry with `args` in exec form, so the post-install check covers both forms. `prune-obsolete.py` and check.py's obsolete-manifest check match `command` and `args` together, since the hook's name moved into `args`. The matrices' `--pwsh` runner keeps testing the fallback form; the exec form is the plain-python runner. Linux and macOS are unchanged: `sh -c` costs about 0.9 ms per hook there, and exec form would need `install.sh` to write absolute paths and gate on the version too.
+
 ## Things deliberately not included
 
 - **Pre-baked stack variants.** See decision 2.

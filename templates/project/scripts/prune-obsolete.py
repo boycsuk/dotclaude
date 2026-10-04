@@ -45,13 +45,21 @@ def hook_matches(manifest):
     return [h["match"] for h in manifest.get("hooks", []) if isinstance(h, dict) and h.get("match")]
 
 
+def _wiring(entry):
+    """A hook entry's command plus its exec-form args: the hook script can be in either."""
+    if not isinstance(entry, dict):
+        return ""
+    args = entry.get("args") if isinstance(entry.get("args"), list) else []
+    return " ".join([str(entry.get("command", ""))] + [str(a) for a in args])
+
+
 def _commands(settings):
     hooks = settings.get("hooks") if isinstance(settings, dict) else None
     for groups in hooks.values() if isinstance(hooks, dict) else []:
         for group in groups if isinstance(groups, list) else []:
             for entry in group.get("hooks", []) if isinstance(group, dict) else []:
                 if isinstance(entry, dict):
-                    yield str(entry.get("command", ""))
+                    yield _wiring(entry)
 
 
 def count_obsolete_hooks(project, matches):
@@ -86,7 +94,7 @@ def prune_hooks(settings, matches):
             entries = group.get("hooks", []) if isinstance(group, dict) else []
             kept = []
             for entry in entries:
-                command = str(entry.get("command", "")) if isinstance(entry, dict) else ""
+                command = _wiring(entry)
                 if any(m in command for m in matches):
                     removed.append(command)
                 else:
