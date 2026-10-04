@@ -364,6 +364,7 @@ def _():
                          ("guard-dependencies", "tests/guard-dependencies-cases.py"),
                          ("reinject-rules", advisory),
                          ("sync-mirror-docs", advisory),
+                         ("design-sync", "tests/design-sync-cases.py"),
                          ("changelog-reminder", "tests/changelog-reminder-cases.py"),
                          # Not a hook, but the same lockstep .sh/.ps1 pair, and
                          # its failure mode is worse than silence: whatever it
