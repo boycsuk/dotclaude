@@ -38,8 +38,9 @@ Levels (debug, info, warn, error) with structured context. Do not just log error
 Comment the **why**, never the **what** — well-named identifiers describe the what. All comments in English.
 
 - **Deletion test, applied before writing any comment:** if a competent reader gets the same information from the line plus its identifier names, the comment must not exist.
-- **Comments that earn their place** (the only ones to write): a workaround with a link to the issue it dodges; a non-obvious invariant or constraint; a counterintuitive decision ("looks wrong but is correct because…"); a reference to a spec, RFC, or regulation; a warning about consequences of changing the code.
+- **Comments that earn their place** (the only ones to write): a workaround with a link to the issue it dodges; a non-obvious invariant or constraint; a counterintuitive decision ("looks wrong but is correct because…"); a reference to an external spec, RFC, or regulation; a warning about consequences of changing the code.
 - **Never write:** comments that paraphrase the code; comments that narrate the session or the change ("added X per request", "fixed the bug here"); decorative section banners; comments that reference the conversation with the user.
+- **Comments describe the code as it is, not the process that produced it.** Never write plan or roadmap positions ("Step 7, deliberately last", "Phase 2", "milestone 3"), speculation about future work ("the fallback, if it ever stalls, is…"), or pointers into the project's own docs ("see CLAUDE.md, 'Scope non-goals'", "SPEC.md §4", "(DESIGN.md §5)"). Plans finish and docs get renumbered, so these rot into riddles; when the reason matters, state it in the comment itself. Links to issues, RFCs and vendor docs are fine. The `comment-hygiene` hook flags the mechanical cases on every edit.
 - **Length:** one line by default. Multi-line only for genuinely complex invariants.
 - **When editing code, delete comments the change makes obsolete** — don't edit around them.
 

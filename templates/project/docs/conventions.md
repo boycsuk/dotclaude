@@ -44,7 +44,11 @@
   comment: workarounds (with issue link), invariants, counterintuitive
   decisions, spec references, change warnings. One line by default. Never
   paraphrase the code, narrate the change ("added X per request"), or add
-  decorative banners. Delete comments your edit makes obsolete. All comments in
+  decorative banners. A comment describes the code as it is, not the process
+  that produced it: no plan steps or phases ("Step 7, deliberately last"), no
+  speculation about future work, no pointers into the project's own docs
+  ("see CLAUDE.md, 'Scope non-goals'", "SPEC.md §4") — state the reason in the
+  comment itself. Delete comments your edit makes obsolete. All comments in
   English.
 - **Document public APIs in the language's native doc format** (JSDoc,
   docstring/PEP 257, rustdoc, godoc…) — the deliberate exception to "never the
