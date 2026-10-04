@@ -12,12 +12,14 @@ below is built to prevent that. An idea is proposed only with the scenario it
 serves and the evidence that the scenario exists.
 
 §0 of the skill (audit wide once, apply in series, budget in agents) applies
-unchanged.
+unchanged, and so does its "Arguments" section: a question the arguments
+already answered is not asked again.
 
 ## 1. The target
 
-Improvement needs a focus. Take the target from the request (a component, a
-screen, a module, a feature); if it names none, ask for one. A whole-project
+Improvement needs a focus. Take the target from the arguments or the request
+(a component, a screen, a module, a feature); if neither names one, ask for
+one. A whole-project
 request is split: list the project's top-level features (from
 `docs/user-stories.md`, `docs/design/README.md` Sections, the router or entry points)
 and ask which to start with, through AskUserQuestion.
