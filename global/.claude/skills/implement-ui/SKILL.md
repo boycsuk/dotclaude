@@ -22,9 +22,10 @@ The canvas is optional; `docs/design/` is not.
 
 Identify, asking only for what you cannot detect:
 
-- **A legacy `docs/ui.md`.** When it exists, the project predates `docs/design/`:
-  read `references/migrate-ui-md.md` and offer the migration before anything
-  else.
+- **Design documentation outside `docs/design/`.** A `docs/ui.md` from the
+  old template, a style guide, a design folder, a design section in another
+  doc: read `references/migrate-design-docs.md`, which finds the candidates by
+  name and by content, and offer their migration before anything else.
 - **The project's design.** Read `docs/design/README.md` when it exists: its
   canvas, the component and screen index, and what is still `designed` or
   `implemented`. When it names a canvas, compare the canvas's listed version

@@ -48,8 +48,9 @@ List `docs/` with the **Glob tool** (`Glob: docs/*`) — portable across Unix an
 Windows, unlike `ls ... 2>/dev/null`. An empty result just means no docs yet.
 When the diff touches UI code, also list `docs/design/` (`Glob: docs/design/**/*`): it is
 the project's design (`/implement-ui`'s `references/design-spec.md`). A
-project with a legacy `docs/ui.md` and no `docs/design/` keeps maintaining
-`docs/ui.md` for now; say once that `/implement-ui` can migrate it.
+project whose design still lives outside `docs/design/` (a legacy `docs/ui.md`,
+a style guide, a design folder) keeps maintaining it there for now; say once
+that `/implement-ui` can migrate it.
 
 **When `docs/design/README.md` names a canvas** and the diff touches UI, compare the
 canvas's version (`Artifact` `list`, `scope: "files"`, its `url`) with the
@@ -158,8 +159,8 @@ diff-driven edits, do a quick cross-check on the touched files:
   `urls.py`, `app.ts`) and confirm every registered route appears in
   `docs/backend.md`. Add a one-liner for any missing one.
 - UI: skim the top-level navigation/router and confirm every user-reachable
-  section appears in `## Sections` of `docs/design/README.md` (or the legacy
-  `docs/ui.md`). Add a one-liner for any missing one. If the diff touched a
+  section appears in `## Sections` of `docs/design/README.md` (or the design
+  doc the project still uses). Add a one-liner for any missing one. If the diff touched a
   theme/style file (CSS variables, SwiftUI Color extensions, Compose theme,
   Tailwind config), confirm `docs/design/tokens.json` holds every token it defines,
   under the same names and values.

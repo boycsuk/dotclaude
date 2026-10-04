@@ -18,11 +18,17 @@ the script the deploy itself prunes with, so the two cannot disagree.
 
 import importlib.util
 import os
+import re
 import sys
 
 sys.dont_write_bytecode = True
 
 UNKNOWN = "UNKNOWN"
+DESIGN_DOC_NAME = re.compile(
+    r"(^|[-_. ])(ui|ux|design|designs|style|styles|styleguide|theme|theming|tokens|brand|branding"
+    r"|components|screens|wireframes?|mockups?)([-_. ]|$)", re.I)
+DESIGN_DOC_SKIP_DIRS = {"node_modules", "vendor", "dist", "build", "out", "target", "venv", "__pycache__"}
+DESIGN_DOC_MAX_DEPTH = 4
 
 
 def template_dir():
@@ -113,12 +119,50 @@ def check_example_drift():
         return UNKNOWN
 
 
-def check_legacy_ui_md():
-    """A docs/ui.md left from before docs/design/ replaced it; /implement-ui migrates it."""
-    path = os.path.join("docs", "ui.md")
-    if not os.path.lexists(path):
-        return "NO"
-    return "YES" if os.path.isfile(path) else UNKNOWN
+def has_markdown(path):
+    """True when `path` holds a Markdown file at any depth (src/components/ with code only does not)."""
+    for _, dirnames, filenames in os.walk(path):
+        dirnames[:] = [d for d in dirnames if d not in DESIGN_DOC_SKIP_DIRS and not d.startswith(".")]
+        if any(f.lower().endswith(".md") for f in filenames):
+            return True
+    return False
+
+
+def check_legacy_design_docs():
+    """Markdown files whose name reads as design, outside docs/design/: candidates /implement-ui offers to migrate.
+
+    Names only: reading every file's headings is the skill's job, where a
+    person chooses. Comma-separated paths, empty when none, UNKNOWN when the
+    project root cannot be listed; an unreadable subdirectory (a root-owned
+    Docker volume) is skipped rather than sinking the whole scan.
+    """
+    found = []
+
+    def fail(err):
+        if os.path.normpath(err.filename or ".") == ".":
+            raise err
+
+    try:
+        for dirpath, dirnames, filenames in os.walk(".", onerror=fail):
+            rel = os.path.relpath(dirpath, ".").replace("\\", "/")
+            depth = 0 if rel == "." else rel.count("/") + 1
+            keep = []
+            for d in ([] if depth >= DESIGN_DOC_MAX_DEPTH else sorted(dirnames)):
+                if d in DESIGN_DOC_SKIP_DIRS or d.startswith(".") or (rel == "docs" and d == "design"):
+                    continue
+                sub = d if rel == "." else f"{rel}/{d}"
+                if DESIGN_DOC_NAME.search(d) and has_markdown(sub):
+                    found.append(sub + "/")       # a design folder is one candidate, not a file list
+                else:
+                    keep.append(d)
+            dirnames[:] = keep
+            for name in filenames:
+                stem, ext = os.path.splitext(name)
+                if ext.lower() == ".md" and DESIGN_DOC_NAME.search(stem):
+                    found.append(name if rel == "." else f"{rel}/{name}")
+    except OSError:
+        return UNKNOWN
+    return ",".join(sorted(found))
 
 
 def main():
@@ -136,7 +180,7 @@ def main():
         ("ALLOW_PUSH_MAIN", allow_push),
         ("MCP_SERVERS", servers),
         ("SETTINGS_EXAMPLE_DRIFT", check_example_drift()),
-        ("LEGACY_UI_MD", check_legacy_ui_md()),
+        ("LEGACY_DESIGN_DOCS", check_legacy_design_docs()),
     ):
         print(f"{key}={value}")
     return 0

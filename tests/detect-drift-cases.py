@@ -97,25 +97,56 @@ def case_clean(project):
     write(project, ".claude/settings.local.json", '{"allowPushToMain": false}')
     return run(project), {"OBSOLETE_HOOKS": "0", "OBSOLETE_MCP": "", "OBSOLETE_FILES": "",
                           "ALLOW_PUSH_MAIN": "FALSE", "MCP_SERVERS": "", "SETTINGS_EXAMPLE_DRIFT": "ABSENT",
-                          "LEGACY_UI_MD": "NO"}
+                          "LEGACY_DESIGN_DOCS": ""}
 
 
 def case_legacy_ui_md(project):
     # docs/ui.md left the template; /implement-ui migrates it into docs/design/.
     write(project, "docs/ui.md", "# UI\n")
-    return run(project), {"LEGACY_UI_MD": "YES"}
+    return run(project), {"LEGACY_DESIGN_DOCS": "docs/ui.md"}
 
 
-def case_legacy_ui_md_beside_design(project):
-    # A migration that wrote docs/design/ but kept the old file is still unfinished.
+def case_design_folder_is_not_legacy(project):
+    # A migration that wrote docs/design/ but kept the old file is still unfinished,
+    # while the specs in docs/design/ are the destination, never a candidate.
     write(project, "docs/ui.md", "# UI\n")
     write(project, "docs/design/README.md", "# Design\n")
-    return run(project), {"LEGACY_UI_MD": "YES"}
+    write(project, "docs/design/components/ui-button/README.md", "# Button\n")
+    return run(project), {"LEGACY_DESIGN_DOCS": "docs/ui.md"}
 
 
-def case_ui_md_not_a_file(project):
-    os.makedirs(os.path.join(project, "docs", "ui.md"))
-    return run(project), {"LEGACY_UI_MD": "UNKNOWN"}
+def case_design_named_docs_anywhere(project):
+    # Any Markdown file whose name reads as design, wherever it sits, minus
+    # dependencies, build output and files whose name says nothing about design.
+    write(project, "STYLEGUIDE.md", "# Style\n")
+    write(project, "design-system.md", "# Tokens\n")
+    write(project, "app/docs/screens.md", "# Screens\n")
+    write(project, "docs/backend.md", "# API\n")
+    write(project, "node_modules/lib/ui.md", "# not ours\n")
+    write(project, "build/theme.md", "# generated\n")
+    write(project, "docs/guide.txt", "ui\n")
+    return run(project), {"LEGACY_DESIGN_DOCS": "STYLEGUIDE.md,app/docs/screens.md,design-system.md"}
+
+
+def case_design_named_folder(project):
+    # A whole design folder (prestashop has design/ with 66 Spanish-named specs)
+    # is one candidate; a code folder that merely shares a name is none.
+    write(project, "design/01-cabecera/01-1-barra.md", "# Barra\n")
+    write(project, "design/index.html", "<p></p>\n")
+    write(project, "src/components/Button.tsx", "export {}\n")
+    return run(project), {"LEGACY_DESIGN_DOCS": "design/"}
+
+
+def case_unreadable_subdirectory(project):
+    # A root-owned Docker volume in the tree must not turn the answer into UNKNOWN.
+    write(project, "docs/ui.md", "# UI\n")
+    locked = os.path.join(project, "data", "locked")
+    os.makedirs(locked)
+    os.chmod(locked, 0)
+    try:
+        return run(project), {"LEGACY_DESIGN_DOCS": "docs/ui.md"}
+    finally:
+        os.chmod(locked, 0o755)
 
 
 def case_example_drift(project):
@@ -152,8 +183,10 @@ CASES = [
     ("an edited settings.local.json.example reports drift", case_example_drift),
     ("the servers in .mcp.json are listed for the §8 check", case_mcp_servers),
     ("a legacy docs/ui.md is reported", case_legacy_ui_md),
-    ("docs/ui.md beside docs/design/ is still reported", case_legacy_ui_md_beside_design),
-    ("a docs/ui.md that is not a file reports UNKNOWN", case_ui_md_not_a_file),
+    ("docs/design/ itself is never a candidate", case_design_folder_is_not_legacy),
+    ("design-named Markdown is found anywhere but dependencies and builds", case_design_named_docs_anywhere),
+    ("a design-named folder with Markdown is one candidate", case_design_named_folder),
+    ("an unreadable subdirectory is skipped, not UNKNOWN", case_unreadable_subdirectory),
 ]
 
 

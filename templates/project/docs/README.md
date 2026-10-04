@@ -54,9 +54,9 @@ kind:
 When the UI is designed as a Design canvas (an Artifact made with Claude), the
 drawing stays in that canvas and `docs/design/` is derived from it: when the design
 changes, regenerate the specs; when the code changes first, the change goes
-back into the canvas. Without a canvas, the specs describe the code. Older
-projects may still have a `docs/ui.md`; `/implement-ui` migrates it into
-`docs/design/`.
+back into the canvas. Without a canvas, the specs describe the code. Design
+notes kept elsewhere (an older `docs/ui.md`, a style guide) are migrated by
+`/implement-ui` into `docs/design/`.
 
 Add more files (`cli.md`, `bot.md`, `events.md`, …) only when there is a *new
 producer or consumer of contracts* another part of the system must understand

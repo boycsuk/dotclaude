@@ -244,7 +244,7 @@ Read `.gitignore` and confirm it excludes `.claude/settings.local.json`. The mer
 Remind the user:
 - `.claude/settings.json` (the per-project stub) and `settings.local.json.example` ARE committed; `.claude/settings.local.json` is gitignored (personal overrides). The hooks/agents/skills/rules/output-styles are central in `~/.claude/`, not in the project.
 - `CLAUDE.md` and `CHANGELOG.md` are committed.
-- `docs/` IS committed — it is the portable contract of the project (see `docs/README.md`). The template seeds `docs/backend.md` (API), `docs/user-stories.md` (what the user can do), and `docs/conventions.md` (how to write the code — a portable mirror of the central rules for editors without Claude Code); the user fills them and runs `/update-docs` whenever a contract or rule changes. Each doc is self-maintained. The visual contract is not seeded: `/implement-ui` creates `docs/design/` the first time a UI is designed or a legacy `docs/ui.md` is migrated.
+- `docs/` IS committed — it is the portable contract of the project (see `docs/README.md`). The template seeds `docs/backend.md` (API), `docs/user-stories.md` (what the user can do), and `docs/conventions.md` (how to write the code — a portable mirror of the central rules for editors without Claude Code); the user fills them and runs `/update-docs` whenever a contract or rule changes. Each doc is self-maintained. The visual contract is not seeded: `/implement-ui` creates `docs/design/` the first time a UI is designed or existing design docs are migrated.
 
 ## 7b. Branch workflow preference
 
