@@ -1,7 +1,7 @@
 ---
 name: update-docs
-description: Updates docs/ and docs/design/ so they reflect contract changes in the current diff — backend endpoints, user-facing capabilities (user stories), and the design (screens, design tokens, and component or screen specs, written back to the Design canvas when the code moved first). Use proactively before committing when a task may have changed a contract (a new/changed endpoint, a screen or component, a token, or a user-facing capability). Proposes the edits for confirmation before writing.
-allowed-tools: Bash(git diff:*) Bash(git status:*) Glob Read Edit Write
+description: Updates docs/ and docs/design/ so they reflect contract changes in the current diff (or the whole branch since main) — backend endpoints, user-facing capabilities (user stories), and the design (screens, design tokens, and component or screen specs, written back to the Design canvas when the code moved first). Use proactively before committing when a task may have changed a contract (a new/changed endpoint, a screen or component, a token, or a user-facing capability). Proposes the edits for confirmation before writing.
+allowed-tools: Bash(git diff:*) Bash(git status:*) Bash(git branch:*) Bash(git merge-base:*) Bash(git log:*) Glob Read Edit Write
 ---
 
 # Update docs
@@ -19,16 +19,41 @@ nothing less.
 ### Current diff (staged + unstaged)
 
 ```!
-git diff --cached
+git diff --cached -- ':(exclude)package-lock.json' ':(exclude)pnpm-lock.yaml' ':(exclude)yarn.lock' ':(exclude)bun.lockb' ':(exclude)*.lock' ':(exclude)go.sum'
 ```
 
 ```!
-git diff
+git diff -- ':(exclude)package-lock.json' ':(exclude)pnpm-lock.yaml' ':(exclude)yarn.lock' ':(exclude)bun.lockb' ':(exclude)*.lock' ':(exclude)go.sum'
 ```
 
 > Staged + unstaged together cover the same ground as `git diff HEAD`, which
 > exits 128 in a repo with no commits and would abort the whole skill (the same
-> fix `changes` and `audit` carry).
+> fix `changes` and `audit` carry). Lockfiles are excluded: they never carry a
+> contract and can bury the diff.
+
+### This branch (when asked)
+
+The default scope is the working tree above. When the request asks for the
+branch ("this branch", "before merging", "since main"), also cover **this
+branch**: the commits since the branch left main, combined with whatever is
+still uncommitted above. At merge time all the work is already committed, so
+the working tree alone shows nothing. From here on, "the diff" means both.
+
+Run these as ordinary Bash steps, one at a time — never as an injected block:
+any of them can fail (no `main`, HEAD on main itself, no commits yet), and a
+failing injected command aborts the whole skill.
+
+1. `git branch --show-current` and `git branch --list main master`. The
+   default branch is `main` if it exists, else `master`. If neither exists,
+   or the current branch IS the default branch, say so in one line and work
+   from the working tree only.
+2. `git merge-base <default> HEAD` gives `<base>`. If it fails, say so and
+   fall back to the working tree.
+3. `git log --oneline <base>..HEAD`, then
+   `git diff <base>...HEAD -- ':(exclude)package-lock.json' ':(exclude)pnpm-lock.yaml' ':(exclude)yarn.lock' ':(exclude)bun.lockb' ':(exclude)*.lock' ':(exclude)go.sum'`.
+
+Files the branch added are in that diff in full; only still-untracked files
+need the `Read` below.
 
 ### Files added or removed
 
@@ -184,7 +209,8 @@ to backfill the entire history in one go.
 
 After your edits (or the "nothing to update" message), summarize in 1-3
 bullets:
-- what contract change you detected (or "none");
+- what contract change you detected (or "none"), and the scope you read
+  (working tree, or this branch plus the working tree);
 - which `docs/` or `docs/design/` file(s) you edited (or "none");
 - anything ambiguous you had to guess — flag it so the user can correct.
 

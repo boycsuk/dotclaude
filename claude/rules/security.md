@@ -12,7 +12,7 @@ paths:
 
 # Security
 
-> Review with the same or more rigor than human-written code. Run `/audit` (Security category, Uncommitted-changes scope) before merging anything that touches I/O, auth, or dependencies.
+> Review with the same or more rigor than human-written code. Run `/audit` (Security category, This-branch scope) before merging anything that touches I/O, auth, or dependencies.
 
 ## Secure code
 

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `/changes` and `/update-docs` take a "this branch" scope (the commits since the branch left main, plus uncommitted work), so they still see the work at merge time when the working tree is clean. The project template and `rules/security.md` now recommend `/audit` with the This-branch scope before merging I/O, auth or dependency changes.
 - `/audit` takes arguments (`[defects|improve] [categories…] [light|medium|deep] [uncommitted|branch|<path>]`): exact words pre-answer their question and only the rest are asked; depth is never inferred, and Medium/Deep still state their agent count. Defect mode gains a "This branch" scope: the commits since the branch left main plus uncommitted work, falling back to uncommitted changes on main or without a trunk.
 - `/verify` runs the Test / Lint / Typecheck commands declared in the project's CLAUDE.md first, falling back to stack detection per step, and detects Maven, Gradle, .NET, Ruby (rspec / rake test) and Swift projects — the stacks `turn-end-notice` and the LSP catalog already supported, where `/verify` answered "no tests configured".
 - `/resume-context` reports work in flight: a `SPEC*.md` with its steps and open questions, design units not yet `verified` in `docs/design/README.md`, and local branches not merged into main.
@@ -166,6 +167,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--remove-obsolete-mcp` for `init.sh`/`init.ps1`: removes the MCP servers listed in `obsolete.json` from `.mcp.json`, with their `mcp__<name>` permission rules.
 
 ### Changed
+- `/update-docs` leaves lockfiles out of its diffs, like `/changes`.
 - `/audit` is a short router (modes, arguments, the audit-versus-fix cost note); the defect flow moved to `references/defect-mode.md`, so an improve-mode run no longer loads it and what compaction re-attaches stays small. Its description, loaded in every session, went from 913 to 428 characters and leads with when to use it.
 - `/commit` asks its branch, docs and missing-CHANGELOG questions in one call, and whether to delete the merged branch inside the commit confirmation (still its own question, effective only if the merge completes). It offers `/update-docs` first when the diff looks like a contract change and nothing under `docs/` changed, leaves lockfiles out of the full diff it reviews, and skips re-running `/verify` when a pass was reported after the last edit outside `docs/**`, `CHANGELOG.md`, `README.md` and `CONTRIBUTING.md`, so `/verify` → `/update-docs` → `/commit` runs the suite once.
 - The repo's `global/.claude/` becomes `claude/`, and `templates/` moves into it: everything installed into `~/.claude/` now lives in one folder at the same relative path. Installed paths do not change. The folder has no dot so Claude Code does not load the central config as this repo's own project config. `sync-mirror-docs` also matches the new `claude/rules/` source path.
