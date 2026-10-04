@@ -186,6 +186,37 @@ def local_settings(root, data):
         json.dump(data, fh)
 
 
+def transcript_prompt(text, ts="2026-01-01T00:00:00Z"):
+    """A transcript entry for a prompt the user typed: it starts a turn."""
+    return {"type": "user", "message": {"role": "user", "content": text}, "timestamp": ts}
+
+
+def transcript_call(name, ts="2026-01-01T00:00:01Z", **tool_input):
+    """A transcript entry for one tool call, shaped like a live Claude Code transcript."""
+    return {"type": "assistant", "timestamp": ts,
+            "message": {"role": "assistant", "content": [
+                {"type": "tool_use", "id": uuid.uuid4().hex, "name": name, "input": tool_input}]}}
+
+
+def transcript_result():
+    """A tool result entry: a user entry with list content, which does not start a turn."""
+    return {"type": "user", "message": {"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": "x", "content": "ok"}]}}
+
+
+def write_transcript(folder, entries, name="session.jsonl", padding=0):
+    """Write `entries` as a JSONL transcript (after `padding` bytes of filler and one bad line); return its path."""
+    path = os.path.join(folder, name)
+    with open(path, "w", encoding="utf-8") as fh:
+        if padding:
+            filler = json.dumps({"type": "attachment", "text": "x" * 1000}) + "\n"
+            fh.write(filler * (padding // len(filler) + 1))
+        fh.write("garbage line that is not json\n")
+        for entry in entries:
+            fh.write(json.dumps(entry) + "\n")
+    return path
+
+
 def cli(description=None):
     """The matrices' shared command line: --pwsh PATH runs every case through PowerShell too."""
     ap = argparse.ArgumentParser(description=description)

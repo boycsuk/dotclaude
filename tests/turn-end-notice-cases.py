@@ -200,31 +200,8 @@ def case_garbage_input(tmp, pwsh):
 
 # --- transcript fixtures: the shapes a live Claude Code transcript uses -------
 
-def prompt(text, ts="2026-01-01T00:00:00Z"):
-    return {"type": "user", "message": {"role": "user", "content": text}, "timestamp": ts}
-
-
-def call(name, ts="2026-01-01T00:00:01Z", **tool_input):
-    return {"type": "assistant", "timestamp": ts,
-            "message": {"role": "assistant", "content": [
-                {"type": "tool_use", "id": uuid.uuid4().hex, "name": name, "input": tool_input}]}}
-
-
-def result():
-    return {"type": "user", "message": {"role": "user", "content": [
-        {"type": "tool_result", "tool_use_id": "x", "content": "ok"}]}}
-
-
-def transcript(tmp, entries, name="session.jsonl", padding=0):
-    path = os.path.join(tmp, name)
-    with open(path, "w", encoding="utf-8") as fh:
-        if padding:
-            filler = json.dumps({"type": "attachment", "text": "x" * 1000}) + "\n"
-            fh.write(filler * (padding // len(filler) + 1))
-        fh.write("garbage line that is not json\n")
-        for entry in entries:
-            fh.write(json.dumps(entry) + "\n")
-    return path
+prompt, call, result, transcript = (pyhook.transcript_prompt, pyhook.transcript_call,
+                                    pyhook.transcript_result, pyhook.write_transcript)
 
 
 def tested_repo(tmp):

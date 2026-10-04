@@ -35,9 +35,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "_li
 
 import hookio  # noqa: E402
 import shellwords  # noqa: E402
+from transcript import last_turn, subagents_dir, tail_entries, tool_calls  # noqa: E402
 
 GIT_TIMEOUT = 2          # an unbounded git on a huge or locked repo would sit in the turn-end path
-TAIL_BYTES = 2_000_000
 NOT_CODE = re.compile(r"\.(md|txt|lock|json|ya?ml|toml|cfg|ini)$|(^|/)(CHANGELOG|README|LICENSE)")
 EDIT_TOOLS = ("Edit", "Write", "NotebookEdit", "MultiEdit")
 WEB_TOOLS = ("WebSearch", "WebFetch")
@@ -77,55 +77,6 @@ def changelog_finding(payload, top):
     if not code or not hookio.first_time(payload, top + "\0" + "\0".join(sorted(code))):
         return None
     return f"CHANGELOG.md not updated — {len(code)} changed file(s): {' '.join(code[:3])}. /commit drafts the entry"
-
-
-def tail_entries(path):
-    """The JSON objects in the last TAIL_BYTES of a JSONL file; [] when it cannot be read."""
-    try:
-        size = os.path.getsize(path)
-        with open(path, "rb") as fh:
-            fh.seek(max(0, size - TAIL_BYTES))
-            data = fh.read()
-    except (OSError, TypeError, ValueError):
-        return []
-    lines = data.split(b"\n")
-    if size > TAIL_BYTES:
-        lines = lines[1:]                        # the first line was cut by the seek
-    entries = []
-    for line in lines:
-        try:
-            entry = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(entry, dict):
-            entries.append(entry)
-    return entries
-
-
-def tool_calls(entries):
-    """(name, input, timestamp) of every tool_use block, in order."""
-    calls = []
-    for entry in entries:
-        message = entry.get("message")
-        content = message.get("content") if isinstance(message, dict) else None
-        if entry.get("type") != "assistant" or not isinstance(content, list):
-            continue
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "tool_use":
-                inp = block.get("input") if isinstance(block.get("input"), dict) else {}
-                calls.append((str(block.get("name", "")), inp, entry.get("timestamp")))
-    return calls
-
-
-def last_turn(entries):
-    """The entries after the last prompt the user typed (a user entry whose content is a string)."""
-    for i in range(len(entries) - 1, -1, -1):
-        entry = entries[i]
-        message = entry.get("message")
-        if (entry.get("type") == "user" and not entry.get("isSidechain")
-                and isinstance(message, dict) and isinstance(message.get("content"), str)):
-            return entries[i + 1:]
-    return entries
 
 
 def runs_tests(command, shell="bash"):
@@ -183,9 +134,10 @@ def epoch(timestamp):
 
 def subagent_ran_tests(transcript_path, since):
     """True when a subagent transcript written after `since` (epoch seconds) ran tests."""
-    if since is None or not transcript_path.endswith(".jsonl"):
+    folder = subagents_dir(transcript_path)
+    if since is None or not folder:
         return False
-    for path in glob.glob(os.path.join(transcript_path[:-len(".jsonl")], "subagents", "agent-*.jsonl")):
+    for path in glob.glob(os.path.join(folder, "agent-*.jsonl")):
         try:
             if os.path.getmtime(path) <= since:
                 continue
