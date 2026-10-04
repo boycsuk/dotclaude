@@ -4,6 +4,11 @@
 # Plan files generated during plan mode
 .claude/plans/
 
+# Working specs written by /plan-feature (root only: a spec archived under
+# docs/ once the feature ships is meant to be committed)
+/SPEC.md
+/SPEC-*.md
+
 # Subagent memory, local scope (`memory: local` in an agent's frontmatter).
 # The `project` scope writes to .claude/agent-memory/ and IS meant to be
 # committed — that is the difference between the two scopes.

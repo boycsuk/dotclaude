@@ -1,6 +1,7 @@
 ---
 name: plan-feature
 description: Structures plan mode for new features using the "interview first" pattern. Interviews the user before planning to surface implicit assumptions, then produces a SPEC.md ready to implement in a fresh session. Use proactively when the user describes a non-trivial feature (more than ~3 files, ambiguous requirements, or an architectural decision) before writing any code.
+argument-hint: "[feature description]"
 disallowed-tools: Edit NotebookEdit
 ---
 
@@ -13,6 +14,8 @@ For non-trivial features (>3 files, ambiguous requirements, architectural decisi
 > The `disallowed-tools` above make "don't implement yet" deterministic for the invocation turn (`Write` stays available for SPEC.md itself); it is not a whole-session guarantee.
 
 ## 1. Interview the user
+
+If the skill was invoked with arguments (an `ARGUMENTS:` line at the end of this skill), they are the feature description: it seeds the interview, it does not replace it. Skip only the questions it answers outright, and ask every one it leaves open.
 
 Clarify before planning. At minimum, cover:
 - What is the expected end-state behavior?
@@ -44,7 +47,7 @@ Once the spec is clear, write a plan with these sections:
 
 Save the plan to `SPEC.md` at the project root. If a `SPEC.md` already exists, ask via `AskUserQuestion` whether to overwrite it or write `SPEC-<slug>.md` instead — never clobber a spec silently. **Do not implement anything yet.**
 
-`SPEC.md` is a working document, not a deliverable: it is normally left untracked (the template's `.gitignore` does not commit it), and once the feature is implemented, delete it or archive it under `docs/` — decide which with the user at that point.
+`SPEC.md` is a working document, not a deliverable: it is normally left untracked (the template's `.gitignore` ignores `SPEC.md` and `SPEC-*.md` at the project root), and once the feature is implemented, delete it or archive it under `docs/` — decide which with the user at that point.
 
 ## 5. Recommend next step
 
