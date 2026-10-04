@@ -18,6 +18,7 @@ import os
 import shutil
 import sys
 import tempfile
+import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pyhook  # noqa: E402
@@ -129,6 +130,22 @@ def main():
             if problems:
                 failures += 1
                 print(f"  FAIL [{runner}] {label}: {'; '.join(problems)}")
+
+    # Within one session the full note comes once per file; later edits get a
+    # one-line pointer that still names the spec.
+    for runner, _ in pyhook.runners(args.pwsh):
+        checked += 1
+        root = project()
+        repeat = dict(payload("src/components/data-table.css"), session_id=uuid.uuid4().hex)
+        notes = []
+        for _ in range(2):
+            code, out, err = pyhook.run("design-sync", repeat, cwd=root,
+                                        pwsh=PWSH if runner == "ps" else None, env=pyhook.home_env(scratch()))
+            notes.append(context_of(out)[0] or "")
+        first, second = notes
+        if "artboard" not in first or "artboard" in second or "data-table/README.md" not in second:
+            failures += 1
+            print(f"  FAIL [{runner}] repeat edit: first={first[:80]!r} second={second[:120]!r}")
 
     # Malformed payloads must never crash an advisory hook.
     for runner, _ in pyhook.runners(args.pwsh):

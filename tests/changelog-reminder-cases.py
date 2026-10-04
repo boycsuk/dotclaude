@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pyhook  # noqa: E402
@@ -52,12 +53,14 @@ def make_repo(tmp, files, changelog=True, commit_first=True):
     return tmp
 
 
-def run_hook(repo, pwsh=None, stop_hook_active=False, session_cwd=None):
+def run_hook(repo, pwsh=None, stop_hook_active=False, session_cwd=None, session=None):
     payload = json.dumps({
         "cwd": session_cwd or repo,
         "hook_event_name": "Stop",
         "stop_hook_active": stop_hook_active,
-        "session_id": "test",
+        # A fresh session per call unless a case shares one: the notice
+        # speaks once per change set within a session.
+        "session_id": session or uuid.uuid4().hex,
         "last_assistant_message": "done",
     })
     cmd = pyhook.argv("changelog-reminder", pwsh)
@@ -175,6 +178,19 @@ def case_missing_cwd(tmp, pwsh):
     return None
 
 
+def case_once_per_change_set(tmp, pwsh):
+    """The same changed files at the next turn end say nothing; a new one speaks again."""
+    repo = make_repo(tmp, {"app.py": "x = 1\n"})
+    session = uuid.uuid4().hex
+    problem = (expect_message(repo, pwsh, "first turn end", must_mention="/commit", session=session)
+               or expect_silent(repo, pwsh, "same change set, next turn end", session=session))
+    if problem:
+        return problem
+    with open(os.path.join(repo, "other.py"), "w") as fh:
+        fh.write("y = 2\n")
+    return expect_message(repo, pwsh, "a new changed file", must_mention="2 changed", session=session)
+
+
 def case_garbage_input(tmp, pwsh):
     cmd = pyhook.argv("changelog-reminder", pwsh)
     p = subprocess.run(cmd, input="not json at all", capture_output=True,
@@ -197,6 +213,7 @@ CASES = [
     ("payload without cwd exits cleanly", case_missing_cwd),
     ("a session in a subdirectory still warns", case_session_in_subdirectory),
     ("garbage stdin exits cleanly", case_garbage_input),
+    ("speaks once per change set in a session", case_once_per_change_set),
 ]
 
 

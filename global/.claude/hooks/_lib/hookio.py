@@ -61,6 +61,36 @@ def granted_opt_out(text):
     return m.group(1) if m else None
 
 
+def first_time(payload, key):
+    """True the first time this hook sees `key` in this session, recording it; True without a session_id.
+
+    Lets a reminder that would repeat on every turn or edit speak once. State
+    lives in the system temp folder, one small file per session and hook, and
+    any error reading or writing it means "first time": a lost reminder is
+    worse than a repeated one.
+    """
+    session = payload.get("session_id")
+    if not isinstance(session, str) or not session:
+        return True
+    import hashlib
+    import tempfile
+    digest = hashlib.sha1(session.encode("utf-8")).hexdigest()[:16]
+    path = os.path.join(tempfile.gettempdir(), "dotclaude-hooks", f"{hook_name()}-{digest}.seen")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            if key in fh.read().splitlines():
+                return False
+    except OSError:
+        pass
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(key.replace("\n", " ") + "\n")
+    except OSError:
+        pass
+    return True
+
+
 def _emit(obj):
     # Windows consoles default to a legacy code page; the harness reads UTF-8.
     out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")

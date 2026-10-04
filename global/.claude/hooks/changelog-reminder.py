@@ -10,7 +10,8 @@ still honoured so a future blocking path cannot forget it.
 
 A repo without CHANGELOG.md has not opted into keeping one, and docs, config
 and lockfiles are not the "code changed" this is about: saying so anyway would
-cry wolf and teach the model to ignore the reminder.
+cry wolf and teach the model to ignore the reminder. For the same reason it
+speaks once per set of changed files in a session, not at every turn end.
 """
 
 import os
@@ -63,10 +64,10 @@ def main():
     if not changed or "CHANGELOG.md" in changed:
         return 0
     code = [p for p in changed if not NOT_CODE.search(p)]
-    if not code:
+    if not code or not hookio.first_time(payload, top + "\0" + "\0".join(sorted(code))):
         return 0
-    hookio.notice(f"CHANGELOG.md not updated — {len(code)} changed file(s): {' '.join(code[:3])} "
-                  "(A task is done only when it compiles, passes tests, and is logged in CHANGELOG.md.)")
+    hookio.notice(f"CHANGELOG.md not updated — {len(code)} changed file(s): {' '.join(code[:3])}. "
+                  "/commit drafts the entry.")
     return 0
 
 

@@ -7,6 +7,8 @@ design that trails its code is how a regenerated spec later resets intentional
 changes. Delivered as additionalContext: the edit is legitimate and must never
 be gated, and stderr at exit 0 never reaches the model. Silent in projects
 without docs/design/, on files no spec names, and on the specs themselves.
+The full note is given once per file per session; later edits of that file
+get a one-line pointer, since building a component means editing it often.
 """
 
 import glob
@@ -68,7 +70,10 @@ def main():
     if not target or target.startswith("docs/design/"):
         return 0
     specs = specs_naming(target, root)
-    if specs:
+    if specs and not hookio.first_time(payload, target):
+        hookio.context("PostToolUse", f"NOTE: {target} implements {', '.join(specs)}; keep it in step "
+                                      "as in the earlier note.")
+    elif specs:
         hookio.context("PostToolUse", (
             f"NOTE: {target} implements {', '.join(specs)}. If this edit changed what that spec "
             "describes (parameters, layout, sizes, states, copy), keep the design in step before "
