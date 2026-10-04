@@ -117,10 +117,25 @@ def scratch_roots(payload):
     return [os.path.normcase(os.path.realpath(r)) for r in roots if isinstance(r, str) and r]
 
 
+def expand_vars(word):
+    """`word` with $NAME, ${NAME}, ${NAME:-default} and PowerShell's $env:NAME resolved from the environment.
+
+    The hook runs in the environment the command will, so "${TMPDIR:-/tmp}/x"
+    names the temp folder. A variable that resolves to nothing stays as
+    written, and the path is then judged as a relative one: unknown is never
+    assumed to be scratch space.
+    """
+    def braced(m):
+        value = os.environ.get(m.group(1))
+        return value if value else (m.group(2) if m.group(2) is not None else m.group(0))
+    word = re.sub(r"\$\{(\w+)(?::?-([^}]*))?\}", braced, word)
+    return re.sub(r"\$(?:env:)?(\w+)", lambda m: os.environ.get(m.group(1)) or m.group(0), word)
+
+
 def outside_scratch(target, cwd, roots):
     if target.strip().lower() in NOT_A_FILE:
         return False
-    path = os.path.normcase(os.path.realpath(writes.absolute(target, cwd)))
+    path = os.path.normcase(os.path.realpath(writes.absolute(expand_vars(target), cwd)))
     return not any(path == r or path.startswith(r.rstrip(os.sep) + os.sep) for r in roots)
 
 

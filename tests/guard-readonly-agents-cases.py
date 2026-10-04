@@ -17,6 +17,7 @@ point at a sibling), since a project under temp would be writable by design.
 """
 
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -57,6 +58,10 @@ CASES = [
     ("researcher", "grep -rn TODO .",                     ALLOW, "searching"),
     ("researcher", "python3 TMP/repro.py",                ALLOW, "running a scratch script"),
     ("researcher", "cd TMP && echo x > probe.txt",        ALLOW, "a relative write after cd into temp"),
+    ("researcher", 'echo x > "${TMPDIR:-/nowhere}/probe.txt"', ALLOW, "${VAR:-default} naming the temp folder"),
+    ("researcher", "echo x > $TMPDIR/probe.txt",          ALLOW, "$VAR naming the temp folder"),
+    ("researcher", 'echo x > "${NO_SUCH_VAR:-TMP}/probe.txt"', ALLOW, "an unset variable falls back to its default"),
+    ("researcher", "echo x > $NO_SUCH_VAR/app.py",        DENY, "an unresolvable variable is not assumed to be scratch"),
     ("researcher", "cd TMP && echo x > PROJECT/app.py",   DENY, "an absolute project path after cd into temp"),
     # --- git ---------------------------------------------------------------
     ("researcher", "git log --oneline -5",                ALLOW, "history"),
@@ -126,8 +131,9 @@ def build():
 
 
 def expand(command, home, project, hooktmp, scratch):
+    # Whole-word tokens only: "TMP" must not rewrite the "$TMPDIR" a case tests.
     for token, path in (("SCRATCH", scratch), ("PROJECT", project), ("HOME", home), ("TMP", hooktmp)):
-        command = command.replace(token, path.replace("\\", "/"))
+        command = re.sub(rf"(?<![\w${{]){token}(?!\w)", lambda _m, p=path: p.replace("\\", "/"), command)
     return command
 
 
