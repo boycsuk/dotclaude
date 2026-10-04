@@ -167,6 +167,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--remove-obsolete-mcp` for `init.sh`/`init.ps1`: removes the MCP servers listed in `obsolete.json` from `.mcp.json`, with their `mcp__<name>` permission rules.
 
 ### Changed
+- `/init-project --update` runs the drift report, the CLAUDE.md bullet diff and the obsolete-artifact check before the deploy, asks every decision in as few questions as possible and prints one command (with `--remove-obsolete-mcp` when chosen), so the user runs the terminal once; only the chosen bullets are inserted after `deploy OK`. It declares `argument-hint: [--update]`, and an explicit `--update` forces update mode.
 - `/update-docs` leaves lockfiles out of its diffs, like `/changes`.
 - `/audit` is a short router (modes, arguments, the audit-versus-fix cost note); the defect flow moved to `references/defect-mode.md`, so an improve-mode run no longer loads it and what compaction re-attaches stays small. Its description, loaded in every session, went from 913 to 428 characters and leads with when to use it.
 - `/commit` asks its branch, docs and missing-CHANGELOG questions in one call, and whether to delete the merged branch inside the commit confirmation (still its own question, effective only if the merge completes). It offers `/update-docs` first when the diff looks like a contract change and nothing under `docs/` changed, leaves lockfiles out of the full diff it reviews, and skips re-running `/verify` when a pass was reported after the last edit outside `docs/**`, `CHANGELOG.md`, `README.md` and `CONTRIBUTING.md`, so `/verify` → `/update-docs` → `/commit` runs the suite once.
@@ -226,6 +227,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `check.py` no longer reads a code-extension list from a hook (check 6 compares the two path-scoped rules only).
 
 ### Fixed
+- `/init-project` no longer says feature branches are merged to main via PR; it matches `/commit`'s local `--no-ff` merge.
 - `/resume-context` no longer aborts on a repository with no commits (`git log` moved out of the injected block), and sets `background: false` so its summary arrives in the same turn instead of as a later notification, like `/verify` and `/changes`.
 - `/commit` no longer aborts on a repository with no commits: `git log` runs as an ordinary step instead of in the injected block, where its exit 128 killed the first commit after `/init-project`.
 - `guard-destructive`, `guard-dependencies` and `guard-push-main` see the real program behind a shell keyword or a `time` flag: `for …; do python3 - <<'EOF'`, `if …; then`, `{ … }`, `! …` and `time -p …` hid it, so a heredoc-fed interpreter in a loop, `curl … | time -p bash`, `time -p rm -rf ~`, `time -p npm install x` and `time -p git push origin main` all ran unjudged. `unwrap()` now skips keywords, and `time` is stripped as a wrapper with its flags instead of as a bare keyword.

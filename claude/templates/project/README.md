@@ -68,7 +68,7 @@ Skills that try to copy files into `.claude/` via shell blocks hit two reliabili
 
 The reusable core (hooks, agents, skills, rules, output-styles) is central, so to pick up master-repo improvements **in every project at once**, run `git pull && ./install.sh` in the dotclaude clone — nothing per project.
 
-Re-running `/init-project --update` inside a project only touches the per-project surface: it seeds missing files (CLAUDE.md, docs/, the settings stub) and drift-reports `settings.local.json.example` if you edited it. `CLAUDE.md`, `CHANGELOG.md`, and `docs/*` are never overwritten. After the deploy, `/init-project` runs **CLAUDE.md bullet reconciliation**: it compares your `CLAUDE.md` against `CLAUDE.md.template` per section and offers any new bullets via `AskUserQuestion` multiSelect — you pick which to add, nothing is overwritten without consent. See DESIGN.md §19, §23.
+Re-running `/init-project --update` inside a project only touches the per-project surface: it seeds missing files (CLAUDE.md, docs/, the settings stub) and drift-reports `settings.local.json.example` if you edited it. `CLAUDE.md`, `CHANGELOG.md`, and `docs/*` are never overwritten. Before printing the deploy command, `/init-project` runs **CLAUDE.md bullet reconciliation**: it compares your `CLAUDE.md` against `CLAUDE.md.template` per section and offers any new bullets via `AskUserQuestion` multiSelect, together with every other pending decision, so you run the terminal once — you pick which bullets to add, they are inserted after the deploy, and nothing is overwritten without consent. See DESIGN.md §19, §23.
 
 ## How to extend
 
@@ -225,7 +225,7 @@ Components in this template that override:
 |---|---|---|
 | `skills/verify` | `haiku` + `context: fork` | Mechanical: runs commands and reports pass/fail. The fork is what keeps `haiku` from applying to the rest of the caller's turn. |
 | `skills/changes` | `haiku` + `context: fork` | Mechanical: summarize a diff into bullets; the fork also keeps the full diff out of the main context. |
-| `skills/resume-context` | `haiku` + `context: fork` | Mechanical: read three files and structure them. Without the fork, `haiku` ran the rest of the session's first turn. |
+| `skills/resume-context` | `haiku` + `context: fork` | Mechanical: read the docs, the log and the work in flight, and structure them. Without the fork, `haiku` ran the rest of the session's first turn. |
 
 Everything else uses `inherit`. Specifically, do NOT downgrade these to `haiku`:
 - `researcher` — synthesizing architecture and cross-module flow is reasoning, not lookup. Quick "where is X" lookups go to the built-in Explore agent instead (smaller context; it runs on the session model since Claude Code v2.1.198).

@@ -1,6 +1,7 @@
 ---
 name: init-project
 description: Sets up the portable .claude/ template in the user's project — stack detection, an MCP/DB interview, and placeholder personalization (the full procedure is in the body). Use when the user invokes /init-project or asks to scaffold the dotclaude setup into a project.
+argument-hint: "[--update]"
 disable-model-invocation: true
 allowed-tools: Bash(ls:*) Bash(cat:*) Bash(grep:*) Bash(find:*) Bash(uname:*) Bash(pwd:*) Bash(python3:*) Bash(test:*) Read Edit Write
 ---
@@ -16,9 +17,11 @@ This skill plans and personalizes a `.claude/` deployment, but **does not execut
 > **This file is a router — load detail on demand.** The heavy phases live in
 > `references/*.md` and are NOT in context until you read them. Read a
 > reference file with the `Read` tool only when the flow reaches that branch:
-> - `references/update-mode.md` — re-run path (§1b/§1c/§1d/§1e). Read only if step 1
->   finds an existing `.claude/`. §1e reconciles artifacts dotclaude stopped
->   shipping (obsolete MCP servers, directories).
+> - `references/update-mode.md` — re-run path (§1b/§1c/§1d/§1e). Read only when
+>   step 1 selects update mode (`--update` passed, or an existing `.claude/`).
+>   It analyses everything first and asks every decision before printing ONE
+>   command; §1e reconciles artifacts dotclaude stopped shipping (obsolete MCP
+>   servers, directories).
 > - `references/stack-interview.md` — stack / Docker / deployment / version
 >   pinning (§2/§2b/§2c/§2d). Read on a first-time deploy or the Reconfigure path.
 > - `references/mcp-and-db.md` — MCP authorization, the LSP plugin and SQL-stack
@@ -56,7 +59,7 @@ Ask for a short description: what the product does, who uses it, which pieces it
 
 Don't bring the description up again. Continue from §1 with the neutral flow. Later questions are presented in neutral order, without biased recommendations.
 
-### If this is a re-run (step 1 detects an existing `.claude/`)
+### If this is a re-run (`--update` passed, or step 1 detects an existing `.claude/`)
 
 Skip §0. The project already exists and its high-level description already lives in its CLAUDE.md. Asking again would be redundant.
 
@@ -67,9 +70,14 @@ Use the regular `Bash` tool to gather context. None of these need to be `!`-bloc
 - `pwd` — current project directory.
 - `uname -s` — `Linux` or `Darwin` → the user runs the `bash`/`init.sh` command in step 5. `MINGW*`, `MSYS*` or `CYGWIN*` means native Windows (Claude Code runs Bash through Git Bash there) → they run `init.ps1`; so does a `uname` that fails.
 - `uname -r` — if output contains `microsoft`, it's WSL → still the `bash` path.
-- `ls -la .claude` — **if `.claude/` already exists, this is a re-run.** Load `references/update-mode.md` and follow it instead of the first-time flow below.
+- `ls -la .claude` — **if `.claude/` already exists, this is a re-run**, unless the arguments below say otherwise.
 - `ls package.json pyproject.toml requirements.txt Cargo.toml go.mod Gemfile Makefile` — present files are stack signals.
 - `ls "$HOME/.claude/templates/project"` — must exist. If not, instruct the user to clone the dotclaude repo and run `./install.sh`.
+
+**Arguments decide first, detection second.** Whatever the user typed after `/init-project` reaches this skill as an `ARGUMENTS:` line at the end of this file (Claude Code appends it because the body has no argument placeholder).
+- `--update` among them **forces update mode**: load `references/update-mode.md` without waiting for the `.claude/` check (a project whose `.claude/` was deleted still has its CLAUDE.md; the deploy re-seeds the stub). If neither `.claude/` nor `CLAUDE.md` exists there is nothing to update — say so and ask via AskUserQuestion whether to run the first-time flow (from §0) or cancel.
+- No arguments → the `.claude/` check decides: present → load `references/update-mode.md` and follow it instead of the first-time flow below; absent → first-time flow.
+- Anything else → ignore it and tell the user `--update` is the only argument this skill takes.
 
 Tell the user which platform was detected and confirm before continuing.
 
@@ -94,6 +102,7 @@ Based on steps 1-4, choose the right flags. **Show the user this block verbatim*
 | `--codebase-memory` | User selected codebase-memory-mcp in §3. Merges the `codebase-memory-mcp` server (persistent code graph: callers, impact of a change, dead code, architecture) into `.mcp.json` AND its read-only tool names into the project `settings.json` `permissions.allow` (do not add them by hand). Exit 8 if the binary is missing. See `references/mcp-and-db.md`. |
 | `--lsp=<plugin>` | **Always** for a code project whose language has an official LSP plugin — map the language from §2 through `~/.claude/templates/project/lsp-plugins.json` (e.g. Python → `--lsp=pyright-lsp`, TypeScript/JavaScript → `--lsp=typescript-lsp`); repeat the flag for each main language. It runs `claude plugin install <plugin>@claude-plugins-official --scope project`, which records the plugin in `.claude/settings.json`. The language-server binary must be on PATH (the catalog has the install hint; the script warns if it is missing). No official plugin for the language (e.g. Bash, PowerShell) → tell the user and pass nothing; do NOT offer community plugins. See `references/mcp-and-db.md` §3b. |
 | `--update` | Re-run path (see `references/update-mode.md`). Informational: every deploy already skips files that exist, so it changes nothing by itself — but it tells the reader this is a re-deploy. Never on a first-time deploy. |
+| `--remove-obsolete-mcp` | Re-run path only, when the user chose in `references/update-mode.md` §1e to remove the obsolete MCP servers. Removes **every** server listed in `obsolete.json` from `.mcp.json`, plus their `mcp__<name>` rules and `enabledMcpjsonServers`/`disabledMcpjsonServers` entries. Combines with `--update` and every other flag in the same run. |
 
 ### Scaffold flags (first-time deploy only — re-runs skip files that exist)
 
@@ -123,6 +132,14 @@ bash ~/.claude/templates/project/init.sh --lsp=typescript-lsp --fullstack --runt
 ```
 cd <path from step 1>
 bash ~/.claude/templates/project/init.sh --update --lsp=pyright-lsp
+```
+
+**Re-run where the user also chose to drop the obsolete MCP servers and a leftover directory** (one block, one terminal visit — `references/update-mode.md` §1b):
+
+```
+cd <path from step 1>
+bash ~/.claude/templates/project/init.sh --update --ui --lsp=typescript-lsp --remove-obsolete-mcp
+rm -r .serena
 ```
 
 **CLI tool, no Docker, no deployment:**
@@ -248,7 +265,7 @@ Remind the user:
 
 ## 7b. Branch workflow preference
 
-The central `guard-push-main` hook is always on: it blocks force push (always) and direct pushes to `main`/`master` (configurable). By default it assumes **branching** — `feature/*` and `fix/*` branches, merged to main via PR. If the project will live entirely on main (solo project, prototype, scratch repo), the main-push block gets in the way.
+The central `guard-push-main` hook is always on: it blocks force push (always) and direct pushes to `main`/`master` (configurable). By default it assumes **branching** — `feature/*` and `fix/*` branches, merged into main locally with `--no-ff` (`/commit` offers the merge and pushes main, never the branch; no pull request involved). If the project will live entirely on main (solo project, prototype, scratch repo), the main-push block gets in the way.
 
 **Ask via AskUserQuestion:**
 
@@ -278,6 +295,8 @@ Use the regular `Bash` tool (a non-zero exit there is informative, not fatal):
 - Run `python3 ~/.claude/skills/init-project/scripts/detect-drift.py` once and read its lines. (Inline `python3 -c` is blocked by the central `guard-destructive` hook — the checks live in that script.)
   - If the user picked "Everything on main" in §7b: `ALLOW_PUSH_MAIN=TRUE`.
   - For every MCP flag in the command (`--xcode` → `xcode`, `--ui` → `playwright`, `--codebase-memory` → `codebase-memory-mcp`): its server must be listed in `MCP_SERVERS`. A merge failure only prints a WARN in the user's terminal and still ends in `deploy OK`, so a missing server here means it was NOT configured — say so, and do not add its permissions.
+  - `OBSOLETE_HOOKS=0`: every deploy prunes them, and a failed prune also only WARNs. Non-zero → say so and show the command again; `UNKNOWN` → the template manifest is missing (re-run `./install.sh` in the dotclaude clone).
+  - If the command carried `--remove-obsolete-mcp`: `OBSOLETE_MCP` must be empty. Otherwise the servers are still configured — say so.
 - If the user chose Refero: `claude mcp get refero` must exit 0. It is user scope, so it never appears in `MCP_SERVERS`; on exit 1, show the add line again.
 
 Summarize to the user what was deployed.
