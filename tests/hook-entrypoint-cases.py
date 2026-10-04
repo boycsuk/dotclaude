@@ -84,9 +84,9 @@ def main():
                           f" | {kind}: {body}   ({why}) {err.strip()[-160:]}")
                 elif want_decision == "ask":
                     reason = out["hookSpecificOutput"]["permissionDecisionReason"]
-                    if "ValueError" not in reason or f"case{i}" not in reason:
+                    if "ValueError" not in reason or not reason.startswith(f"[dotclaude case{i}] "):
                         failures += 1
-                        print(f"  FAIL [{name}] the ask must name the hook and the error: {reason!r}")
+                        print(f"  FAIL [{name}] the ask must open with the hook tag and name the error: {reason!r}")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

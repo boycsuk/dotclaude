@@ -55,8 +55,9 @@ PS_COPIES = {"copy-item", "move-item", "cpi", "mi", "copy", "move", "cp", "mv"}
 REDIRECT = re.compile(r"^(\d*|&)>>?\|?(.*)$")
 PROGRAM_PRODUCERS = {"echo", "printf"}
 INLINE_REASON = ("inline interpreter execution (python3 -c, node -e, bash -c, pwsh -c, or a program "
-                 "fed on stdin or written and run in the same command): put the code in a reviewable "
-                 "file with the Write tool, then run it")
+                 "fed on stdin or written and run in the same command). Instead: write the code to a "
+                 "file with the Write tool, then run that file in a separate command")
+USER_RUNS = "If it really is intended, the user runs it in their own terminal"
 
 # Used only when the quoting cannot be parsed: the patterns of the old
 # text-matching guard, so an unbalanced quote never opens a hole.
@@ -145,8 +146,12 @@ def judge_rm(name, args, shell):
         recursive = any(ps_flag(f, "recurse", 1) or short_bundle(f, "rR") for f in flags)
     else:
         recursive = any(f == "--recursive" or short_bundle(f, "rR") for f in flags)
-    if recursive and any(dangerous_target(p) for p in positional):
-        return "deny", "recursive delete of a dangerous path"
+    hit = next((p for p in positional if dangerous_target(p)), None) if recursive else None
+    if hit is not None:
+        return "deny", (f"recursive delete of a dangerous path ({hit}: the root, the working "
+                        f"directory, a parent, a system directory, or anything under the home "
+                        f"directory). Instead: give a path relative to the project, such as "
+                        f"node_modules or ./build. {USER_RUNS}")
     return None
 
 
@@ -159,8 +164,10 @@ def judge_find(args):
     deletes = "-delete" in args or any(
         a in ("-exec", "-execdir", "-ok") and i + 1 < len(args) and shellwords.basename(args[i + 1]) == "rm"
         for i, a in enumerate(args))
-    if deletes and any(dangerous_target(r) for r in roots or ["."]):
-        return "deny", "find deleting under a dangerous path"
+    hit = next((r for r in roots or ["."] if dangerous_target(r)), None) if deletes else None
+    if hit is not None:
+        return "deny", (f"find deleting under a dangerous path ({hit}). Instead: start find from a "
+                        f"narrower directory inside the project. {USER_RUNS}")
     return None
 
 
@@ -193,14 +200,16 @@ def judge_git(seg):
     force = git_option(flags, "--force", "f")
     if sub == "reset" and git_option(flags, "--hard"):
         if not action or re.match(r"^(origin/)?(main|master)$|^(HEAD|@)[~^]", action):
-            return "deny", "git reset --hard discards commits or work on a main branch"
+            return "deny", (f"git reset --hard discards commits or work on a main branch. Instead: "
+                            f"git stash, or reset on a feature branch. {USER_RUNS}")
         if action not in ("HEAD", "@"):
             return "ask", "git reset --hard to another commit discards uncommitted work and can drop commits"
     if sub == "clean" and force and any(short_bundle(f, "dx") for f in flags):
         return "ask", "git clean force-deletes untracked directories or ignored files"
     if sub == "branch" and (any(short_bundle(f, "D") for f in flags)
                             or (git_option(flags, "--delete", "d") and force)):
-        return "deny", "git branch -D force-deletes a branch whether or not it is merged"
+        return "deny", ("git branch -D force-deletes a branch whether or not it is merged. Instead: "
+                        f"git branch -d, which refuses an unmerged branch. {USER_RUNS}")
     if sub == "stash" and action in ("clear", "drop"):
         return "ask", f"git stash {action} discards stashed work"
     if (sub == "checkout" and force) or (sub == "switch" and (force or git_option(flags, "--discard-changes"))):
@@ -313,10 +322,12 @@ def judge(command, payload):
         if any(p.search(text) for p in FALLBACK):
             return "deny", ("its quoting cannot be parsed and it matches a destructive pattern "
                             "(recursive delete, reset --hard, download into a shell, inline "
-                            "interpreter or a write into ~/.claude)")
+                            "interpreter or a write into ~/.claude). Instead: fix the quoting so "
+                            "the command can be checked")
         return None, None
     if judge_downloads(command, shell):
-        return "deny", "piping a network download into a shell or interpreter (remote code execution)"
+        return "deny", ("piping a network download into a shell or interpreter (remote code "
+                        "execution). Instead: download it to a file, read it, then run the file")
     cwd = payload.get("cwd") if isinstance(payload.get("cwd"), str) else os.getcwd()
     asks = []
     for seg in segments:
@@ -331,8 +342,8 @@ def judge(command, payload):
             continue
         if judge_central(name, args, shell, cwd):
             return "deny", ("writing to the installed central config (~/.claude/...) through the shell. "
-                            "It is shared by every project and overwritten by install.sh: edit the "
-                            "source in the dotclaude repo (global/.claude/...) and run ./install.sh")
+                            "It is shared by every project and overwritten by install.sh. Instead: edit "
+                            "the source in the dotclaude repo (global/.claude/...) and run ./install.sh")
         verdict = None
         if lower == "rm" or (shell == "powershell" and lower in PS_REMOVE):
             verdict = judge_rm(lower, args, shell)
@@ -363,7 +374,7 @@ def main():
         return 0
     decision, reason = judge(command, payload)
     if decision == "deny":
-        hookio.deny(f"BLOCKED: {reason}. The user must run this manually if intentional.")
+        hookio.deny(f"BLOCKED: {reason}.")
     elif decision == "ask":
         hookio.ask(f"Confirm: {reason}.")
     return 0

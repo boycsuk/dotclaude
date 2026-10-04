@@ -68,23 +68,35 @@ def _emit(obj):
     out.flush()
 
 
+def hook_name():
+    """The running hook's file name without .py, e.g. "guard-destructive"."""
+    path = getattr(sys.modules.get("__main__"), "__file__", "") or ""
+    return os.path.splitext(os.path.basename(path))[0] or "hook"
+
+
+def _tagged(text):
+    # Every message names its hook, so a wrong one leads straight to the
+    # file and its tests/<hook>-cases.py matrix.
+    return f"[dotclaude {hook_name()}] {text}"
+
+
 def deny(reason):
     """PreToolUse: refuse the tool call; `reason` is shown to the model."""
     _emit({"hookSpecificOutput": {"hookEventName": "PreToolUse",
                                   "permissionDecision": "deny",
-                                  "permissionDecisionReason": reason}})
+                                  "permissionDecisionReason": _tagged(reason)}})
 
 
 def ask(reason):
     """PreToolUse: route the tool call to the user for confirmation."""
     _emit({"hookSpecificOutput": {"hookEventName": "PreToolUse",
                                   "permissionDecision": "ask",
-                                  "permissionDecisionReason": reason}})
+                                  "permissionDecisionReason": _tagged(reason)}})
 
 
 def context(event, text):
     """Inject advisory text into the model's context for `event`."""
-    _emit({"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}})
+    _emit({"hookSpecificOutput": {"hookEventName": event, "additionalContext": _tagged(text)}})
 
 
 def notice(text):
@@ -93,7 +105,7 @@ def notice(text):
     `systemMessage` is the one Stop output that does not continue the
     conversation: `decision: "block"`, exit 2 and `additionalContext` all do.
     """
-    _emit({"systemMessage": text})
+    _emit({"systemMessage": _tagged(text)})
 
 
 FEEDBACK_EXIT = 2
@@ -108,7 +120,7 @@ def feedback(text):
     `return hookio.feedback(msg)`.
     """
     err = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
-    err.write(text.rstrip("\n") + "\n")
+    err.write(_tagged(text.rstrip("\n")) + "\n")
     err.flush()
     return FEEDBACK_EXIT
 
@@ -137,11 +149,10 @@ def entrypoint(main):
         import traceback
         traceback.print_exc()
         path = getattr(sys.modules.get("__main__"), "__file__", "") or ""
-        name = os.path.splitext(os.path.basename(path))[0] or "hook"
         if _hook_kind(path) == "guard":
-            ask(f"the {name} guard crashed ({type(exc).__name__}: {exc}), so this command was not "
-                f"checked. Approve only if it is safe. A crash that repeats is a bug in "
-                f"global/.claude/hooks/{name}.py: fix it in the dotclaude repo and re-run ./install.sh.")
+            ask(f"this guard crashed ({type(exc).__name__}: {exc}), so the command was not checked. "
+                f"Approve only if it is safe. A crash that repeats is a bug in "
+                f"global/.claude/hooks/{hook_name()}.py: fix it in the dotclaude repo and re-run ./install.sh.")
         code = 0
     sys.exit(code or 0)
 
