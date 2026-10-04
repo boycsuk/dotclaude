@@ -47,7 +47,7 @@ Ask for a short description: what the product does, who uses it, which pieces it
 - **Docker**: "self-hosted / VPS / homelab" → bias toward Docker Compose; "Vercel / serverless / Cloudflare Workers" → advise against Compose.
 - **Deployment**: "SaaS for customers" → VPS or container platform; "tool that runs on my machine" → No deployment; mentions HTTPS / own domains → Caddy + Let's Encrypt.
 - **Versions**: explicit constraints ("the client's Ubuntu 20.04") narrow the options (Node 20 LTS, not 22).
-- **MCPs**: "scraping / E2E tests / web UI" → playwright; "tickets / Linear / Asana" → their MCP; "large or multi-service codebase / impact analysis / dead code" → codebase-memory; "iOS / macOS / Swift app" → xcode (only on a macOS host).
+- **MCPs**: "scraping / E2E tests / web UI" → playwright; "tickets / Linear / Asana" → their MCP; "large or multi-service codebase / impact analysis / dead code" → codebase-memory; "iOS / macOS / Swift app" → xcode (only on a macOS host); "UI / design / landing page" → refero (only when not configured yet, see `references/mcp-and-db.md`).
 - **DB**: "catalogs / users / transactions" → PostgreSQL; "cache / sessions / queues" → Redis; "documents / flexible JSON" → Mongo; "embedded / single machine / edge" → SQLite.
 
 **The bias is a suggestion, not a decision.** The user can always pick "Other" or a different option. **If they contradict the description** (said "daily scraper" but picks "Frontend"), don't push back: accept the change and keep biasing with the combined information.
@@ -138,6 +138,12 @@ Substitute the bash command with:
 
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\.claude\templates\project\init.ps1" [same flags]
+```
+
+**If the user chose Refero in §3**, add its line after the init command in the same block. It is the same on every OS, runs once per machine (user scope, not this project), and needs `/mcp` in a new session to sign in:
+
+```
+claude mcp add --scope user --transport http refero https://api.refero.design/mcp
 ```
 
 Tell the user to run the command, then come back to this session and confirm when it printed `init.sh: deploy OK` (or `init.ps1: deploy OK`).
@@ -270,6 +276,7 @@ Use the regular `Bash` tool (a non-zero exit there is informative, not fatal):
 - Run `python3 ~/.claude/skills/init-project/scripts/detect-drift.py` once and read its lines. (Inline `python3 -c` is blocked by the central `guard-destructive` hook — the checks live in that script.)
   - If the user picked "Everything on main" in §7b: `ALLOW_PUSH_MAIN=TRUE`.
   - For every MCP flag in the command (`--xcode` → `xcode`, `--ui` → `playwright`, `--codebase-memory` → `codebase-memory-mcp`): its server must be listed in `MCP_SERVERS`. A merge failure only prints a WARN in the user's terminal and still ends in `deploy OK`, so a missing server here means it was NOT configured — say so, and do not add its permissions.
+- If the user chose Refero: `claude mcp get refero` must exit 0. It is user scope, so it never appears in `MCP_SERVERS`; on exit 1, show the add line again.
 
 Summarize to the user what was deployed.
 

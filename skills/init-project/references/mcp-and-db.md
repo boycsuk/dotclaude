@@ -22,6 +22,8 @@ Ask via AskUserQuestion (multiSelect) which MCPs the user wants for this project
   see the section below before recommending it)
 - `xcode` — Apple's own Xcode bridge (iOS/macOS projects only; **offer it only on
   a macOS host with an Xcode project**, and see the section below before doing so)
+- `refero` — real design references for `/implement-ui` (projects with a UI;
+  user scope, not a flag — see the section below)
 
 Remember the selection. You will write the permissions and CLAUDE.md section in step 6.
 
@@ -145,6 +147,35 @@ Do not add a `mcp__playwright__*` wildcard: it would also allow
 `browser_evaluate`, `browser_run_code_unsafe` and `browser_file_upload`, which
 stay on ask. The server is pinned to one `@playwright/mcp` version in
 `mcp/playwright.json`; bump it there deliberately.
+
+### Refero (user scope, no flag)
+
+[Refero](https://refero.design) is a paid catalogue of real product design
+(styles, screens, flows) behind a remote MCP server. `/implement-ui` offers
+to research in it before drawing a canvas (its
+`references/design-research.md`). It belongs to the user's subscription, not
+to the project, so it is added once at **user scope** and never to
+`.mcp.json`: a committed entry would ask every collaborator to sign in to a
+service they may not pay for.
+
+- **Check first**, with the `Bash` tool: `claude mcp get refero`. Exit 0
+  means it is already configured: do not offer it, it already reaches every
+  project. Exit 1 means it is not.
+- **Offer it only** when it is not configured and the project has a UI (web,
+  desktop or mobile). Without a UI, leave it out of the list.
+- **On a yes**, step 5 prints, next to the init command, the line to run once
+  in the user's own terminal (same on Windows):
+
+  ```
+  claude mcp add --scope user --transport http refero https://api.refero.design/mcp
+  ```
+
+  then `/mcp` in a new session to sign in (OAuth; no token is stored in any
+  file). A user who signs in with a token instead adds
+  `--header "Authorization: Bearer <token>"`; never write that token into a
+  file.
+- It adds no permissions and no `{{MCP_SECTION}}` line: neither is
+  per-project.
 
 ## 3b. Code intelligence: the LSP plugin (`--lsp=<plugin>`)
 

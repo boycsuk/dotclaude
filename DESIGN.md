@@ -650,6 +650,18 @@ Designs are now made in Claude Code as Artifacts of the Design type: a `canvas.j
 - **Chosen ideas are routed, not built in place**: large or ambiguous to `/plan-feature`, UI changes to `/implement-ui` (design first when a `docs/design/` spec exists), small ones implemented here in series through `/commit`.
 - The defect category "Duplication & improvements" became "Duplication & simplification": with a mode called improvements, the old name invited the two to be confused.
 
+### 42. `implement-ui` can research the design in Refero first (revises §40) (2026-10-04)
+
+A canvas designed with no reference falls back on the model's defaults: the same palette, type scale and empty states every time. Refero is a paid, read-only MCP server over real product design: styles (tokens, roles and do/don't rules extracted from real sites), screens (web and iOS) and flows (multi-step journeys). Its tool reference is at doc.refero.design/mcp/tools.
+
+- **Asked, never assumed.** Step 1 asks whether to research first or design directly, and only when the session has the `refero_*` tools. Not every user has the subscription and not every UI needs research; without the tools the skill behaves as before and does not mention it.
+- **Research feeds the canvas; it does not replace it.** One primary style chosen by the user supplies the small system rule 1 of `design-canvas.md` asks for, as semantic roles rather than the source's names; screens and flows inform structure, states and copy, so fewer `TBD`s reach the spec. The canvas stays the contract everything after step 1 reads, so steps 2-6 are unchanged.
+- **Live tokens win.** When `docs/ui.md` already holds tokens, styles are skipped and only screens and flows are used.
+- **Provenance is recorded**, as a canvas note copied into `docs/design/README.md`, so a later session does not re-spend the monthly call quota re-researching.
+- **User scope, not a template fragment.** The entry holds no secret (OAuth, or a token passed by the user), but the subscription is the user's, not the project's: a committed `.mcp.json` entry would ask every collaborator to sign in to a service they may not pay for, and the question would repeat in every project. So `/init-project` asks in its MCP interview only when `claude mcp get refero` says it is not configured yet and the project has a UI, and on a yes prints the `claude mcp add --scope user` line next to the init command, for the user to run. No `--refero` flag, so `init.sh`/`init.ps1` are untouched.
+
+**Rejected:** installing Refero's own `refero-design` skill. It is a full brief-research-implement methodology that would compete with `implement-ui` for the same requests; only its research phase is useful here, and that phase is what `references/design-research.md` holds. Also rejected: using research in the verification gate. The gate compares against the user's canvas, not against a reference.
+
 ## Things deliberately not included
 
 - **Pre-baked stack variants.** See decision 2.

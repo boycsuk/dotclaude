@@ -91,7 +91,15 @@ default and minimum size in the screen header. Unstated narrow behaviour is
 | Screen | Status | Components |
 |--------|--------|------------|
 | [Orders](screens/orders.md) | implemented | `nav-bar`, `data-table` |
+
+## References
+
+- Style: <title> (<url>, Refero <uuid>)
+- Orders: <refero_url of each screen or flow it drew on>
 ```
+
+`## References` exists only when the canvas carries a `References` note
+(`design-research.md`); copy it from there.
 
 Status is `designed` (spec written), `implemented` (code exists) or
 `verified` (passed the visual gate with every acceptance line checked). The

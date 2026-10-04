@@ -1,6 +1,6 @@
 ---
 name: implement-ui
-description: Designs and implements a web or desktop UI, or implements one from a design reference (a Design canvas made with the Artifact tool, an HTML mockup, a screenshot, or a Claude Design handoff bundle), without drowning in it — when there is no design yet it builds a Design canvas with components as separate, parameterised artboards, extracts design tokens into docs/ui.md, turns the canvas into a per-screen and per-component spec under docs/design/, closes its open questions, agrees a component tree, then builds components first and screens after, one unit at a time, each gated on a screenshot-vs-reference check and its acceptance checklist. Use when the user hands over a design or mockup or asks to build, replicate, or restyle an interface beyond a trivial tweak.
+description: Designs and implements a web or desktop UI, or implements one from a design reference (a Design canvas made with the Artifact tool, an HTML mockup, a screenshot, or a Claude Design handoff bundle), without drowning in it — when there is no design yet it builds a Design canvas (optionally researched first in Refero, the user's design-reference MCP) with components as separate, parameterised artboards, extracts design tokens into docs/ui.md, turns the canvas into a per-screen and per-component spec under docs/design/, closes its open questions, agrees a component tree, then builds components first and screens after, one unit at a time, each gated on a screenshot-vs-reference check and its acceptance checklist. Use when the user hands over a design or mockup or asks to build, replicate, or restyle an interface beyond a trivial tweak.
 ---
 
 # Implement UI
@@ -41,7 +41,11 @@ not a listing to transcribe.
 ## 1. Make the design (only when there is none)
 
 When the user wants a UI and brings no reference, the first deliverable is a
-Design canvas, not code. Read `references/design-canvas.md` and build the
+Design canvas, not code. If the session has the Refero MCP tools
+(`refero_search_styles` and siblings), ask through AskUserQuestion whether to
+research references in Refero first or design the canvas directly; on
+research, follow `references/design-research.md` before the first artboard.
+Read `references/design-canvas.md` and build the
 canvas by it: screens and components as separate artboards, every component
 option declared as a parameter, every call site explicit, variants and narrow
 layouts drawn. That structure is what lets step 3 read the spec instead of

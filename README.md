@@ -53,6 +53,14 @@ Running it deploys only the project-specific surface:
 
 The hooks, agents, skills and rules are not copied into the project — they already apply from `~/.claude/`.
 
+`/implement-ui` can research real design references before drawing a canvas when the [Refero](https://refero.design) MCP is connected. It needs a Refero subscription and is personal, so it is added once at user scope, never to a project's `.mcp.json`:
+
+```bash
+claude mcp add --scope user --transport http refero https://api.refero.design/mcp
+```
+
+`/init-project` offers this in its MCP interview the first time a UI project is set up on a machine and prints the line for you. `/implement-ui` asks each time whether to research first or design directly.
+
 ## Updating
 
 ```bash

@@ -11,7 +11,8 @@ then publish with the `type_url` it returns and a `title`.
 
 1. **Reuse the project's tokens.** If `docs/ui.md` already holds live tokens
    (its placeholder comment is gone), the canvas uses exactly those values.
-   Otherwise commit to a small system; it becomes the skill's token step.
+   Otherwise commit to a small system, taken from the chosen style when
+   `design-research.md` ran; it becomes the skill's token step.
    Inline styles use values from the scale only, so every size maps to one
    token.
 2. **Screens and components are separate artboards.** Every element that
