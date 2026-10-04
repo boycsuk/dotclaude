@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `tests/bench-hook-launch.py`: a hand-run benchmark of one Bash call's guards in exec form and through Windows PowerShell 5.1 and pwsh, to measure what the launch form costs on a given machine.
 - The status line leads with "!guards off" when the running Claude Code predates 2.1.139 and `~/.claude/settings.json` wires a hook in exec form (`args`): that version ignores `args`, so every guard is off and no hook can report it. It reads the settings only in that case (DESIGN.md §48).
 - `scripts/sandbox-readiness.py`, run last by `install.sh` and `install.ps1`: one line saying whether Claude Code's optional Bash sandbox can run on the machine — ready on macOS, the missing packages and the exact install command (apt-get, dnf, pacman, zypper) on Linux/WSL2, unsupported on WSL1 and native Windows with WSL2 or a dev container as the way forward. It never installs anything or uses sudo; the guards stay the default protection (DESIGN.md §21).
 - `tests/vacuity-check.py`: replaces each hook with a no-op stub in a scratch copy and requires a matrix that runs it to fail, so a harness or matrix refactor cannot leave a hook untested unnoticed.
