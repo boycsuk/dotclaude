@@ -154,6 +154,11 @@
             "type": "command",
             "command": "python3 \"$HOME\"/.claude/hooks/detect-secrets.py",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$HOME\"/.claude/hooks/comment-hygiene.py",
+            "timeout": 5
           }
         ]
       }

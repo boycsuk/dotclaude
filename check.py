@@ -357,6 +357,7 @@ def _():
     for hook, matrix in (("guard-push-main", "tests/guard-push-main-cases.py"),
                          ("guard-destructive", "tests/guard-destructive-cases.py"),
                          ("detect-secrets", "tests/detect-secrets-cases.py"),
+                         ("comment-hygiene", "tests/comment-hygiene-cases.py"),
                          ("guard-central-config", "tests/guard-central-config-cases.py"),
                          ("verify-on-edit", "tests/verify-on-edit-cases.py"),
                          ("guard-commit", "tests/guard-commit-cases.py"),

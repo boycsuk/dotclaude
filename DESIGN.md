@@ -662,6 +662,15 @@ A canvas designed with no reference falls back on the model's defaults: the same
 
 **Rejected:** installing Refero's own `refero-design` skill. It is a full brief-research-implement methodology that would compete with `implement-ui` for the same requests; only its research phase is useful here, and that phase is what `references/design-research.md` holds. Also rejected: using research in the verification gate. The gate compares against the user's canvas, not against a reference.
 
+### 43. Comments describe the code, not the process: rule + `comment-hygiene` hook (2026-10-04)
+
+Code written in a deployed project came back with module docs like "Step 7, deliberately last … see CLAUDE.md, 'Scope non-goals'". The existing rule banned narrating the session; it did not name plan positions or pointers into the project's own docs, and a rule alone was already not holding. Both forms rot: the plan finishes, the doc is renumbered, and the comment becomes a riddle where a one-line reason would have survived.
+
+- **The rule** (`rules/code-quality.md`, mirrored in `conventions.md`, summarised in the output style) bans plan or roadmap positions, speculation about future work, and pointers into the project's docs; external references (issues, RFCs, vendor docs) stay allowed.
+- **The hook warns, it does not deny.** PostToolUse runs after the write, so denial is not available anyway, and the forms it can recognise are narrow: `step|phase|milestone|sprint` plus a number, and a `.md` file cited as a pointer (`see/per/cf. X.md`, or `X.md` followed by `§`, `section N`, an anchor or a quoted heading). A rare false hit, such as an algorithm's "step 2", costs one ignored line; a broader pattern would teach the model to ignore it. It scans only comment text, by the file's comment syntax, and on an Edit only the lines the edit added, so code, strings, prose files and pre-existing comments are never blamed. A `.md` file named as the code's own subject (`root / "CLAUDE.md"`) is not a pointer.
+- **Paraphrases are left to `/audit`**, whose comment category now lists these forms. No pattern recognises "this part was built last".
+- **This repo follows its own rule.** Its code comments cited `DESIGN.md §N` and `CLAUDE.md §N` throughout; they now state the reason inline. DESIGN.md and CLAUDE.md keep their section cross-references: they are the docs, not comments.
+
 ## Things deliberately not included
 
 - **Pre-baked stack variants.** See decision 2.
