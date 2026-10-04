@@ -334,7 +334,7 @@ def _():
         r"""|(ruby|perl)\s+(-[A-Za-z]*)?-e|php\s+-r|(ba|z|da|k)?sh\s+-c)([\s"']|$)""")
     # os.walk, not glob: glob skips dot-directories, so `global/.claude/skills/`
     # — every central skill — was invisible to this check.
-    for path in walk_files(("skills", "global/.claude/skills"), ".md"):
+    for path in walk_files(("global/.claude/skills",), ".md"):
         rel = os.path.relpath(path, REPO)
         for i, line in enumerate(open(path, encoding="utf-8"), 1):
             if pattern.search(line):
@@ -458,7 +458,7 @@ def _():
             if not os.path.exists(os.path.join(REPO, "global/.claude", subdir, name)):
                 fail("central artifact inventory",
                      f"global/.claude/{subdir}/{name} is missing — every project loses it")
-    for skill in ("audit", "changes", "commit", "compound", "implement-ui",
+    for skill in ("audit", "changes", "commit", "compound", "implement-ui", "init-project",
                   "plan-feature", "readme", "resume-context", "update-docs",
                   "verify"):
         if not os.path.exists(os.path.join(REPO, "global/.claude/skills", skill, "SKILL.md")):
@@ -480,9 +480,7 @@ def _():
                 "templates/project/docs/README.md",
                 "templates/project/docs/backend.md",
                 "templates/project/docs/user-stories.md",
-                "templates/project/docs/conventions.md",
-                "skills/init-project/SKILL.md",
-                "skills/init-project/scripts/detect-drift.py"):
+                "templates/project/docs/conventions.md"):
         if not os.path.exists(os.path.join(REPO, rel)):
             fail("central artifact inventory", f"{rel} is missing — every deploy needs it")
 
@@ -900,7 +898,7 @@ def _():
     # Python is now the standard hook form, and a .py hook that fails to
     # compile exits 1 — a non-blocking error, so the guard is silently off.
     # A broken _lib/hookio.py takes every .py hook down with it.
-    py_roots = ["global/.claude/hooks", "templates/project/scripts", "skills", "tests"]
+    py_roots = ["global/.claude/hooks", "global/.claude/skills", "templates/project/scripts", "tests"]
     for path in sorted(walk_files(py_roots, ".py")) + [os.path.join(REPO, "check.py")]:
         rel = os.path.relpath(path, REPO)
         try:

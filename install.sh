@@ -7,7 +7,7 @@
 # the master repo and re-running this script propagates to all your projects
 # at once — no per-project update needed.
 #
-# Also installs the per-project template and the /init-project skill.
+# Also installs the per-project template that the /init-project skill deploys.
 #
 # Re-running is safe: it refreshes the central artifacts it owns by removing
 # only the files it shipped last time (see the manifest below), so your own
@@ -95,6 +95,12 @@ if [ -f "$MANIFEST" ]; then
     rm -f "${TARGET:?}/$rel"
     dirname "$rel" >> "$EMPTIED"
   done < "$MANIFEST"
+fi
+# Older installers replaced skills/init-project/ wholesale and left it out of
+# the manifest, so nothing in it can be the user's. Clear it once, or every
+# file there would be backed up below as a same-named user file.
+if ! grep -qxF "skills/init-project/SKILL.md" "$MANIFEST" 2>/dev/null; then
+  rm -rf "${TARGET:?}/skills/init-project"
 fi
 
 # Every file this install writes. Unix uses the .sh hooks, so the Windows .ps1
@@ -233,14 +239,10 @@ print("  - ~/.claude/settings.json merged (permissions, hooks, attribution set t
       "your other keys kept)" % note)
 PY
 
-# --- Per-project template and the /init-project skill ------------------------
+# --- Per-project template ----------------------------------------------------
 rm -rf "$TARGET/templates/project"
 cp -r "$SCRIPT_DIR/templates/project" "$TARGET/templates/"
 echo "  - templates/project/ installed"
-
-rm -rf "$TARGET/skills/init-project"
-cp -r "$SCRIPT_DIR/skills/init-project" "$TARGET/skills/"
-echo "  - skills/init-project/ installed"
 
 # --- ~/.claude/CLAUDE.md is the USER's own — never touch it ------------------
 # The repo's CLAUDE.md is the maintenance guide for THIS repo, not user global

@@ -5,7 +5,7 @@
 # project automatically, so improving the master repo and re-running this
 # script propagates to all your projects at once.
 #
-# Also installs the per-project template and the /init-project skill.
+# Also installs the per-project template that the /init-project skill deploys.
 #
 # Re-running is safe: it refreshes the central artifacts it owns by removing only
 # the files it shipped last time (per the manifest), so your own skills/agents/
@@ -350,6 +350,13 @@ foreach ($rel in $oldManifest) {
     if (Test-Path -LiteralPath $victim) { Remove-Item -LiteralPath $victim -Force -ErrorAction SilentlyContinue }
     $emptied += (Split-Path -Parent $rel)
 }
+# Older installers replaced skills\init-project\ wholesale and left it out of
+# the manifest, so nothing in it can be the user's. Clear it once, or every
+# file there would be backed up below as a same-named user file.
+$initProject = Join-Path $Target "skills\init-project"
+if (($oldManifest -notcontains "skills/init-project/SKILL.md") -and (Test-Path -LiteralPath $initProject)) {
+    Remove-Item -LiteralPath $initProject -Recurse -Force
+}
 
 $manifest = @()
 foreach ($dir in @("hooks", "agents", "skills", "rules", "output-styles")) {
@@ -502,16 +509,11 @@ if ($ExecHooks) {
     Write-Host "  - hooks run through PowerShell: $why. Re-run this installer after updating Claude Code for the faster direct form."
 }
 
-# --- Per-project template and the /init-project skill ------------------------
+# --- Per-project template ----------------------------------------------------
 $templateDest = Join-Path $Target "templates\project"
 if (Test-Path $templateDest) { Remove-Item -Recurse -Force $templateDest }
 Copy-Item -Recurse (Join-Path $ScriptDir "templates\project") (Join-Path $Target "templates\")
 Write-Host "  - templates/project/ installed"
-
-$skillDest = Join-Path $Target "skills\init-project"
-if (Test-Path $skillDest) { Remove-Item -Recurse -Force $skillDest }
-Copy-Item -Recurse (Join-Path $ScriptDir "skills\init-project") (Join-Path $Target "skills\")
-Write-Host "  - skills/init-project/ installed"
 
 # --- ~/.claude/CLAUDE.md is the USER's own - never touch it ------------------
 # The repo's CLAUDE.md is the maintenance guide for THIS repo, not user global

@@ -58,7 +58,7 @@ The goal of this repo: turn that guide into a concrete, portable, reusable setup
 
 **Why:** `jq` was missing on the test machine. Python 3 is present on virtually every Linux/macOS/WSL install. Removing the dependency made the hooks immediately portable. PowerShell variant uses native `ConvertFrom-Json`.
 
-**This licence covers hooks only — never skills (learned 2026-07-26).** A hook runs *as* the PreToolUse layer, so nothing intercepts it. A skill's commands go through that layer like any other Bash call, and `guard-destructive` blocks inline interpreters. `/init-project` had four inline `python3 -c` drift checks that silently died with exit 2 once §9 hardened the guard — the `--update` Serena/Graphify reconciliation was inoperative for two commits and nobody noticed, because a skill that gets exit 2 just improvises. Skill-side logic that needs Python goes in a **script file** (`skills/init-project/scripts/detect-drift.py`), which the guard allows. `check.py` enforces this: it fails on any inline interpreter under `skills/` or `global/.claude/skills/`.
+**This licence covers hooks only — never skills (learned 2026-07-26).** A hook runs *as* the PreToolUse layer, so nothing intercepts it. A skill's commands go through that layer like any other Bash call, and `guard-destructive` blocks inline interpreters. `/init-project` had four inline `python3 -c` drift checks that silently died with exit 2 once §9 hardened the guard — the `--update` Serena/Graphify reconciliation was inoperative for two commits and nobody noticed, because a skill that gets exit 2 just improvises. Skill-side logic that needs Python goes in a **script file** (`global/.claude/skills/init-project/scripts/detect-drift.py`), which the guard allows. `check.py` enforces this: it fails on any inline interpreter under `skills/` or `global/.claude/skills/`.
 
 ### 6. Compound engineering as first-class
 
@@ -229,7 +229,7 @@ A skill is a one-shot tool: it runs, returns, exits. The main session would have
 - (b) Ask, then use the description to pick a stack-specific path (Django flow, Next.js flow, mobile flow, …).
 - (c) Ask optionally; if given, use the description to reorder and re-label options inside the existing neutral interview, marking the best fit `(Recommended)`. If declined, run the original neutral flow.
 
-**Chosen:** option (c). Documented in `skills/init-project/SKILL.md` §0.
+**Chosen:** option (c). Documented in `global/.claude/skills/init-project/SKILL.md` §0.
 
 **Why not (a):** the neutral interview presents every framework on equal footing. For a user who already knows they want "a scraper that runs daily on a VPS," seeing "Frontend" and "Library" alongside "Script" as equal options is noise. Worse, without context the skill can't reason about cross-cutting choices — e.g. whether to recommend Docker Compose (yes if VPS self-hosted, no if Cloudflare Workers), or which MCPs are likely useful (Playwright for scraping/E2E, Serena for a large codebase). Cross-question coherence is hard without a project goal.
 
@@ -320,7 +320,7 @@ One feature appears in all three under a different lens, with no duplicated deta
 - (b) `--update` mode that only adds missing files (the original behavior up to the design tokens commit). Preserves user edits but never refreshes anything that exists.
 - (c) `--update` mode with three file classes — always-refresh (hooks), refresh-if-untouched (rules, settings.local.json.example), add-if-missing (agents, skills) — plus DRIFT lines on stderr for any file the user edited that the template also updated, plus a CLAUDE.md bullet reconciliation step run by the skill.
 
-**Chosen:** option (c). Implemented across `templates/project/init.sh` + `init.ps1` (the three-class policy and DRIFT emission) and `skills/init-project/references/update-mode.md` §1b/§1c/§1d/§1e (the parsing, the report, the bullet diff, and the Serena/Graphify improvement reconciliation for projects that opted into Serena before the template added those improvements).
+**Chosen:** option (c). Implemented across `templates/project/init.sh` + `init.ps1` (the three-class policy and DRIFT emission) and `global/.claude/skills/init-project/references/update-mode.md` §1b/§1c/§1d/§1e (the parsing, the report, the bullet diff, and the Serena/Graphify improvement reconciliation for projects that opted into Serena before the template added those improvements).
 
 **Why not (a):** loses user edits silently. The user is the source of truth for their CLAUDE.md, their docs/, their per-project settings.json — never overwrite.
 

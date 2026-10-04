@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Behavioural contract for skills/init-project/scripts/detect-drift.py.
+"""Behavioural contract for global/.claude/skills/init-project/scripts/detect-drift.py.
 
 Run:  python3 tests/detect-drift-cases.py
 
@@ -23,7 +23,7 @@ import pyhook  # noqa: E402
 import stubs  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCRIPT = os.path.join(REPO, "skills/init-project/scripts/detect-drift.py")
+SCRIPT = os.path.join(REPO, "global/.claude/skills/init-project/scripts/detect-drift.py")
 TEMPLATE_DIR = os.path.join(REPO, "templates/project")
 
 LEGACY_SETTINGS = ('{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": ['

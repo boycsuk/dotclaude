@@ -224,7 +224,7 @@ def case_python_hook_installed_and_runs(home, pwsh):
     # the installed command actually runs, through the shell that runs it.
     repo = tempfile.mkdtemp(prefix="install-repo-")
     try:
-        for item in ("install.sh", "install.ps1", "global", "templates", "skills", "scripts"):
+        for item in ("install.sh", "install.ps1", "global", "templates", "scripts"):
             src = os.path.join(REPO, item)
             dst = os.path.join(repo, item)
             (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, dst)
@@ -508,6 +508,31 @@ def case_same_named_user_file_is_backed_up(home, pwsh):
     return None
 
 
+def case_wholesale_init_project_is_adopted(home, pwsh):
+    # Installers before the move copied skills/init-project/ wholesale and kept
+    # it out of the manifest. Upgrading must not take those files for the
+    # user's own: a .user-backup per file, and a stale one never cleaned up.
+    old = claude(home, "skills", "init-project")
+    for rel in ("SKILL.md", os.path.join("references", "retired.md")):
+        os.makedirs(os.path.dirname(os.path.join(old, rel)), exist_ok=True)
+        with open(os.path.join(old, rel), "w", encoding="utf-8") as fh:
+            fh.write("from an older dotclaude\n")
+    with open(claude(home, ".dotclaude-manifest"), "w", encoding="utf-8") as fh:
+        fh.write("agents/researcher.md\n")
+    if run_install(home, pwsh) != 0:
+        return "installer exited non-zero"
+    if glob.glob(os.path.join(old, "**", "*.user-backup"), recursive=True) or "was yours" in LAST_OUTPUT[0]:
+        return "the previously installed init-project was backed up as the user's"
+    if os.path.exists(os.path.join(old, "references", "retired.md")):
+        return "a file the old wholesale copy left was not cleaned up"
+    if _read(os.path.join(old, "SKILL.md")) != _read(
+            os.path.join(REPO, "global", ".claude", "skills", "init-project", "SKILL.md")):
+        return "init-project/SKILL.md was not refreshed"
+    if "skills/init-project/SKILL.md" not in _read(claude(home, ".dotclaude-manifest")).decode("utf-8"):
+        return "init-project is not tracked in the manifest"
+    return None
+
+
 def case_replaced_owned_keys_are_backed_up(home, pwsh):
     os.makedirs(claude(home))
     with open(claude(home, "settings.json"), "w", encoding="utf-8") as fh:
@@ -551,7 +576,7 @@ def case_broken_hook_aborts_before_copying(home, pwsh):
                           "\nif ($x) {\n" if pwsh else "\nif true; then\n")):
         repo = tempfile.mkdtemp(prefix="install-repo-")
         try:
-            for item in ("install.sh", "install.ps1", "global", "templates", "skills", "scripts"):
+            for item in ("install.sh", "install.ps1", "global", "templates", "scripts"):
                 src = os.path.join(REPO, item)
                 (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, os.path.join(repo, item))
             with open(os.path.join(repo, "global/.claude/hooks", broken), "a") as fh:
@@ -599,7 +624,7 @@ def case_hook_fields_and_permission_keys_carry_over(home, pwsh):
     # later reached Unix and silently vanished on Windows.
     repo = tempfile.mkdtemp(prefix="install-repo-")
     try:
-        for item in ("install.sh", "install.ps1", "global", "templates", "skills", "scripts"):
+        for item in ("install.sh", "install.ps1", "global", "templates", "scripts"):
             src = os.path.join(REPO, item)
             (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, os.path.join(repo, item))
         settings_src = os.path.join(repo, "global/.claude/settings.json")
@@ -691,6 +716,7 @@ CASES = [
     ("a re-install is byte-for-byte idempotent", case_reinstall_is_idempotent),
     ("the user's own hooks and empty dirs survive", case_user_files_in_shared_trees_survive),
     ("a same-named user file is backed up, not lost", case_same_named_user_file_is_backed_up),
+    ("an init-project copied wholesale by an older install is adopted", case_wholesale_init_project_is_adopted),
     ("replaced owned keys are backed up and reported", case_replaced_owned_keys_are_backed_up),
     ("the manifest cannot delete outside ~/.claude", case_manifest_cannot_escape_claude_dir),
     ("a broken hook aborts before anything is copied", case_broken_hook_aborts_before_copying),

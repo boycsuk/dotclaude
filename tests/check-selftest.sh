@@ -27,7 +27,7 @@ setup() {
   mkdir -p "$WORK/repo"
   # Copy only what check.py reads.
   (cd "$SRC" && tar -cf - check.py CLAUDE.md DESIGN.md install.sh install.ps1 \
-      global templates skills tests 2>/dev/null) | (cd "$WORK/repo" && tar -xf -)
+      global templates tests 2>/dev/null) | (cd "$WORK/repo" && tar -xf -)
   injected=1
 }
 

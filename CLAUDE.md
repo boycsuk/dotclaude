@@ -21,7 +21,7 @@ scaffolds) is deployed per project by `/init-project`. See DESIGN.md §23.
 ```
 dotclaude/
 ├── install.sh / install.ps1     # bootstrap: installs global/.claude/ into ~/.claude/ (MERGES settings),
-│                                # plus templates/project/ and skills/init-project/
+│                                # plus templates/project/
 ├── CLAUDE.md                    # ← THIS FILE (project guide for Claude Code)
 ├── DESIGN.md                    # rationale for every architectural choice
 ├── README.md                    # human-facing install/usage doc
@@ -42,11 +42,11 @@ dotclaude/
 │   ├── agents/                  # researcher, code-reviewer, debugger, db-inspector
 │   ├── rules/                   # progressive-disclosure conventions
 │   ├── skills/                  # workflow skills (verify, commit, audit, update-docs, …)
+│   │   └── init-project/        # the deployer skill
+│   │       ├── SKILL.md                 # the router; loads a reference per phase (progressive disclosure)
+│   │       ├── references/              # update-mode.md, stack-interview.md, mcp-and-db.md
+│   │       └── scripts/detect-drift.py  # drift report for --update
 │   └── output-styles/           # opt-in tone/language conventions (dotclaude.md)
-├── skills/init-project/         # the global deployer skill (also installed into ~/.claude/skills/)
-│   ├── SKILL.md                 # the router; loads a reference per phase (progressive disclosure)
-│   ├── references/              # update-mode.md, stack-interview.md, mcp-and-db.md
-│   └── scripts/detect-drift.py  # drift report for --update
 └── templates/project/           # the PER-PROJECT skeleton (deployed by /init-project)
     ├── init.sh / init.ps1       # internal deployer — copies only per-project files
     ├── CLAUDE.md.template       # per-project CLAUDE.md with {{placeholders}}
@@ -73,7 +73,7 @@ dotclaude/
 
 ### 1. The skill plans, the user executes — do not merge them back
 
-`skills/init-project/SKILL.md` deliberately does NOT run `init.sh` itself. It detects the stack, runs the interview, then **prints** the exact `bash …/init.sh [--lsp=<plugin>] [--codebase-memory] [--xcode] [--ui]` command for the user to run from a normal terminal. After the user confirms `deploy OK`, the skill resumes with `Edit` to fill placeholders.
+`global/.claude/skills/init-project/SKILL.md` deliberately does NOT run `init.sh` itself. It detects the stack, runs the interview, then **prints** the exact `bash …/init.sh [--lsp=<plugin>] [--codebase-memory] [--xcode] [--ui]` command for the user to run from a normal terminal. After the user confirms `deploy OK`, the skill resumes with `Edit` to fill placeholders.
 
 The temptation to "just run the script from the skill" via a `!`-prefixed shell block is real and was tried — it fails reliably for reasons that are not in our control:
 
@@ -91,7 +91,7 @@ The pairs that remain are `install.sh` ↔ `install.ps1` and `templates/project/
 
 ### 3. Re-running the installer must be idempotent and never touch user content
 
-`install.sh` refreshes the central artifacts it owns in `~/.claude/{hooks,agents,skills,rules,output-styles}` by removing only the files it shipped **last time** (tracked in `~/.claude/.dotclaude-manifest`) and then copying the current set — files the user added to those directories are left alone, and files this repo stops shipping are still cleaned up. Do **not** "simplify" this back to an `rm -rf` per directory: that was the previous form and it silently deleted the user's own skills/agents/rules on every re-install (DESIGN.md §29). `templates/project/` and `skills/init-project/` *are* replaced wholesale — nothing user-owned lives there. The base `settings.json` is **merged** into `~/.claude/settings.json` preserving the user's own keys. It does **not** touch `~/.claude/CLAUDE.md` at all — the repo's `CLAUDE.md` is this repo's maintenance guide, not user global preferences, so it is never copied out. The user can `git pull && ./install.sh` repeatedly without losing global preferences.
+`install.sh` refreshes the central artifacts it owns in `~/.claude/{hooks,agents,skills,rules,output-styles}` by removing only the files it shipped **last time** (tracked in `~/.claude/.dotclaude-manifest`) and then copying the current set — files the user added to those directories are left alone, and files this repo stops shipping are still cleaned up. Do **not** "simplify" this back to an `rm -rf` per directory: that was the previous form and it silently deleted the user's own skills/agents/rules on every re-install (DESIGN.md §29). `templates/project/` *is* replaced wholesale — nothing user-owned lives there. The base `settings.json` is **merged** into `~/.claude/settings.json` preserving the user's own keys. It does **not** touch `~/.claude/CLAUDE.md` at all — the repo's `CLAUDE.md` is this repo's maintenance guide, not user global preferences, so it is never copied out. The user can `git pull && ./install.sh` repeatedly without losing global preferences.
 
 If you change install behaviour, preserve this: the installer owns the central artifacts, keeps the user's own settings keys (replacing only the owned `permissions`/`hooks`/`attribution`, with a backup when the user had entries there), and leaves everything else in `~/.claude/` (CLAUDE.md, projects/, credentials) untouched.
 
@@ -106,9 +106,9 @@ When `/compound` (a skill inside the template) suggests promoting a project-loca
 
 ## How the pieces fit together at runtime
 
-1. **Bootstrap / propagation.** User runs `./install.sh` in a clone of this repo. It installs the central config — `global/.claude/{hooks,agents,skills,rules,output-styles}` and the base `settings.json` (MERGED into the user's, never clobbering their personal keys) — into `~/.claude/`, resolving the OS hook form (`.sh` on Unix, `.ps1` + PowerShell rules on Windows). It also copies `templates/project/` and `skills/init-project/` into `~/.claude/`. **Re-running `install.sh` after a master-repo change is how the improvement reaches every project at once** — the central artifacts apply to all projects via the harness.
+1. **Bootstrap / propagation.** User runs `./install.sh` in a clone of this repo. It installs the central config — `global/.claude/{hooks,agents,skills,rules,output-styles}` and the base `settings.json` (MERGED into the user's, never clobbering their personal keys) — into `~/.claude/`, resolving the OS hook form (`.sh` on Unix, `.ps1` + PowerShell rules on Windows). It also copies `templates/project/` into `~/.claude/`. **Re-running `install.sh` after a master-repo change is how the improvement reaches every project at once** — the central artifacts apply to all projects via the harness.
 
-2. **Per-project plan.** In any project, the user opens Claude Code and types `/init-project`. The skill (`skills/init-project/SKILL.md`):
+2. **Per-project plan.** In any project, the user opens Claude Code and types `/init-project`. The skill (`global/.claude/skills/init-project/SKILL.md`):
    - **First-time projects only:** asks whether the user wants to describe the project up-front (SKILL.md §0). If yes, that description biases the recommended option in every subsequent question (project type, framework, Docker, deployment, MCPs, DB) — the questions and their answer sets stay the same, only the order and "(Recommended)" tag changes. If no, the interview runs neutrally. Skipped on re-runs (the description already lives in the project's CLAUDE.md). See DESIGN.md §16.
    - Detects platform (Linux/macOS/WSL → `sh`, Windows → `ps1`).
    - Detects stack from `package.json` / `pyproject.toml` / `Cargo.toml` / `go.mod` etc., or interviews via AskUserQuestion if empty.
@@ -128,15 +128,15 @@ When `/compound` (a skill inside the template) suggests promoting a project-loca
 
 | You discovered… | Edit… |
 |---|---|
-| A bug in the deployer | `skills/init-project/SKILL.md` or `templates/project/init.sh` / `init.ps1` |
+| A bug in the deployer | `global/.claude/skills/init-project/SKILL.md` or `templates/project/init.sh` / `init.ps1` |
 | A new always-on guarantee for every project | One `global/.claude/hooks/<name>.py` with a `# hook-kind:` line + its entry in `global/.claude/settings.json` (`install.ps1` derives the Windows form) + `tests/<name>-cases.py` |
 | A reusable workflow every project should have | New skill in `global/.claude/skills/` |
 | A convention all projects should follow | Add to the right file in `global/.claude/rules/` (and mirror in `templates/project/docs/conventions.md`) |
 | A specialist agent useful everywhere | New agent in `global/.claude/agents/` |
 | A reusable tone/output convention | `global/.claude/output-styles/dotclaude.md` (on by default: install sets `outputStyle` when absent) |
-| A new flag or behavior in the deploy step | `templates/project/init.sh` AND `init.ps1` (keep them in lockstep), then update `skills/init-project/SKILL.md` to mention the flag in the printed command |
+| A new flag or behavior in the deploy step | `templates/project/init.sh` AND `init.ps1` (keep them in lockstep), then update `global/.claude/skills/init-project/SKILL.md` to mention the flag in the printed command |
 | A new portable doc convention every project should seed | `templates/project/docs/` (the seed) + entry in `global/.claude/skills/update-docs/SKILL.md` (the maintainer) |
-| A change to the `--update` re-deploy or drift-reconciliation flow | `templates/project/init.sh` AND `init.ps1` (in lockstep) + `skills/init-project/references/update-mode.md` §1b/§1c/§1d/§1e |
+| A change to the `--update` re-deploy or drift-reconciliation flow | `templates/project/init.sh` AND `init.ps1` (in lockstep) + `global/.claude/skills/init-project/references/update-mode.md` §1b/§1c/§1d/§1e |
 | Anything stack-specific | **Stop.** It probably belongs in the project, not the template |
 
 ## Non-obvious decisions worth re-reading
