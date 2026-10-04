@@ -172,7 +172,7 @@ def judge(command, payload):
     """The deny reason for `command`, or None to let it run."""
     segments = shellwords.segments(command, shellwords.shell_of(payload))
     if segments is None:
-        if re.search(r"\bgit\b[^\n]*\bpush\b", command):
+        if shellwords.mentions(command, "git") and shellwords.mentions(command, "push"):
             return ("BLOCKED: this looks like a git push, but its quoting cannot be parsed, so "
                     "its target cannot be checked. Fix the quoting, or the user runs it manually.")
         return None
@@ -220,7 +220,7 @@ def main():
     payload = hookio.read_payload()
     tool_input = payload.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
-    if not isinstance(command, str) or "git" not in command:
+    if not isinstance(command, str) or not shellwords.mentions(command, "git"):
         return 0
     reason = judge(command, payload)
     if reason:

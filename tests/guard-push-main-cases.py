@@ -90,6 +90,9 @@ ON_MAIN = [
     ('echo "git push origin main" | bash', BLOCK, "a push echoed into a shell"),
     ("git push origin HEAD:heads/main",          BLOCK, "git expands heads/main to refs/heads/main"),
     ("git push origin main 'x",                  BLOCK, "unparseable push fails closed"),
+    ("g''it push --force origin x",              BLOCK, "empty quotes split the program name past the prefilter"),
+    ("gi\\t push origin main",                   BLOCK, "a backslash splits the program name"),
+    ("GIT push origin main",                     BLOCK, "case-insensitive filesystems resolve GIT to git"),
     # Legitimate — blocking these teaches the model the hook is noise.
     ("git push origin feature/x",                ALLOW, "feature branch"),
     ("git push origin feature/main-refactor",    ALLOW, "branch name merely contains 'main'"),

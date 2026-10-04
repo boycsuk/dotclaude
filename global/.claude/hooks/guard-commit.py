@@ -235,7 +235,7 @@ def main():
     payload = hookio.read_payload()
     tool_input = payload.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
-    if not isinstance(command, str) or "commit" not in command:
+    if not isinstance(command, str) or not shellwords.mentions(command, "commit"):
         return 0
     shell = shellwords.shell_of(payload)
     segments = shellwords.segments(command, shell)

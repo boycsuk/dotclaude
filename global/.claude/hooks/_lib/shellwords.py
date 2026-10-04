@@ -29,6 +29,8 @@ _CAT_SUBST = re.compile(
 _ANSI_C = re.compile(r"\$'((?:[^'\\]|\\.)*)'", re.S)
 _ANSI_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "\\": "\\", "'": "'", '"': '"', "e": "\x1b", "0": "\0"}
 _PS_HERESTRING = re.compile(r"@(['\"])[ \t]*\r?\n(.*?)\r?\n\1@", re.S)
+_PS_ESCAPE = re.compile(r"`([A-Za-z0-9_\"`])")
+_PS_ESCAPES = {"n": "\n", "t": "\t", '"': '\\"'}
 
 SEPARATOR_CHARS = set(";&|()")
 GIT_VALUED_GLOBALS = ("-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path")
@@ -51,6 +53,7 @@ WRAPPERS = {
 }
 _POSITIONAL_ARG_WRAPPERS = {"timeout"}          # `timeout 60 cmd`: the duration comes first
 _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+_QUOTING = re.compile(r"[\"'\\`]")
 # Interpreters whose program is not shell, so a body they run cannot be judged
 # by parsing it as commands.
 PROGRAM_INTERPRETERS = re.compile(r"^(python[0-9.]*|py|node|nodejs|bun|deno|perl|ruby|php)$", re.I)
@@ -81,8 +84,9 @@ def _from_powershell(cmd):
 
 
 def _ps_unescape(text):
-    return (text.replace("`r`n", "\n").replace("`n", "\n").replace("`t", "\t")
-            .replace('`"', '\\"').replace("``", "`"))
+    # Any other escaped character is itself: `` com`mit `` runs commit.
+    text = text.replace("`r`n", "`n")
+    return _PS_ESCAPE.sub(lambda m: _PS_ESCAPES.get(m.group(1), m.group(1)), text)
 
 
 def normalize(cmd, shell="bash"):
@@ -516,6 +520,16 @@ def basename(word):
     return name[:-4] if name.lower().endswith(".exe") else name
 
 
+def mentions(cmd, word):
+    """True when `word` may run in `cmd` once quotes and escapes are removed.
+
+    The cheap prefilter a guard runs before parsing: `g''it`, `gi\\t` and
+    PowerShell's `` com`mit `` all run the word, and a case-insensitive
+    filesystem (Windows, default macOS) runs `GIT` as git.
+    """
+    return word in _QUOTING.sub("", cmd).lower()
+
+
 def git_invocation(seg):
     """For a segment that runs git, return (subcommand, args, global_opts).
 
@@ -524,7 +538,7 @@ def git_invocation(seg):
     anything that is not a git invocation.
     """
     seg = unwrap(seg)
-    if not seg or basename(seg[0]) != "git":
+    if not seg or basename(seg[0]).lower() != "git":
         return None
     rest = seg[1:]
     opts, i = {}, 0

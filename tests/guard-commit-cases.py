@@ -58,6 +58,9 @@ MESSAGE_CASES = [
     ("env -u FOO git commit -s -m 'feat: x'", DENY, "env -u NAME"),
     ("echo x | xargs git commit -s -m", DENY, "xargs"),
     ("(git commit -s -m 'feat: x')", DENY, "subshell"),
+    ("git com''mit --signoff -m 'feat: x'", DENY, "empty quotes split the subcommand past the prefilter"),
+    ("g\"\"it commit -s -m 'feat: x'", DENY, "empty quotes split the program name"),
+    ("GIT commit -s -m 'feat: x'", DENY, "case-insensitive filesystems resolve GIT to git"),
     ("{ git commit -s -m 'feat: x'; }", DENY, "brace group"),
     ("if true; then git commit -s -m 'feat: x'; fi", DENY, "inside if/then"),
     ("bash -c \"git commit -s -m 'feat: x'\"", DENY, "bash -c string"),
@@ -102,6 +105,7 @@ PS_CASES = [
     ("git commit -m @'\nfeat: don't break\n\nCo-Authored-By: a <a@b>\n'@", DENY, "single-quoted here-string with an apostrophe"),
     ('git commit -m @"\nfix: the "foo" case\n\nSigned-off-by: a <a@b>\n"@', DENY, "double-quoted here-string with quotes"),
     ('git commit -m "feat: add x"', ALLOW, "plain PowerShell commit"),
+    ("git com`mit -s -m 'feat: x'", DENY, "a backtick escape splits the subcommand past the prefilter"),
 ]
 
 # (command, expected, state, why) — state keys: branch, staged, modified, local
