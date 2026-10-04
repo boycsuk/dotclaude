@@ -682,6 +682,15 @@ Code written in a deployed project came back with module docs like "Step 7, deli
 - **Known gap.** A runner the wrapper list does not know (`uv run python -`), noted in the hook's docstring.
 - **Cost accepted.** Writing a scratch script and running it in one Bash call now needs two steps. That is the rule's point: the file exists, and the Write tool shows it, before it runs.
 
+### 45. `/commit` offers merge-into-main and push in the same confirmation (2026-10-04)
+
+The workflow this setup's user actually runs is local feature branches, merged into main when done, with only main pushed. Branches never reach the remote. `/commit` used to stop at the commit, so every finished feature ended with the same manual merge and push.
+
+- **One question, not a second flow.** The commit confirmation carries the integration choice: "commit, merge into main and push" next to "commit only", recommended while the branch's work is unfinished. The hard gate covers the merge and the push the same way it covers the commit.
+- **Local `--no-ff` merge, never a PR.** Pushing the branch and merging through a PR was offered and declined: branches stay local. The merge commit keeps the atomic commits and marks where the feature landed. Squash would erase them.
+- **It works with `guard-push-main`, not around it.** A push of main is a direct push, so the push is offered only where `allowPushToMain` is set (every project of this user's that pushes). Without it, the skill merges and tells the user to push from their terminal. It does not offer an action the guard will deny a moment later.
+- **It stops instead of repairing.** It pulls `--ff-only` first, re-runs `/verify` when main had commits the branch lacked (that merged state was never verified), and stops at the first conflict, divergence or rejected push. It never runs `reset`, `rebase` or `--force`. Deleting the branch is a separate question, and it uses `git branch -d`, which refuses an unmerged branch.
+
 ## Things deliberately not included
 
 - **Pre-baked stack variants.** See decision 2.

@@ -128,6 +128,8 @@
   `main` only when complete and verified. (Developers using dotclaude have a
   central hook that blocks direct pushes to main — unless this project opts out
   — and every force push; other tools follow the same discipline by hand.)
+  Feature branches stay local: finished work is merged into `main` with
+  `--no-ff`, and only `main` is pushed.
 - **Atomic commits:** one logical change each; the message covers what and why.
   Never `--amend` without explicit confirmation. **Never add a
   `Co-Authored-By` / `Signed-off-by` trailer** unless the project requires

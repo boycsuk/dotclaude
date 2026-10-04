@@ -8,7 +8,7 @@
 # Workflow
 
 ## Branching
-One branch per feature/fix (`feature/<name>`, `fix/<name>`); merge to `main` only when complete and verified. The main-protection half is enforced deterministically by the `guard-push-main` hook (blocks direct pushes to main/master and all force pushes); branch naming and merge discipline are advisory — on you. Opt out of the main-block for solo/scratch repos via `"allowPushToMain": true` in `.claude/settings.local.json`; force push stays blocked regardless.
+One branch per feature/fix (`feature/<name>`, `fix/<name>`); merge to `main` only when complete and verified. The main-protection half is enforced deterministically by the `guard-push-main` hook (blocks direct pushes to main/master and all force pushes); branch naming and merge discipline are advisory — on you. Opt out of the main-block for solo/scratch repos via `"allowPushToMain": true` in `.claude/settings.local.json`; force push stays blocked regardless. Feature branches stay local: once the work is done, `/commit` offers to merge the branch into main (`--no-ff`) and push main, never the branch.
 
 ## Atomic, descriptive commits
 - One logical change per commit.

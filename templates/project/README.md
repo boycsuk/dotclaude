@@ -212,7 +212,7 @@ When something you added to a project's `.claude/` proves useful for all project
 
 ### Skills: auto-invocable vs manual
 
-- **Auto** (default, `disable-model-invocation: false`): Claude invokes when the description matches the context. Every central skill is auto-invocable; the ones with side effects gate them in their own body instead — `/commit` never commits without explicit confirmation, `/compound` and `/update-docs` propose their edits first, `/plan-feature` interviews before writing, and `/implement-ui` confirms its component tree via AskUserQuestion before anything is written.
+- **Auto** (default, `disable-model-invocation: false`): Claude invokes when the description matches the context. Every central skill is auto-invocable; the ones with side effects gate them in their own body instead — `/commit` never commits, merges or pushes without explicit confirmation, `/compound` and `/update-docs` propose their edits first, `/plan-feature` interviews before writing, and `/implement-ui` confirms its component tree via AskUserQuestion before anything is written.
 - **Manual** (`disable-model-invocation: true`): only by typing `/<name>`. Only `/init-project`, whose deploy step the user runs in their own terminal.
 - `/audit` stays auto-invocable but asks — the mode (defects or improvements) when the request does not say, then in two rounds, categories then depth+scope — before doing any work, so it can never quietly spend a large budget. It also absorbed the old `/security-review`: a pre-commit security pass is `/audit` → Security → Light → Uncommitted changes.
 
