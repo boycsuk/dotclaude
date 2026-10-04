@@ -102,9 +102,10 @@ FEEDBACK_EXIT = 2
 def feedback(text):
     """PostToolUse: show `text` to Claude; return the exit code that delivers it.
 
-    Exit 2 with stderr is the PostToolUse channel that reaches Claude without
-    stopping the turn (`decision: "block"` would stop it, and the tool already
-    ran). The caller returns the value: `return hookio.feedback(msg)`.
+    Exit 2 with stderr shows the text to Claude after the tool already ran;
+    `decision: "block"` with a `reason` is the documented JSON equivalent,
+    adding the reason next to the tool result. The caller returns the value:
+    `return hookio.feedback(msg)`.
     """
     err = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
     err.write(text.rstrip("\n") + "\n")

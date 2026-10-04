@@ -253,7 +253,7 @@ The central `guard-push-main` hook is always on: it blocks force push (always) a
 **Ask via AskUserQuestion:**
 
 - "How will you work with git in this project?"
-  - **Branches (Recommended)** — `feature/*`, `fix/*`, merge to main via PR. The `guard-push-main` hook protects you from pushing to main by mistake.
+  - **Branches (Recommended)** — `feature/*`, `fix/*`, merged into main locally (`/commit` offers it) and pushed as main by you. The `guard-push-main` hook protects you from pushing to main by mistake.
   - **Everything on main** — solo or scratch project. `"allowPushToMain": true` will be written into `.claude/settings.local.json` (gitignored). Force push stays blocked.
 
 **If they answer "Everything on main"**, use `Read` + `Write` (or `Edit` if it already exists) on `./.claude/settings.local.json`:
