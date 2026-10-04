@@ -165,22 +165,57 @@ def judge_find(args):
     return None
 
 
+def git_option(flags, option, short=""):
+    """True when a flag is `option`, a prefix of it, or a short bundle holding `short`.
+
+    git accepts any unambiguous prefix of a long option (`--har` is --hard); a
+    prefix git would reject as ambiguous only ever blocks a failing command.
+    """
+    for f in flags:
+        name = f.split("=", 1)[0]
+        if name.startswith("--") and len(name) > 2 and option.startswith(name):
+            return True
+        if short and short_bundle(f, short):
+            return True
+    return False
+
+
+def prunes_now(flags, options):
+    return any(f.endswith(("=now", "=all")) and git_option([f], o) for f in flags for o in options)
+
+
 def judge_git(seg):
     inv = shellwords.git_invocation(seg)
     if not inv:
         return None
     sub, args, _ = inv
     flags, positional, _ = split_args(args)
-    if sub == "reset" and "--hard" in flags:
-        ref = positional[0] if positional else ""
-        if not ref or re.match(r"^(origin/)?(main|master)$|^(HEAD|@)[~^]", ref):
+    action = positional[0] if positional else ""
+    force = git_option(flags, "--force", "f")
+    if sub == "reset" and git_option(flags, "--hard"):
+        if not action or re.match(r"^(origin/)?(main|master)$|^(HEAD|@)[~^]", action):
             return "deny", "git reset --hard discards commits or work on a main branch"
-    if sub == "clean" and any(short_bundle(f, "f") or f == "--force" for f in flags) \
-            and any(short_bundle(f, "dx") for f in flags):
+        if action not in ("HEAD", "@"):
+            return "ask", "git reset --hard to another commit discards uncommitted work and can drop commits"
+    if sub == "clean" and force and any(short_bundle(f, "dx") for f in flags):
         return "ask", "git clean force-deletes untracked directories or ignored files"
+    if sub == "branch" and (any(short_bundle(f, "D") for f in flags)
+                            or (git_option(flags, "--delete", "d") and force)):
+        return "deny", "git branch -D force-deletes a branch whether or not it is merged"
+    if sub == "stash" and action in ("clear", "drop"):
+        return "ask", f"git stash {action} discards stashed work"
+    if (sub == "checkout" and force) or (sub == "switch" and (force or git_option(flags, "--discard-changes"))):
+        return "ask", f"git {sub} --force discards uncommitted changes"
     if sub in ("checkout", "restore") and ("." in positional or ":/" in positional) \
             and not any(f in ("--staged", "-S") for f in flags):
         return "ask", f"git {sub} . discards every uncommitted change"
+    if (sub == "reflog" and action == "expire" and prunes_now(flags, ("--expire", "--expire-unreachable"))) \
+            or (sub == "gc" and prunes_now(flags, ("--prune",))):
+        return "ask", f"git {sub} with an immediate expiry makes lost commits unrecoverable"
+    if sub == "update-ref" and "-d" in flags:
+        return "ask", "git update-ref -d deletes a ref with no safety check"
+    if sub == "worktree" and action == "remove" and force:
+        return "ask", "git worktree remove --force discards the worktree's uncommitted changes"
     return None
 
 
