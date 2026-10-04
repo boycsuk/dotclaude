@@ -244,7 +244,7 @@ Read `.gitignore` and confirm it excludes `.claude/settings.local.json`. The mer
 Remind the user:
 - `.claude/settings.json` (the per-project stub) and `settings.local.json.example` ARE committed; `.claude/settings.local.json` is gitignored (personal overrides). The hooks/agents/skills/rules/output-styles are central in `~/.claude/`, not in the project.
 - `CLAUDE.md` and `CHANGELOG.md` are committed.
-- `docs/` IS committed — it is the portable contract of the project (see `docs/README.md`). The template seeds `docs/backend.md` (API), `docs/ui.md` (design tokens + sections), `docs/user-stories.md` (what the user can do), and `docs/conventions.md` (how to write the code — a portable mirror of the central rules for editors without Claude Code); the user fills them and runs `/update-docs` whenever a contract or rule changes. Each doc is self-maintained.
+- `docs/` IS committed — it is the portable contract of the project (see `docs/README.md`). The template seeds `docs/backend.md` (API), `docs/user-stories.md` (what the user can do), and `docs/conventions.md` (how to write the code — a portable mirror of the central rules for editors without Claude Code); the user fills them and runs `/update-docs` whenever a contract or rule changes. Each doc is self-maintained. The visual contract is not seeded: `/implement-ui` creates `design/` at the root the first time a UI is designed or a legacy `docs/ui.md` is migrated.
 
 ## 7b. Branch workflow preference
 
@@ -272,7 +272,7 @@ Use the regular `Bash` tool (a non-zero exit there is informative, not fatal):
 - `python3 -m json.tool .claude/settings.json >/dev/null` — confirms JSON parses (mirrors `install.sh`; the repo avoids `jq` — see DESIGN.md §5).
 - `ls .claude/` — should show only the per-project files: `settings.json` and `settings.local.json.example`. The hooks/agents/skills/rules/output-styles are CENTRAL (`ls ~/.claude/` to see them) and are NOT copied into the project.
 - `ls CLAUDE.md CHANGELOG.md` — both must exist.
-- `ls docs/` — `README.md`, `backend.md`, `ui.md`, `user-stories.md`, `conventions.md` must exist (seeds for the portable contract surface).
+- `ls docs/` — `README.md`, `backend.md`, `user-stories.md`, `conventions.md` must exist (seeds for the portable contract surface).
 - Run `python3 ~/.claude/skills/init-project/scripts/detect-drift.py` once and read its lines. (Inline `python3 -c` is blocked by the central `guard-destructive` hook — the checks live in that script.)
   - If the user picked "Everything on main" in §7b: `ALLOW_PUSH_MAIN=TRUE`.
   - For every MCP flag in the command (`--xcode` → `xcode`, `--ui` → `playwright`, `--codebase-memory` → `codebase-memory-mcp`): its server must be listed in `MCP_SERVERS`. A merge failure only prints a WARN in the user's terminal and still ends in `deploy OK`, so a missing server here means it was NOT configured — say so, and do not add its permissions.

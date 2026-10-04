@@ -137,7 +137,7 @@ slow once, then cached.
 work follows the visual verification loop — implement, screenshot the running
 app, compare against the design reference, fix, repeat — instead of coding
 blind. The central `/implement-ui` skill drives exactly that loop (tokens into
-`docs/ui.md` first, then section-by-section implementation with a
+`design/tokens.json` first, then section-by-section implementation with a
 screenshot-vs-reference gate). **Recommend `--ui` for any project with a web
 UI**, not only when the user asks for browser automation.
 

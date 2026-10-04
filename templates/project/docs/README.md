@@ -1,7 +1,8 @@
 # Project documentation
 
 This folder holds **portable contract docs**: a concise description of what
-the system does and exposes, split across three files. It is meant to travel
+the system does and exposes, split across a few files. A project with a user
+interface also has **`design/`** at its root, the third lens (below). It is meant to travel
 with the repo so that anyone — a teammate, or any tool that can only see one
 slice of the project (an Xcode workspace, an embedded subdir, a sandboxed
 editor) — still has enough context to work coherently against the whole.
@@ -12,29 +13,36 @@ no skills, a teammate by hand) you just edit them directly — each file carries
 its own maintenance rules in its header, so you never need this README or the
 skill to keep it true. The skill is the convenience, not the requirement.
 
-## The three files
+## The three lenses
 
 - **`backend.md`** — the API contract. Every endpoint (path, method,
   request/response shape, status codes, auth), the shared error model, and
   cross-endpoint conventions. What a client can call and what comes back.
-- **`ui.md`** — the visual + navigational contract. The brand design tokens
-  (colors, typography, spacing, radii) every client shares, and the list of
-  top-level sections/screens. What it looks like and what screens exist.
+- **`../design/`** (projects with a UI) — the visual + navigational contract.
+  `design/tokens.json` holds the design tokens (colors, typography, spacing,
+  radii) every client shares; `design/README.md` maps the top-level
+  sections/screens and indexes one spec per screen and per component
+  (`design/screens/<screen>/README.md`, `design/components/<component>/README.md`:
+  layout, parameters, sizes in tokens, states, copy, an acceptance checklist,
+  and the source files that implement it). What it looks like and what
+  screens exist. `/implement-ui` creates it; the file's own header says how to
+  keep it true by hand.
 - **`user-stories.md`** — the behavioral contract. Everything the user must be
   able to DO, as platform-independent user stories. What the product can do
   for its user.
 
 The three answer different questions and should not bleed into each other:
-*what can a client call* (backend) vs *what does it look like* (ui) vs *what
-can the user achieve* (user-stories). A capability shows up in `user-stories.md`
-as an outcome, in `ui.md` as the screen it lives on, and in `backend.md` as the
-endpoints behind it — same feature, three lenses, no duplication of detail.
+*what can a client call* (backend) vs *what does it look like* (design) vs
+*what can the user achieve* (user-stories). A capability shows up in
+`user-stories.md` as an outcome, in `design/` as the screen it lives on, and in
+`backend.md` as the endpoints behind it — same feature, three lenses, no
+duplication of detail.
 
 Alongside the three product-contract files there is a fourth, different in
 kind:
 
 - **`conventions.md`** — *how to write the code* in this project (typing,
-  error handling, security, git, output). The three above describe *what the
+  error handling, security, git, output). The lenses above describe *what the
   system does*; this one describes *how contributors should build it*. It is
   the **repo-versioned copy** of the conventions: it travels with the clone and
   is what every contributor and non-Claude tool (Xcode, a sandboxed editor, a
@@ -43,15 +51,12 @@ kind:
   are NOT checked in — so `conventions.md` is the one source present in a fresh
   clone, and must be kept in sync by hand when a convention changes.
 
-When the UI is designed as a Design canvas (an Artifact made with Claude),
-`/implement-ui` also writes **`design/`**: one spec per screen
-(`design/screens/<screen>.md`: components, placement, sizes in tokens, phone
-behaviour, content and copy) and one per component
-(`design/components/<component>/README.md`: parameters, variants, states,
-events, keyboard), each with an acceptance checklist, plus an index tracking
-which items are designed, implemented and verified. It is derived from the canvas, not from the
-code: when the design changes, regenerate it; when the code deliberately
-departs from it, record the deviation there.
+When the UI is designed as a Design canvas (an Artifact made with Claude), the
+drawing stays in that canvas and `design/` is derived from it: when the design
+changes, regenerate the specs; when the code changes first, the change goes
+back into the canvas. Without a canvas, the specs describe the code. Older
+projects may still have a `docs/ui.md`; `/implement-ui` migrates it into
+`design/`.
 
 Add more files (`cli.md`, `bot.md`, `events.md`, …) only when there is a *new
 producer or consumer of contracts* another part of the system must understand
@@ -63,7 +68,7 @@ a folder exists.
 Most products implement the same behavior on every client (web, iOS, Android,
 desktop). So:
 
-- `user-stories.md` and `ui.md` are **platform-agnostic by default**: write
+- `user-stories.md` and `design/` are **platform-agnostic by default**: write
   each story/section once.
 - Only annotate a platform when a capability **genuinely differs** — e.g.
   *"Admin panel — web only"*, or a `Platform exception:` line under a story.
@@ -89,7 +94,7 @@ one-liner so it exists", always pick the one-liner.
 A change counts as a contract change when it adds, removes, or alters:
 - a backend endpoint (path, method, request body, response shape, status
   codes, auth) → `backend.md`;
-- a top-level section/screen, or a brand design token → `ui.md`;
+- a top-level section/screen, a component, or a design token → `design/`;
 - something the user can now do, can no longer do, or does differently
   → `user-stories.md`;
 - any cross-component agreement another consumer relies on → the relevant

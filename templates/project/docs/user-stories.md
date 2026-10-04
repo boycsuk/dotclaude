@@ -8,7 +8,7 @@
 > docs.
 >
 > **What this file is NOT.** Not the API (`backend.md` lists endpoints), not
-> the visual map (`ui.md` lists screens and tokens), not implementation. A
+> the visual map (`design/` lists screens and tokens), not implementation. A
 > story says *what the user achieves and why*, never *how it is built*.
 >
 > **Platform model: parity by default, exceptions only.** Assume every story
@@ -41,7 +41,7 @@ Add nested lines only when they carry contract-level information:
   camera"*.
 
 Keep stories outcome-focused. "I can reset my password" is a story; "the
-reset button is blue" is not (that is `ui.md`), and "calls `POST /auth/reset`"
+reset button is blue" is not (that is `design/`), and "calls `POST /auth/reset`"
 is not (that is `backend.md`).
 
 ## Roles

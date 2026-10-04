@@ -59,7 +59,7 @@ dotclaude/
     ├── mcp/                     # one fragment per MCP server (xcode, playwright, codebase-memory-mcp);
     │                            # ./.mcp.json is COMPOSED from these, never copied
     ├── scaffolds/               # infra templates (Dockerfile, compose, deploy.sh, …)
-    ├── docs/                    # portable contract docs (backend.md, ui.md, user-stories.md, conventions.md, README.md)
+    ├── docs/                    # portable contract docs (backend.md, user-stories.md, conventions.md, README.md)
     └── .claude/
         ├── settings.json        # per-project STUB (base config is central; this only ADDS, e.g. MCP perms)
         └── settings.local.json.example  # personal overrides (gitignored once renamed)
@@ -149,7 +149,7 @@ DESIGN.md captures the reasoning behind every structural choice — read it befo
 - §10: hooks are deterministic guarantees, not advisory. If safety is non-negotiable, it goes in a hook, not in `CLAUDE.md`.
 - §13 (superseded): Serena and Graphify were removed, and `--serena` is now an unknown flag (exit 9). Their hook entries in old projects are pruned through `templates/project/obsolete.json` on every deploy — when you retire any artifact, add it there (check.py fails if an entry still names something shipped).
 - §14: `db-inspector` is an agent (not a skill, not only the MCP) and is read-only by allow/denylist enforced in its prompt.
-- §17: portable `docs/` seeded for every project (backend.md + ui.md + user-stories.md + conventions.md + README.md) and maintained via `/update-docs`; each doc is self-maintained for editors without skills. `conventions.md` is the repo-versioned copy of the coding conventions — present in every clone, unlike the personal `~/.claude/rules/` — so non-Claude-Code tools follow the same conventions. Coverage-over-depth: every capability listed, even briefly.
+- §17: portable `docs/` seeded for every project (backend.md + user-stories.md + conventions.md + README.md; the visual contract is `design/`, created by `/implement-ui`, §46) and maintained via `/update-docs`; each doc is self-maintained for editors without skills. `conventions.md` is the repo-versioned copy of the coding conventions — present in every clone, unlike the personal `~/.claude/rules/` — so non-Claude-Code tools follow the same conventions. Coverage-over-depth: every capability listed, even briefly.
 - §18: `guard-push-main` is opt-out via `"allowPushToMain": true` in `.claude/settings.local.json` (gitignored). Force push stays blocked regardless.
 - §19/§23: after centralization (§23), `init.sh --update` only seeds missing per-project files and drift-reports `settings.local.json.example`; the old three-class hook/agent/skill/rule refresh is gone (those update via `git pull && ./install.sh`). `/init-project` still diffs CLAUDE.md bullets for non-destructive reconciliation.
 

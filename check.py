@@ -468,7 +468,6 @@ def _():
                 "templates/project/scripts/merge-mcp.py",
                 "templates/project/docs/README.md",
                 "templates/project/docs/backend.md",
-                "templates/project/docs/ui.md",
                 "templates/project/docs/user-stories.md",
                 "templates/project/docs/conventions.md",
                 "skills/init-project/SKILL.md",
