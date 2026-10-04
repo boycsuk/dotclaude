@@ -1,6 +1,7 @@
 ---
 name: compound
 description: Captures a learning from the current session (a mistake, an applied rule, a discovered pattern) and codifies it in the right place of the system. Use when the user invokes /compound, or proactively when the user corrects something systematic that should persist across sessions. Proposes the change for confirmation before editing anything.
+argument-hint: "[the learning to capture]"
 ---
 
 # Compound
@@ -8,6 +9,8 @@ description: Captures a learning from the current session (a mistake, an applied
 A session has produced a learning. Your job: turn it into infrastructure so it does not get lost.
 
 ## 1. Identify the learning
+
+If the skill was invoked with arguments (an `ARGUMENTS:` line at the end of this skill), they are the learning to capture: start from them instead of reconstructing it from the session, and still put them through the questions below — above all, general or local.
 
 Ask yourself (and the user if needed):
 - What happened that should not have happened, or that worked better than expected?

@@ -1,6 +1,7 @@
 ---
 name: implement-ui
-description: Designs and implements a web or desktop UI, or implements one from a design reference (the project's Design canvas made with the Artifact tool, an HTML mockup, a screenshot, or a Claude Design handoff bundle), keeping the design ordered and current in docs/design/ (tokens.json, a README index, one spec per component and screen). It extends the project's single Design canvas (optionally researched first in Refero, the user's design-reference MCP), reusing components before creating new ones and keeping experiments under explorations; turns the canvas into specs, closes their open questions, agrees a component tree, then builds components first and screens after, one unit at a time, each gated on a screenshot-vs-reference check and its acceptance checklist. Use when the user hands over a design or mockup or asks to build, replicate, extend or restyle an interface beyond a trivial tweak.
+description: Use when the user hands over a design or mockup, or asks to build, replicate, extend or restyle a web or desktop UI beyond a trivial tweak, from the project's Design canvas (made with the Artifact tool), an HTML mockup, a screenshot, a Claude Design handoff bundle, or no reference yet. Keeps the design ordered and current in docs/design/ (tokens.json, a README index, one spec per component and screen).
+argument-hint: "[design reference: path, URL or canvas link]"
 ---
 
 # Implement UI
@@ -19,6 +20,11 @@ the code needs in `docs/design/` (`references/design-spec.md`).
 The canvas is optional; `docs/design/` is not.
 
 ## 0. Locate the inputs
+
+If the skill was invoked with arguments (an `ARGUMENTS:` line at the end of
+this skill), they are the design reference for this request — a file path, a
+URL or a canvas link. Classify it among the kinds below instead of asking for
+one; the other inputs are still located as usual.
 
 Identify, asking only for what you cannot detect:
 
