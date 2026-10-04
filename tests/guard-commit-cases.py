@@ -61,6 +61,7 @@ MESSAGE_CASES = [
     ("git com''mit --signoff -m 'feat: x'", DENY, "empty quotes split the subcommand past the prefilter"),
     ("g\"\"it commit -s -m 'feat: x'", DENY, "empty quotes split the program name"),
     ("GIT commit -s -m 'feat: x'", DENY, "case-insensitive filesystems resolve GIT to git"),
+    ("cd $'a\\0b'; git commit -s -m 'feat: x'", DENY, "a NUL byte in the cd target must not crash the guard"),
     ("{ git commit -s -m 'feat: x'; }", DENY, "brace group"),
     ("if true; then git commit -s -m 'feat: x'; fi", DENY, "inside if/then"),
     ("bash -c \"git commit -s -m 'feat: x'\"", DENY, "bash -c string"),

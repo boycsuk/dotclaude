@@ -390,6 +390,17 @@ def silence_feedback_hook(repo):
         fh.write(text.replace("hookio.feedback(", "print(", 1))
 
 
+def bypass_entrypoint(repo):
+    """A guard exiting through sys.exit(main()) lets a crash through as a non-blocking exit 1."""
+    path = os.path.join(repo, "global/.claude/hooks/guard-destructive.py")
+    with open(path) as fh:
+        text = fh.read()
+    if "hookio.entrypoint(main)" not in text:
+        raise SystemExit("inject: guard-destructive.py no longer exits through hookio.entrypoint")
+    with open(path, "w") as fh:
+        fh.write(text.replace("hookio.entrypoint(main)", "sys.exit(main())"))
+
+
 def orphan_shell_hook(repo):
     """A shell hook shipped without its .ps1 twin silently skips Windows."""
     with open(os.path.join(repo, "global/.claude/hooks/new-check.sh"), "w") as fh:
@@ -463,6 +474,7 @@ REGRESSIONS = {
     "break-frontmatter": break_frontmatter,
     "pin-model-on-reviewer": pin_model_on_reviewer,
     "add-deny-rule": add_deny_rule,
+    "bypass-entrypoint": bypass_entrypoint,
     "drop-design-heading": drop_design_heading,
     "diverge-extensions": diverge_extensions,
     "drop-hook-from-readme": drop_hook_from_readme,

@@ -100,6 +100,39 @@ def feedback(text):
     return FEEDBACK_EXIT
 
 
+def _hook_kind(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            first = fh.readline()
+    except OSError:
+        return ""
+    return first.partition("# hook-kind:")[2].strip()
+
+
+def entrypoint(main):
+    """Run a hook's `main` and exit with its return code; never exits 1 on a crash.
+
+    An uncaught exception exits 1, which Claude Code treats as a non-blocking
+    error, so a crashing guard let the tool call run unjudged. A guard
+    therefore asks the user instead, naming itself and the error; every other
+    kind exits 0, since a crash in advice must not interrupt the tool. The
+    traceback goes to stderr, which at exit 0 reaches the debug log.
+    """
+    try:
+        code = main()
+    except Exception as exc:  # noqa: BLE001 — any crash must still produce a decision
+        import traceback
+        traceback.print_exc()
+        path = getattr(sys.modules.get("__main__"), "__file__", "") or ""
+        name = os.path.splitext(os.path.basename(path))[0] or "hook"
+        if _hook_kind(path) == "guard":
+            ask(f"the {name} guard crashed ({type(exc).__name__}: {exc}), so this command was not "
+                f"checked. Approve only if it is safe. A crash that repeats is a bug in "
+                f"global/.claude/hooks/{name}.py: fix it in the dotclaude repo and re-run ./install.sh.")
+        code = 0
+    sys.exit(code or 0)
+
+
 def update_input(tool_input):
     """PreToolUse: replace the tool's input with `tool_input`."""
     _emit({"hookSpecificOutput": {"hookEventName": "PreToolUse",

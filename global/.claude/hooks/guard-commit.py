@@ -118,7 +118,7 @@ def git(opts, cwd, *argv):
     try:
         out = subprocess.run(cmd + list(argv), cwd=cwd, capture_output=True, text=True,
                              timeout=GIT_TIMEOUT)
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError, ValueError):
         return None
     return out.stdout if out.returncode == 0 else None
 
@@ -268,4 +268,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    hookio.entrypoint(main)

@@ -63,6 +63,10 @@ inject silence-feedback-hook
 expect_fail "hook wiring" "a feedback hook stops reporting to Claude"
 
 setup
+inject bypass-entrypoint
+expect_fail "hook wiring" "a guard exits through sys.exit(main()), so a crash allows the call"
+
+setup
 inject orphan-shell-hook
 expect_fail "hook .sh/.ps1 pairs" "a shell hook ships without its .ps1 twin"
 

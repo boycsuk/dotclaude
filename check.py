@@ -569,6 +569,10 @@ def _():
             continue
         kind = m.group(1)
         body = code_only(raw)
+        if "hookio.entrypoint(main)" not in body:
+            fail("hook wiring",
+                 f"{name}.py does not exit through hookio.entrypoint(main) — a bare "
+                 f"sys.exit(main()) exits 1 on a crash, which lets the tool call run unjudged")
         if kind == "advisory" and "hookio.context(" not in body:
             fail("hook wiring",
                  f"{name}.py is advisory but never calls hookio.context() — its "
