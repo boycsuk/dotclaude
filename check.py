@@ -485,6 +485,26 @@ def _():
             fail("central artifact inventory", f"{rel} is missing — every deploy needs it")
 
 
+def frontmatter(body):
+    """Top-level `key: value` pairs of a Markdown file's frontmatter, or None
+    when the fences are broken. Indented lines (YAML lists, maps, folded
+    continuations) are skipped: only the keys themselves are judged."""
+    if not body.startswith("---\n") or "\n---\n" not in body[4:]:
+        return None
+    front = body[4:].split("\n---\n", 1)[0]
+    return {key: value.strip().strip("'\"")
+            for key, value in re.findall(r"^([A-Za-z_-]+):[ \t]*(.*)$", front, re.M)}
+
+
+def skill_docs():
+    """(skill, relpath, text) for every central SKILL.md and references/*.md."""
+    for path in walk_files(("claude/skills",), ".md"):
+        rel = os.path.relpath(path, REPO)
+        parts = rel.split(os.sep)
+        if len(parts) == 4 and parts[3] == "SKILL.md" or len(parts) == 5 and parts[3] == "references":
+            yield parts[2], rel.replace(os.sep, "/"), read(rel)
+
+
 # --- 8c. Agent and skill frontmatter parses and declares what it must --------
 @check("frontmatter validity")
 def _():
@@ -498,12 +518,10 @@ def _():
     model_allowed = {"verify", "changes", "resume-context"}
     for path in paths:
         rel = os.path.relpath(path, REPO)
-        body = read(rel)
-        if not body.startswith("---\n") or "\n---\n" not in body[4:]:
+        keys = frontmatter(read(rel))
+        if keys is None:
             fail("frontmatter validity", f"{rel} has no closing --- fence")
             continue
-        front = body[4:].split("\n---\n", 1)[0]
-        keys = dict(re.findall(r"^([A-Za-z-]+):\s*(.*)$", front, re.M))
         expected_name = (os.path.basename(os.path.dirname(path))
                          if path.endswith("SKILL.md") else os.path.basename(path)[:-3])
         for required in ("name", "description"):
@@ -525,6 +543,122 @@ def _():
             fail("frontmatter validity",
                  f"{rel} pins model: {model} without `context: fork` — the model "
                  f"would run the rest of the caller's turn")
+
+
+# --- 8d. Skill frontmatter uses only documented keys and values --------------
+@check("skill frontmatter fields")
+def _():
+    # Claude Code ignores a key or value it does not know, with no error: a
+    # misspelled `context: fork` or `disable-model-invocation` drops the
+    # guarantee it was written for. Documented set:
+    # https://code.claude.com/docs/en/skills (frontmatter reference); metadata,
+    # license and compatibility come from the Agent Skills spec. Agents have
+    # a different field set, so this is scoped to SKILL.md.
+    known = {"name", "description", "when_to_use", "argument-hint", "arguments",
+             "disable-model-invocation", "user-invocable", "allowed-tools",
+             "disallowed-tools", "model", "effort", "context", "agent", "background",
+             "hooks", "paths", "shell", "metadata", "license", "compatibility"}
+    enums = {"context": {"fork"},
+             "effort": {"low", "medium", "high", "xhigh", "max"},
+             "shell": {"bash", "powershell"},
+             "background": {"true", "false"},
+             "disable-model-invocation": {"true", "false"},
+             "user-invocable": {"true", "false"}}
+    for path in sorted(glob.glob(os.path.join(REPO, "claude/skills/*/SKILL.md"))):
+        rel = os.path.relpath(path, REPO)
+        keys = frontmatter(read(rel))
+        if keys is None:
+            continue  # reported by "frontmatter validity"
+        for key, value in keys.items():
+            if key not in known:
+                fail("skill frontmatter fields",
+                     f"{rel} has `{key}:`, not a documented skill field — Claude Code ignores it")
+            elif key in enums and value not in enums[key]:
+                fail("skill frontmatter fields",
+                     f"{rel} has `{key}: {value}`; accepted: {', '.join(sorted(enums[key]))}")
+        for key in ("background", "agent"):
+            if key in keys and keys.get("context") != "fork":
+                fail("skill frontmatter fields",
+                     f"{rel} sets `{key}:` without `context: fork` — it only applies to a fork")
+
+
+# --- 8e. Injected shell blocks never need a commit to exist -------------------
+@check("skill injections need no commit")
+def _():
+    # A failed injected command aborts the whole skill invocation (docs:
+    # "Run skills" > dynamic context injection), and these exit 128 in a repo
+    # with no commits yet — so the skill is dead in every fresh project.
+    always = {"log", "show", "describe", "merge-base"}
+    with_head = {"diff", "rev-parse"}
+    takes_arg = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
+
+    def offending(command):
+        for segment in re.split(r"[;&|\n]|\$\(", command):
+            words = segment.split()
+            for i, word in enumerate(words):
+                if word.strip("'\"") != "git" and not word.endswith("/git"):
+                    continue
+                j = i + 1
+                while j < len(words) and words[j].startswith("-"):
+                    j += 2 if words[j] in takes_arg else 1
+                sub = words[j] if j < len(words) else ""
+                if sub in always or (sub in with_head and any("HEAD" in w for w in words[j + 1:])):
+                    return " ".join(words[i:])
+        return None
+
+    fenced = re.compile(r"^```!\s*\n(.*?)^```\s*$", re.S | re.M)
+    inline = re.compile(r"(?:^|\s)!`([^`\n]+)`", re.M)
+    for _skill, rel, text in skill_docs():
+        blocks = [(m.start(), m.group(1)) for m in fenced.finditer(text)]
+        blocks += [(m.start(1), m.group(1)) for m in inline.finditer(text)]
+        for start, command in blocks:
+            bad = offending(command)
+            if bad:
+                line = text.count("\n", 0, start) + 1
+                fail("skill injections need no commit",
+                     f"{rel}:{line} injects `{bad}`, which exits 128 before the first "
+                     f"commit and aborts the whole skill (run it with the Bash tool instead)")
+
+
+# --- 8f. Skills point only at skills, references and scripts that exist -------
+@check("skill cross-references")
+def _():
+    # A renamed or retired skill leaves `/old-name` and `references/x.md`
+    # pointers behind; the model then follows a path that is not there, with
+    # nothing failing. Built-ins the skills cite are real commands, not ours.
+    builtins = {"code-review", "compact", "config", "mcp", "plugin", "rewind", "run",
+                "sandbox", "security-review"}
+    path_roots = {"bin", "dev", "etc", "home", "mnt", "opt", "private", "tmp", "usr", "var"}
+    skills_dir = os.path.join(REPO, "claude/skills")
+    skills = {d for d in os.listdir(skills_dir)
+              if os.path.exists(os.path.join(skills_dir, d, "SKILL.md"))}
+    fence = re.compile(r"^(`{3,}|~{3,}).*?^\1[ \t]*$", re.S | re.M)
+    for skill, rel, text in skill_docs():
+        prose = fence.sub("", text)
+        named = set()
+        for span in re.findall(r"`([^`\n]+)`", prose):
+            m = re.match(r"/([a-z][a-z0-9:-]*)(?=\s|$)", span)
+            if not m or m.group(1) in path_roots:
+                continue
+            named.add(m.group(1))
+            if m.group(1) not in skills | builtins:
+                fail("skill cross-references",
+                     f"{rel} cites `/{m.group(1)}`, which is neither a central skill nor a "
+                     f"known built-in")
+        # A reference may belong to another skill the same file names, as
+        # update-docs cites implement-ui's references/design-spec.md.
+        for m in re.finditer(r"(?:\b([\w-]+)/)?references/([\w.-]+\.md)", text):
+            owners = [m.group(1)] if m.group(1) in skills else [skill, *sorted(named & skills)]
+            if not any(os.path.exists(os.path.join(skills_dir, o, "references", m.group(2)))
+                       for o in owners):
+                fail("skill cross-references",
+                     f"{rel} cites references/{m.group(2)}, found in none of: "
+                     f"{', '.join(owners)}")
+        for m in re.finditer(r"(?:~|\$HOME)/\.claude/skills/([\w-]+)/scripts/([\w.-]+)", text):
+            if not os.path.exists(os.path.join(skills_dir, m.group(1), "scripts", m.group(2))):
+                fail("skill cross-references",
+                     f"{rel} cites {m.group(0)}, but claude/skills/{m.group(1)}/scripts/"
+                     f"{m.group(2)} does not exist")
 
 
 # --- 9b. Hook wiring: no prefix `if` gates, no dead advisory channel ---------

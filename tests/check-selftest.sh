@@ -263,6 +263,38 @@ printf 'then run `bash -c "make"`\n' >> "$WORK/repo/claude/skills/verify/SKILL.m
 expect_fail "skills avoid inline interpreters" "a central skill gains a bash -c one-liner"
 
 setup
+inject misspell-skill-field
+expect_fail "skill frontmatter fields" "a skill frontmatter key is misspelled"
+
+setup
+inject bad-effort-value
+expect_fail "skill frontmatter fields" "a skill declares an undocumented effort level"
+
+setup
+inject background-without-fork
+expect_fail "skill frontmatter fields" "a skill sets background: without context: fork"
+
+setup
+printf '\n```!\ngit log --oneline -5\n```\n' >> "$WORK/repo/claude/skills/changes/SKILL.md"
+expect_fail "skill injections need no commit" "an injected block runs git log"
+
+setup
+printf 'Branch: !`git rev-parse --abbrev-ref HEAD`\n' >> "$WORK/repo/claude/skills/verify/SKILL.md"
+expect_fail "skill injections need no commit" "an inline injection resolves HEAD"
+
+setup
+printf 'then run `/review-changes`\n' >> "$WORK/repo/claude/skills/verify/SKILL.md"
+expect_fail "skill cross-references" "a skill cites a slash command that does not exist"
+
+setup
+printf 'Read `references/missing-mode.md` first.\n' >> "$WORK/repo/claude/skills/verify/SKILL.md"
+expect_fail "skill cross-references" "a skill cites a references/ file that does not exist"
+
+setup
+printf 'Run `python3 ~/.claude/skills/init-project/scripts/gone.py`.\n' >> "$WORK/repo/claude/skills/verify/SKILL.md"
+expect_fail "skill cross-references" "a skill cites an installed script that does not exist"
+
+setup
 if python3 "$WORK/repo/check.py" >/dev/null 2>&1; then
   echo "  caught:     (control) pristine repo passes"
   pass=$((pass + 1))

@@ -461,6 +461,23 @@ def drop_fork_from_verify(repo):
         fh.write(text.replace("\ncontext: fork\n", "\n", 1))
 
 
+def misspell_skill_field(repo):
+    """A misspelled frontmatter key is ignored: init-project becomes model-invocable."""
+    _replace(repo, "claude/skills/init-project/SKILL.md",
+             "\ndisable-model-invocation: true\n", "\ndisable-model-invokation: true\n")
+
+
+def bad_effort_value(repo):
+    """An effort level outside the documented set is ignored without a word."""
+    _replace(repo, "claude/skills/readme/SKILL.md", "\neffort: high\n", "\neffort: highest\n")
+
+
+def background_without_fork(repo):
+    """`background:` only applies to a forked skill; on any other it does nothing."""
+    _replace(repo, "claude/skills/readme/SKILL.md", "\nname: readme\n",
+             "\nname: readme\nbackground: false\n")
+
+
 def unpin_mcp_fragment(repo):
     """An MCP server fragment back on @latest re-resolves the package on every start."""
     path = os.path.join(repo, "claude/templates/project/mcp/playwright.json")
@@ -515,6 +532,9 @@ REGRESSIONS = {
     "wrap-mcp-fragment": wrap_mcp_fragment,
     "break-mcp-fragment-json": break_mcp_fragment_json,
     "delete-central-skill": delete_central_skill,
+    "misspell-skill-field": misspell_skill_field,
+    "bad-effort-value": bad_effort_value,
+    "background-without-fork": background_without_fork,
 }
 
 
