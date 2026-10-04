@@ -259,6 +259,16 @@ def main():
                     if got != want:
                         failures += 1
                         print(f"  FAIL want {want} got {got} | {command!r}  ({why})")
+                for command, want, why in (
+                        (f"Set-Location {repo}; git commit -m 'feat: x'", ASK, "Set-Location into a repo on main"),
+                        (f"sl {repo}; git commit -s -m 'feat: x'", DENY, "sl: the session's trailer opt-out does not apply"),
+                        (f"Set-Location -Path {repo}; git commit -m 'feat: x'", ASK, "-Path names the directory"),
+                        (f"Push-Location {repo}; git commit -m 'feat: x'", ASK, "Push-Location")):
+                    got = decide(session, command, pwsh, tool="PowerShell")
+                    total += 1
+                    if got != want:
+                        failures += 1
+                        print(f"  FAIL [PowerShell tool] want {want} got {got} | {command!r}  ({why})")
                 set_state(repo, branch="main", local={"allowPushToMain": True})
                 got = decide(session, f"git -C {repo_sh} commit -m 'feat: x'", pwsh)
                 total += 1
@@ -274,7 +284,7 @@ def main():
                 if code != 0 or out is not None:
                     failures += 1
                     print(f"  FAIL malformed payload {bad}: exit {code}, out {out}")
-            print(f"  {len(MESSAGE_CASES) + len(PS_CASES) + len(STATE_CASES) + 7} cases checked")
+            print(f"  {len(MESSAGE_CASES) + len(PS_CASES) + len(STATE_CASES) + 11} cases checked")
     finally:
         shutil.rmtree(repo, ignore_errors=True)
     print()

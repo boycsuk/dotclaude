@@ -245,9 +245,8 @@ def main():
     cwd = payload.get("cwd") or hookio.project_dir(payload)
     earlier_adds, verdicts = [], []
     for seg in segments:
-        words = shellwords.unwrap(seg)
-        if words and words[0] in ("cd", "pushd"):
-            target = next((w for w in words[1:] if w != "--"), "~")
+        target = shellwords.chdir_target(shellwords.unwrap(seg))
+        if target is not None:
             cwd = os.path.normpath(os.path.join(cwd, os.path.expanduser(target)))
             continue
         inv = shellwords.git_invocation(seg)

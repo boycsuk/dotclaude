@@ -178,9 +178,8 @@ def judge(command, payload):
         return None
     cur = start_dir(payload)
     for seg in segments:
-        words = shellwords.unwrap(seg)
-        if words and words[0] in ("cd", "pushd"):
-            target = next((w for w in words[1:] if w != "--"), "~")
+        target = shellwords.chdir_target(shellwords.unwrap(seg))
+        if target is not None:
             cur = os.path.normpath(os.path.join(cur, os.path.expanduser(target)))
             continue
         inv = shellwords.git_invocation(seg)

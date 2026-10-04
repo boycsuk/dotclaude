@@ -52,7 +52,6 @@ INTERPRETERS = re.compile(r"^((ba|z|da|k)?sh|fish|python[0-9.]*|py|perl|ruby|nod
 PS_REMOVE = {"remove-item", "ri", "rm", "del", "erase", "rd", "rmdir"}
 PS_WRITERS = {"set-content", "add-content", "out-file", "clear-content", "new-item", "sc", "ac"}
 PS_COPIES = {"copy-item", "move-item", "cpi", "mi", "copy", "move", "cp", "mv"}
-CD = {"cd", "pushd", "chdir", "set-location", "sl"}
 REDIRECT = re.compile(r"^(\d*|&)>>?\|?(.*)$")
 PROGRAM_PRODUCERS = {"echo", "printf"}
 INLINE_REASON = ("inline interpreter execution (python3 -c, node -e, bash -c, pwsh -c, or a program "
@@ -326,8 +325,9 @@ def judge(command, payload):
             continue
         name = shellwords.basename(words[0])
         lower, args = name.lower(), words[1:]
-        if lower in CD:
-            cwd = absolute(next((a for a in args if a != "--"), "~"), cwd)
+        target = shellwords.chdir_target(words)
+        if target is not None:
+            cwd = absolute(target, cwd)
             continue
         if judge_central(name, args, shell, cwd):
             return "deny", ("writing to the installed central config (~/.claude/...) through the shell. "

@@ -240,6 +240,8 @@ POWERSHELL = [
     ('pwsh -c "Get-ChildItem"',                     BLOCK, "inline pwsh"),
     ("Set-Content ~/.claude/settings.json '{}'",    BLOCK, "write the registry"),
     ("Copy-Item evil.ps1 -Destination $HOME/.claude/hooks/", BLOCK, "copy into central hooks"),
+    ("Set-Location -Path ~/.claude; Set-Content settings.json '{}'", BLOCK, "-Path names the directory"),
+    ("Push-Location ~/.claude; Set-Content settings.json '{}'", BLOCK, "Push-Location, then a relative write"),
     ("Remove-Item ./build -Recurse",                ALLOW, "a build dir"),
     ("Remove-Item notes.txt",                       ALLOW, "one file"),
     ("Get-ChildItem ~/.claude",                     ALLOW, "listing"),

@@ -54,6 +54,8 @@ WRAPPERS = {
 _POSITIONAL_ARG_WRAPPERS = {"timeout"}          # `timeout 60 cmd`: the duration comes first
 _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _QUOTING = re.compile(r"[\"'\\`]")
+CHDIR = {"cd", "pushd", "chdir", "set-location", "sl", "push-location"}
+_PS_PATH_FLAG = re.compile(r"^-(path|literalpath|lp|pspath)$", re.I)
 # Interpreters whose program is not shell, so a body they run cannot be judged
 # by parsing it as commands.
 PROGRAM_INTERPRETERS = re.compile(r"^(python[0-9.]*|py|node|nodejs|bun|deno|perl|ruby|php)$", re.I)
@@ -518,6 +520,17 @@ def basename(word):
     """The program name of `word`: path and a trailing .exe removed."""
     name = re.split(r"[/\\]", word)[-1]
     return name[:-4] if name.lower().endswith(".exe") else name
+
+
+def chdir_target(words):
+    """The directory a cd-like command moves to ("~" when bare), or None for any other command.
+
+    Covers the POSIX builtins and PowerShell's cmdlets and aliases, so a guard
+    that resolves "which repo does this act on" follows `Set-Location x; git push`.
+    """
+    if not words or basename(words[0]).lower() not in CHDIR:
+        return None
+    return next((w for w in words[1:] if w != "--" and not _PS_PATH_FLAG.match(w)), "~")
 
 
 def mentions(cmd, word):

@@ -269,6 +269,19 @@ def main():
             if got != want:
                 failures += 1
                 print(f"  FAIL want {want} got {got} ({name}) | {cmd}   ({why})")
+    cross_ps = [
+        (f"Set-Location {other}; git push origin main", BLOCK, "Set-Location into another repo"),
+        (f"sl {other}; git push", BLOCK, "the sl alias, then a bare push"),
+        (f"Set-Location -Path {other}; git push origin main", BLOCK, "-Path names the directory"),
+        (f"Push-Location {other}; git push origin main", BLOCK, "Push-Location"),
+        (f"chdir {other}; git push origin main", BLOCK, "the chdir alias"),
+    ]
+    for cmd, want, why in cross_ps:
+        for name, runner in runners:
+            got = invoke(runner, cmd, session, tool="PowerShell")
+            if got != want:
+                failures += 1
+                print(f"  FAIL [PowerShell tool] want {want} got {got} ({name}) | {cmd}   ({why})")
     set_optout(session, False)
     set_optout(other, True)
     for cmd, want, why in ((f"git -C {other_sh} push origin main", ALLOW, "the target repo's own opt-out applies"),
@@ -278,7 +291,7 @@ def main():
             if got != want:
                 failures += 1
                 print(f"  FAIL want {want} got {got} ({name}) | {cmd}   ({why})")
-    print(f"  {len(cross) + 2} cases checked")
+    print(f"  {len(cross) + len(cross_ps) + 2} cases checked")
 
     # The hook runs where the harness starts it, which need not be the
     # session's directory: the payload's cwd is where the command runs.
