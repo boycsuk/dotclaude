@@ -19,7 +19,7 @@ unchanged.
 Improvement needs a focus. Take the target from the request (a component, a
 screen, a module, a feature); if it names none, ask for one. A whole-project
 request is split: list the project's top-level features (from
-`docs/user-stories.md`, `docs/ui.md` Sections, the router or entry points)
+`docs/user-stories.md`, `design/README.md` Sections, the router or entry points)
 and ask which to start with, through AskUserQuestion.
 
 ## 2. One round of questions (AskUserQuestion, three questions)
@@ -39,7 +39,7 @@ the options carry real numbers.
     (parameters, events, slots, extension points, defaults).
 - **Sources** (`multiSelect`):
   - **Project code and docs**: what the code does today against what
-    `docs/user-stories.md`, `docs/design/` and `docs/ui.md` promise. Always
+    `docs/user-stories.md` and `design/` promise. Always
     cheap; recommend it.
   - **Patterns for this kind of piece**: what components or features of this
     kind usually offer, filtered by what this project needs.
@@ -63,7 +63,7 @@ a wrong reading is corrected before it multiplies:
   the data itself before passing it, wraps it to add a feature) is the
   strongest evidence of a missing capability.
 - **What was promised**: user stories not yet met, the spec's
-  `## Open questions` and `## Accepted deviations` in `docs/design/`,
+  `## Open questions` and `## Accepted deviations` in `design/`,
   `TODO`/`FIXME` near the target.
 - **Its limits**: data volumes the code assumes (an unbounded list rendered
   whole, a query without a limit), platforms it targets.
@@ -118,7 +118,7 @@ questions per call) which ideas to take, then route each:
 - **Large or ambiguous** (effort L, more than ~3 files, or a design
   decision): `/plan-feature`, which interviews and writes a SPEC.md.
 - **Visual or interaction change in a UI**: `/implement-ui`. When the
-  project has a `docs/design/` spec, the design changes first and the code
+  project has a `design/` spec, the design changes first and the code
   follows it.
 - **Small and clear**: implement it here, one idea at a time, each verified
   with the project's tests and committed through `/commit`.
