@@ -11,16 +11,42 @@ so it carries no hook-kind.
 """
 
 import json
+import os
+import re
 import sys
 
 sys.dont_write_bytecode = True
 
 HEADROOM_FLOOR = 40000      # tokens; below this the warning shows whatever the percentage
 PERCENT_WARN = 70
+EXEC_FORM_SINCE = (2, 1, 139)
+GUARDS_OFF = "!guards off: Claude Code too old for this install - update it or re-run the installer"
+
+
+def exec_hooks_unsupported(version):
+    """True when Claude Code `version` predates hook `args` and settings.json wires a hook with them.
+
+    Such a Claude Code runs a bare python.exe for every exec-form hook, which
+    exits 1 without blocking, so every guard is off. The hooks cannot report
+    it, since they are what fails; this line, wired without `args`, still runs.
+    """
+    m = re.match(r"\s*(\d+)\.(\d+)\.(\d+)", str(version or ""))
+    if not m or tuple(map(int, m.groups())) >= EXEC_FORM_SINCE:
+        return False
+    config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+    try:
+        with open(os.path.join(config, "settings.json"), encoding="utf-8-sig") as fh:
+            hooks = json.load(fh).get("hooks") or {}
+    except (OSError, ValueError, AttributeError):
+        return False
+    return any(isinstance(h, dict) and isinstance(h.get("args"), list)
+               for groups in hooks.values() if isinstance(groups, list)
+               for g in groups if isinstance(g, dict)
+               for h in g.get("hooks") or [])
 
 
 def line(data):
-    parts = []
+    parts = [GUARDS_OFF] if exec_hooks_unsupported(data.get("version")) else []
     model = (data.get("model") or {}).get("display_name")
     if model:
         parts.append(str(model))

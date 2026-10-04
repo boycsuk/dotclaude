@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- The status line leads with "!guards off" when the running Claude Code predates 2.1.139 and `~/.claude/settings.json` wires a hook in exec form (`args`): that version ignores `args`, so every guard is off and no hook can report it. It reads the settings only in that case (DESIGN.md §48).
 - `scripts/sandbox-readiness.py`, run last by `install.sh` and `install.ps1`: one line saying whether Claude Code's optional Bash sandbox can run on the machine — ready on macOS, the missing packages and the exact install command (apt-get, dnf, pacman, zypper) on Linux/WSL2, unsupported on WSL1 and native Windows with WSL2 or a dev container as the way forward. It never installs anything or uses sudo; the guards stay the default protection (DESIGN.md §21).
 - `tests/vacuity-check.py`: replaces each hook with a no-op stub in a scratch copy and requires a matrix that runs it to fail, so a harness or matrix refactor cannot leave a hook untested unnoticed.
 - `guard-readonly-agents` hook (PreToolUse on Bash/PowerShell) and `tests/guard-readonly-agents-cases.py`: when a subagent whose definition gives it no Write or Edit runs a command, it denies writes outside the temp folder and session scratchpad, any git command outside a read-only allowlist, and package installs, updates or removals. The main thread, built-in agents and agents that can edit are never judged; SQL is not parsed (DESIGN.md §47). The post-install smoke test covers it.

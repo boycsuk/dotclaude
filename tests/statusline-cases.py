@@ -32,21 +32,21 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = pyhook.hook_path("statusline")
 
 
-def run(payload, pwsh=None, cwd=None):
+def run(payload, pwsh=None, cwd=None, env=None):
     # On Windows install.ps1 seeds `powershell -NoProfile -Command "& '<python>' '<script>'"`.
     cmd = ([pwsh, "-NoProfile", "-Command", f"& {pyhook.ps_quote(sys.executable)} {pyhook.ps_quote(SCRIPT)}"]
            if pwsh else [sys.executable, SCRIPT])
     try:
         p = subprocess.run(cmd, input=payload, capture_output=True, text=True,
-                           cwd=cwd or REPO, timeout=60)
+                           cwd=cwd or REPO, timeout=60, env=env)
     except subprocess.TimeoutExpired:
         return "TIMEOUT", "", ""
     return p.returncode, p.stdout.strip(), p.stderr.strip()
 
 
-def check(payload, pwsh, why, must_contain=None, must_not_contain=None,
+def check(payload, pwsh, why, must_contain=None, must_not_contain=None, env=None,
           expect_empty=False):
-    rc, out, err = run(payload, pwsh)
+    rc, out, err = run(payload, pwsh, env=env)
     if rc != 0:
         return f"{why}: exited {rc} — a status line must always exit 0"
     if err:
@@ -141,7 +141,43 @@ def case_unexpected_types(_, pwsh):
                  pwsh, "wrong types throughout", expect_empty=True)
 
 
+def home_with_hooks(tmp, exec_form):
+    """A fake home whose settings.json wires one guard in exec form (args) or shell form."""
+    os.makedirs(os.path.join(tmp, ".claude"), exist_ok=True)
+    hook = ({"type": "command", "command": "C:\\Python\\python.exe", "args": ["C:\\h\\guard-destructive.py"]}
+            if exec_form else {"type": "command", "command": 'python3 "$HOME"/.claude/hooks/guard-destructive.py'})
+    with open(os.path.join(tmp, ".claude", "settings.json"), "w") as fh:
+        json.dump({"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [hook]}]}}, fh)
+    env = dict(os.environ, **pyhook.home_env(tmp))
+    env.pop("CLAUDE_CONFIG_DIR", None)
+    return env
+
+
+def case_downgrade_under_exec_hooks_warns(tmp, pwsh):
+    # A Claude Code older than 2.1.139 ignores `args`: every exec-form hook
+    # runs a bare python.exe that exits 1, so every guard is off. No hook can
+    # say so (they are the ones failing); the status line still runs.
+    return check(p(model={"display_name": "Opus"}, version="2.1.100"), pwsh,
+                 "old Claude Code with exec-form hooks", must_contain=["guards off"],
+                 env=home_with_hooks(tmp, exec_form=True))
+
+
+def case_recent_version_does_not_warn(tmp, pwsh):
+    return check(p(model={"display_name": "Opus"}, version="2.1.289"), pwsh,
+                 "a version that supports exec form", must_not_contain=["guards off"],
+                 env=home_with_hooks(tmp, exec_form=True))
+
+
+def case_old_version_shell_hooks_does_not_warn(tmp, pwsh):
+    return check(p(model={"display_name": "Opus"}, version="2.1.100"), pwsh,
+                 "an old version with shell-form hooks", must_not_contain=["guards off"],
+                 env=home_with_hooks(tmp, exec_form=False))
+
+
 CASES = [
+    ("an old Claude Code under exec-form hooks warns the guards are off", case_downgrade_under_exec_hooks_warns),
+    ("a recent Claude Code under exec-form hooks does not warn", case_recent_version_does_not_warn),
+    ("an old Claude Code under shell-form hooks does not warn", case_old_version_shell_hooks_does_not_warn),
     ("model and context render", case_model_and_context),
     ("high context warns", case_high_context_warns),
     ("low headroom warns below 70%", case_low_pct_but_low_headroom),
