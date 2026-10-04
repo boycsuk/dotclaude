@@ -121,6 +121,13 @@ def build_fixture(kind):
     elif kind == "go-vet-fails":
         open(os.path.join(root, "go.mod"), "w").close()
         write_stub(bindir, "go", "vet: unreachable code\n", 1)
+    elif kind == "js-lint-floods":
+        # A project with existing lint debt: every edit used to re-inject the
+        # whole report, and the edited file's own error came last.
+        with open(os.path.join(root, "package.json"), "w") as fh:
+            fh.write('{"scripts": {"lint": "x"}}')
+        flood = "".join(f"src/old{i}.ts: 1:1 error no-unused-vars\n" for i in range(120))
+        write_stub(bindir, "npm", flood + "src/app.ts: 3:1 error EDITED-FILE-MARKER\n", 1)
     elif kind == "empty":
         pass
     return root, bindir
@@ -226,7 +233,36 @@ def main():
             failures += 1
             print(f"  FAIL ({rname}) linter output was cut at a backslash: {err[0][-200:]!r}")
 
-    print(f"\n{len(CASES) + 1} cases checked")
+    # A flood is capped, keeps the edited file's lines, says it was cut, and
+    # labels the check as whole-project so Claude does not chase other files.
+    root, bindir = build_fixture("js-lint-floods")
+    target = os.path.join(root, "src", "app.ts")
+    os.makedirs(os.path.dirname(target))
+    open(target, "w").close()
+    for rname, runner in runners:
+        err = []
+        invoke(runner, root, bindir, target, err)
+        text = err[0]
+        problems = [p for p, bad in (
+            ("over 60 lines", text.count("\n") > 60),
+            ("the edited file's error is missing", "EDITED-FILE-MARKER" not in text),
+            ("no note that output was cut", "/verify" not in text),
+            ("not labelled whole-project", "whole project" not in text)) if bad]
+        if problems:
+            failures += 1
+            print(f"  FAIL ({rname}) flood: {', '.join(problems)}")
+    # A per-file check is labelled as such.
+    root, bindir = build_fixture("py-ruff-fails")
+    target = os.path.join(root, "app.py")
+    open(target, "w").close()
+    for rname, runner in runners:
+        err = []
+        invoke(runner, root, bindir, target, err)
+        if "this file" not in err[0] or "whole project" in err[0]:
+            failures += 1
+            print(f"  FAIL ({rname}) ruff must be labelled as checking this file: {err[0][:200]!r}")
+
+    print(f"\n{len(CASES) + 3} cases checked")
     if failures:
         print(f"{failures} FAILED")
         return 1
