@@ -260,7 +260,7 @@ def judge(command, payload):
         if judge_central(name, args, shell, cwd):
             return "deny", ("writing to the installed central config (~/.claude/...) through the shell. "
                             "It is shared by every project and overwritten by install.sh. Instead: edit "
-                            "the source in the dotclaude repo (global/.claude/...) and run ./install.sh")
+                            "the source in the dotclaude repo (claude/...) and run ./install.sh")
         verdict = None
         if lower == "rm" or (shell == "powershell" and lower in PS_REMOVE):
             verdict = judge_rm(lower, args, shell)

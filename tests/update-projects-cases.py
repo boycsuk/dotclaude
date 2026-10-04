@@ -25,7 +25,7 @@ import pyhook  # noqa: E402
 import stubs  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TEMPLATE_DIR = os.path.join(REPO, "templates/project")
+TEMPLATE_DIR = os.path.join(REPO, "claude/templates/project")
 SH = os.path.join(TEMPLATE_DIR, "init.sh")
 PS1 = os.path.join(TEMPLATE_DIR, "init.ps1")
 STUB = os.path.join(TEMPLATE_DIR, ".claude/settings.json")
@@ -70,7 +70,7 @@ def build_tree(root):
     write(os.path.join(b, ".mcp.json"), {"mcpServers": {"xcode": {"command": "xcrun", "args": ["mcpbridge"]}}})
     write(os.path.join(root, "node_modules", "c", ".claude/settings.json"), stub_with())  # dependency folder
     write(os.path.join(root, "plain", ".claude/settings.json"), "{}")                     # no dotclaude marker
-    shutil.copytree(TEMPLATE_DIR, os.path.join(root, "clone", "templates", "project"))    # the template itself
+    shutil.copytree(TEMPLATE_DIR, os.path.join(root, "clone", "claude", "templates", "project"))    # the template itself
     write(os.path.join(root, "deep/1/2/3/4/proj/.claude/settings.json"), stub_with())      # beyond depth 4
     write(os.path.join(root, ".hidden/hiddenproj/.claude/settings.json"), stub_with())     # hidden dirs are not walked
     return a, b
@@ -166,7 +166,7 @@ def check(tmp, pwsh):
         problems.append("project b: xcode server changed on a non-macOS host")
     if load(os.path.join(b, ".claude/settings.json")) != {"permissions": {"allow": ["Bash(make:*)"]}}:
         problems.append("project b: a user-owned settings.json was rewritten")
-    for skipped in ("a/sub", "node_modules/c", "plain", "deep/1/2/3/4/proj", "clone/templates/project"):
+    for skipped in ("a/sub", "node_modules/c", "plain", "deep/1/2/3/4/proj", "clone/claude/templates/project"):
         if os.path.exists(os.path.join(root, skipped, "CLAUDE.md")):
             problems.append(f"{skipped} was deployed into")
     return problems

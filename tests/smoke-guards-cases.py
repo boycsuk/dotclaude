@@ -64,7 +64,7 @@ def main():
         os.makedirs(os.path.join(home, ".claude", "agents"))
         with open(os.path.join(home, ".claude", "settings.json"), "w") as fh:
             fh.write("{}")
-        shutil.copy(os.path.join(pyhook.REPO, "global", ".claude", "agents", "researcher.md"),
+        shutil.copy(os.path.join(pyhook.REPO, "claude", "agents", "researcher.md"),
                     os.path.join(home, ".claude", "agents"))
         cases = [
             ("every guard wired and working", settings(pyhook.HOOKS), 0, None),

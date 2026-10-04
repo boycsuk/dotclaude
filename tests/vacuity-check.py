@@ -27,7 +27,7 @@ import sys
 import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HOOKS = os.path.join(REPO, "global", ".claude", "hooks")
+HOOKS = os.path.join(REPO, "claude", "hooks")
 STUB = "import sys\nsys.stdin.read()\n"
 TIMEOUT = 600
 
@@ -72,7 +72,7 @@ def main():
         caught = []
         try:
             copy_repo(files, work)
-            with open(os.path.join(work, "global", ".claude", "hooks", f"{hook}.py"), "w") as fh:
+            with open(os.path.join(work, "claude", "hooks", f"{hook}.py"), "w") as fh:
                 fh.write(STUB)
             for matrix in matrices:
                 try:

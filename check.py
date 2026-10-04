@@ -36,7 +36,7 @@ def walk_files(roots, suffix):
     """Every file under `roots` ending in `suffix`.
 
     Uses os.walk rather than glob because glob skips dot-directories, and the
-    central artifacts all live under `global/.claude/` — a glob-based scan
+    central artifacts all live under `claude/` — a glob-based scan
     silently sees none of them and reports a clean pass.
     """
     for root in roots:
@@ -81,14 +81,14 @@ NOT_HOOKS = {"statusline"}
 def py_hooks():
     """Names of the single-file Python hooks (no .sh/.ps1 twin by design)."""
     return sorted(name for name in (os.path.basename(p)[:-3]
-                                    for p in glob.glob(os.path.join(REPO, "global/.claude/hooks/*.py")))
+                                    for p in glob.glob(os.path.join(REPO, "claude/hooks/*.py")))
                   if name not in NOT_HOOKS)
 
 
 # --- 1. Every shell hook ships as a .sh + .ps1 pair --------------------------
 @check("hook .sh/.ps1 pairs")
 def _():
-    hooks = os.path.join(REPO, "global/.claude/hooks")
+    hooks = os.path.join(REPO, "claude/hooks")
     for name in py_hooks():
         for ext in (".sh", ".ps1"):
             if os.path.exists(os.path.join(hooks, name + ext)):
@@ -105,7 +105,7 @@ def _():
 # --- 2. Other scripts that must exist in both forms --------------------------
 @check("installer/deployer pairs")
 def _():
-    for base in ("install", "templates/project/init"):
+    for base in ("install", "claude/templates/project/init"):
         for ext in (".sh", ".ps1"):
             path = os.path.join(REPO, base + ext)
             if not os.path.exists(path):
@@ -115,7 +115,7 @@ def _():
 # --- 3. Every hook wired in settings.json actually exists --------------------
 @check("settings.json hook wiring")
 def _():
-    settings = json.loads(read("global/.claude/settings.json"))
+    settings = json.loads(read("claude/settings.json"))
     for event, groups in settings["hooks"].items():
         for group in groups:
             for hook in group["hooks"]:
@@ -126,13 +126,13 @@ def _():
                         fail("settings.json hook wiring",
                              f"{event} wires {name} without `python3 ` — install.ps1 "
                              f"only rewrites that form to the verified interpreter")
-                    if not os.path.exists(os.path.join(REPO, "global/.claude/hooks", name)):
+                    if not os.path.exists(os.path.join(REPO, "claude/hooks", name)):
                         fail("settings.json hook wiring",
                              f"{event} wires '{name}' but it does not exist")
                     continue
                 name = os.path.basename(command).replace(".sh", "")
                 for ext in (".sh", ".ps1"):
-                    path = os.path.join(REPO, "global/.claude/hooks", name + ext)
+                    path = os.path.join(REPO, "claude/hooks", name + ext)
                     if not os.path.exists(path):
                         fail("settings.json hook wiring",
                              f"{event} wires '{name}' but {name}{ext} does not exist")
@@ -142,9 +142,9 @@ def _():
 @check("install.ps1 derives from settings.json")
 def _():
     ps1 = read("install.ps1")
-    if "ConvertFrom-Json" not in ps1 or "global\\.claude\\settings.json" not in ps1:
+    if "ConvertFrom-Json" not in ps1 or "claude\\settings.json" not in ps1:
         fail("install.ps1 derives from settings.json",
-             "install.ps1 no longer reads global/.claude/settings.json — it is "
+             "install.ps1 no longer reads claude/settings.json — it is "
              "re-typing the rules, which is how Unix and Windows drifted before")
     # Every Bash verb in the source needs a $verbMap entry (or an explicit
     # $null drop). Parse the $verbMap block rather than searching the whole
@@ -158,7 +158,7 @@ def _():
         return
     mapped = set(re.findall(r'^\s*"([^"]+)"\s*=', block.group(1), re.M))
 
-    settings = json.loads(read("global/.claude/settings.json"))
+    settings = json.loads(read("claude/settings.json"))
     rules = (settings["permissions"]["allow"] + settings["permissions"]["ask"]
              + settings["permissions"]["deny"])
     for rule in rules:
@@ -246,7 +246,7 @@ def _():
 
     # Every non-comment top-level key in the source must be classified, or the
     # installers simply drop it.
-    settings = json.loads(read("global/.claude/settings.json"))
+    settings = json.loads(read("claude/settings.json"))
     for key in settings:
         if key.startswith("_"):
             continue
@@ -265,11 +265,11 @@ def _():
 @check("doc inventories")
 def _():
     hooks = sorted(os.path.basename(p)[:-3]
-                   for p in glob.glob(os.path.join(REPO, "global/.claude/hooks/*.sh"))) + py_hooks()
+                   for p in glob.glob(os.path.join(REPO, "claude/hooks/*.sh"))) + py_hooks()
     agents = sorted(os.path.basename(p)[:-3]
-                    for p in glob.glob(os.path.join(REPO, "global/.claude/agents/*.md")))
+                    for p in glob.glob(os.path.join(REPO, "claude/agents/*.md")))
     skills = sorted(os.path.basename(os.path.dirname(p))
-                    for p in glob.glob(os.path.join(REPO, "global/.claude/skills/*/SKILL.md")))
+                    for p in glob.glob(os.path.join(REPO, "claude/skills/*/SKILL.md")))
 
     # `statusline` lives in hooks/ for the .sh/.ps1 install machinery but is NOT
     # a hook — it is the statusLine command, wired through its own settings key
@@ -284,9 +284,9 @@ def _():
     inventories = [
         ("CLAUDE.md", "The central hooks (", "hook", hooks),
         ("CLAUDE.md", "├── agents/", "agent", agents),
-        ("templates/project/README.md", "- **hooks/** —", "hook", hooks),
-        ("templates/project/README.md", "- **agents/** —", "agent", agents),
-        ("templates/project/README.md", "- **skills/** —", "skill", skills),
+        ("claude/templates/project/README.md", "- **hooks/** —", "hook", hooks),
+        ("claude/templates/project/README.md", "- **agents/** —", "agent", agents),
+        ("claude/templates/project/README.md", "- **skills/** —", "skill", skills),
     ]
     for doc, anchor, kind, names in inventories:
         line = next((ln for ln in read(doc).splitlines() if anchor in ln), None)
@@ -308,8 +308,8 @@ def _():
         m = re.search(r"paths:\s*(.+)", head)
         return set(re.findall(r"\w+", m.group(1).split("{")[-1])) if m else set()
 
-    rule_exts = exts_from_rule("global/.claude/rules/code-quality.md")
-    sec_exts = exts_from_rule("global/.claude/rules/security.md")
+    rule_exts = exts_from_rule("claude/rules/code-quality.md")
+    sec_exts = exts_from_rule("claude/rules/security.md")
     # A check that silently no-ops is worse than no check: an empty list means
     # the extraction broke, and that is itself the finding.
     if not rule_exts:
@@ -332,9 +332,9 @@ def _():
     pattern = re.compile(
         r"""(^|[\s`(])(python[0-9.]*\s+(-[A-Za-z]*)?-c|node\s+--eval|node\s+-e|deno\s+eval"""
         r"""|(ruby|perl)\s+(-[A-Za-z]*)?-e|php\s+-r|(ba|z|da|k)?sh\s+-c)([\s"']|$)""")
-    # os.walk, not glob: glob skips dot-directories, so `global/.claude/skills/`
-    # — every central skill — was invisible to this check.
-    for path in walk_files(("global/.claude/skills",), ".md"):
+    # os.walk, not glob: glob skips dot-directories, and when the central
+    # skills lived under one it hid every one of them from this check.
+    for path in walk_files(("claude/skills",), ".md"):
         rel = os.path.relpath(path, REPO)
         for i, line in enumerate(open(path, encoding="utf-8"), 1):
             if pattern.search(line):
@@ -367,7 +367,7 @@ def _():
     # A hook wired for PowerShell or NotebookEdit must be fed that tool by a
     # matrix that runs it: the matrices once proved only the Bash payload,
     # and guard-dependencies was wired on NotebookEdit it never handled.
-    settings = json.loads(read("global/.claude/settings.json"))
+    settings = json.loads(read("claude/settings.json"))
     for groups in settings.get("hooks", {}).values():
         for group in groups:
             tools = [t for t in ("PowerShell", "NotebookEdit") if t in (group.get("matcher") or "").split("|")]
@@ -455,32 +455,32 @@ def _():
     }
     for subdir, names in expected.items():
         for name in names:
-            if not os.path.exists(os.path.join(REPO, "global/.claude", subdir, name)):
+            if not os.path.exists(os.path.join(REPO, "claude", subdir, name)):
                 fail("central artifact inventory",
-                     f"global/.claude/{subdir}/{name} is missing — every project loses it")
+                     f"claude/{subdir}/{name} is missing — every project loses it")
     for skill in ("audit", "changes", "commit", "compound", "implement-ui", "init-project",
                   "plan-feature", "readme", "resume-context", "update-docs",
                   "verify"):
-        if not os.path.exists(os.path.join(REPO, "global/.claude/skills", skill, "SKILL.md")):
+        if not os.path.exists(os.path.join(REPO, "claude/skills", skill, "SKILL.md")):
             fail("central artifact inventory",
-                 f"global/.claude/skills/{skill}/SKILL.md is missing")
+                 f"claude/skills/{skill}/SKILL.md is missing")
     # The per-project surface init.sh copies: a missing one makes the deploy
     # exit 1, which the skill reports as "template missing" on every machine.
-    for rel in ("templates/project/CLAUDE.md.template",
-                "templates/project/CHANGELOG.md.template",
-                "templates/project/.gitignore.template",
-                "templates/project/.claude/settings.json",
-                "templates/project/.claude/settings.local.json.example",
-                "templates/project/obsolete.json",
-                "templates/project/lsp-plugins.json",
-                "templates/project/scripts/prune-obsolete.py",
-                "templates/project/scripts/merge-permissions.py",
-                "templates/project/scripts/update-projects.py",
-                "templates/project/scripts/merge-mcp.py",
-                "templates/project/docs/README.md",
-                "templates/project/docs/backend.md",
-                "templates/project/docs/user-stories.md",
-                "templates/project/docs/conventions.md"):
+    for rel in ("claude/templates/project/CLAUDE.md.template",
+                "claude/templates/project/CHANGELOG.md.template",
+                "claude/templates/project/.gitignore.template",
+                "claude/templates/project/.claude/settings.json",
+                "claude/templates/project/.claude/settings.local.json.example",
+                "claude/templates/project/obsolete.json",
+                "claude/templates/project/lsp-plugins.json",
+                "claude/templates/project/scripts/prune-obsolete.py",
+                "claude/templates/project/scripts/merge-permissions.py",
+                "claude/templates/project/scripts/update-projects.py",
+                "claude/templates/project/scripts/merge-mcp.py",
+                "claude/templates/project/docs/README.md",
+                "claude/templates/project/docs/backend.md",
+                "claude/templates/project/docs/user-stories.md",
+                "claude/templates/project/docs/conventions.md"):
         if not os.path.exists(os.path.join(REPO, rel)):
             fail("central artifact inventory", f"{rel} is missing — every deploy needs it")
 
@@ -490,8 +490,8 @@ def _():
 def _():
     # A broken fence or a missing `description` makes an artifact silently
     # un-loadable or un-invokable — no error anywhere, it just never fires.
-    paths = (glob.glob(os.path.join(REPO, "global/.claude/agents/*.md"))
-             + glob.glob(os.path.join(REPO, "global/.claude/skills/*/SKILL.md")))
+    paths = (glob.glob(os.path.join(REPO, "claude/agents/*.md"))
+             + glob.glob(os.path.join(REPO, "claude/skills/*/SKILL.md")))
     # model: is scoped to mechanical components. Anything else pinning a
     # model is a downgrade of reasoning work — the drift once found on
     # code-reviewer and debugger.
@@ -530,7 +530,7 @@ def _():
 # --- 9b. Hook wiring: no prefix `if` gates, no dead advisory channel ---------
 @check("hook wiring")
 def _():
-    settings = json.loads(read("global/.claude/settings.json"))
+    settings = json.loads(read("claude/settings.json"))
     # An `if` pattern is prefix-anchored, so it reopens exactly the wrapped
     # forms the hooks' parsers exist to catch: "if": "Bash(git push *)" let
     # `git -C /repo push origin main` through unjudged, and the matrix passed
@@ -557,12 +557,12 @@ def _():
             fail("hook wiring", f"{name}.py ships but no event in settings.json runs it")
     status_command = settings.get("statusLine", {}).get("command", "")
     for name in sorted(NOT_HOOKS):
-        if os.path.exists(os.path.join(REPO, "global/.claude/hooks", f"{name}.py")) \
+        if os.path.exists(os.path.join(REPO, "claude/hooks", f"{name}.py")) \
                 and f"{name}.py" not in status_command:
             fail("hook wiring", f"{name}.py ships but statusLine.command does not run it")
     # Shell hooks too: a safety hook dropped from settings.json still has its
     # file and its matrix, so nothing else notices it stopped running.
-    for path in sorted(glob.glob(os.path.join(REPO, "global/.claude/hooks/*.sh"))):
+    for path in sorted(glob.glob(os.path.join(REPO, "claude/hooks/*.sh"))):
         name = os.path.basename(path)
         if name not in wired:
             fail("hook wiring", f"{name} ships but no event in settings.json runs it")
@@ -570,7 +570,7 @@ def _():
     # Python hooks declare their kind instead of being listed here by hand, so
     # a new hook cannot dodge this check by never being added to a tuple.
     for name in py_hooks():
-        raw = read(f"global/.claude/hooks/{name}.py")
+        raw = read(f"claude/hooks/{name}.py")
         m = re.search(r"^# hook-kind: (guard|advisory|rewrite|notice|feedback)\s*$", raw, re.M)
         if not m:
             fail("hook wiring",
@@ -637,15 +637,15 @@ def _():
 # monolithic template), would merge the wrong keys into the user's file.
 @check("MCP fragments")
 def _():
-    frag_dir = os.path.join(REPO, "templates/project/mcp")
+    frag_dir = os.path.join(REPO, "claude/templates/project/mcp")
     if not os.path.isdir(frag_dir):
-        fail("MCP fragments", "templates/project/mcp/ is missing")
+        fail("MCP fragments", "claude/templates/project/mcp/ is missing")
         return
     names = sorted(n for n in os.listdir(frag_dir) if n.endswith(".json"))
     if not names:
-        fail("MCP fragments", "templates/project/mcp/ has no fragments")
+        fail("MCP fragments", "claude/templates/project/mcp/ has no fragments")
     for name in names:
-        rel = f"templates/project/mcp/{name}"
+        rel = f"claude/templates/project/mcp/{name}"
         try:
             data = json.loads(read(rel))
         except json.JSONDecodeError:
@@ -678,13 +678,13 @@ def _():
     # passed green while check 10 deferred to "the JSON validity check".
     fragments = sorted(
         os.path.relpath(p, REPO)
-        for p in glob.glob(os.path.join(REPO, "templates/project/mcp/*.json"))
-        + glob.glob(os.path.join(REPO, "templates/project/permissions/*.json")))
-    for rel in ["global/.claude/settings.json",
-                "templates/project/.claude/settings.json",
-                "templates/project/obsolete.json",
-                "templates/project/lsp-plugins.json",
-                "templates/project/.claude/settings.local.json.example",
+        for p in glob.glob(os.path.join(REPO, "claude/templates/project/mcp/*.json"))
+        + glob.glob(os.path.join(REPO, "claude/templates/project/permissions/*.json")))
+    for rel in ["claude/settings.json",
+                "claude/templates/project/.claude/settings.json",
+                "claude/templates/project/obsolete.json",
+                "claude/templates/project/lsp-plugins.json",
+                "claude/templates/project/.claude/settings.local.json.example",
                 ] + fragments:
         try:
             json.loads(read(rel))
@@ -698,12 +698,12 @@ def _():
     # prune-obsolete.py deletes every project hook entry whose command contains
     # a listed match. A match that also hits a hook still shipped would strip
     # a live hook from every project on its next deploy.
-    manifest = json.loads(read("templates/project/obsolete.json"))
-    shipped_hooks = [f"hooks/{n}" for n in os.listdir(os.path.join(REPO, "global/.claude/hooks"))]
+    manifest = json.loads(read("claude/templates/project/obsolete.json"))
+    shipped_hooks = [f"hooks/{n}" for n in os.listdir(os.path.join(REPO, "claude/hooks"))]
     # Every command the central settings wire, in the POSIX form and in the
     # PowerShell forms install.ps1 writes — a match hitting any of them (say
     # "claude", "python3 " or "$HOME") would prune live hooks everywhere.
-    settings = json.loads(read("global/.claude/settings.json"))
+    settings = json.loads(read("claude/settings.json"))
     live = [h["command"] for groups in settings["hooks"].values() for g in groups for h in g["hooks"]]
     live += [c.replace("/", "\\") for c in live]
     # The exact forms install.ps1's New-Hook writes, not just a slash swap.
@@ -731,7 +731,7 @@ def _():
                 fail("obsolete manifest",
                      f"match {match!r} also matches the live central hook command {command!r}")
     granted = set()
-    for frag in glob.glob(os.path.join(REPO, "templates/project/permissions/*.json")):
+    for frag in glob.glob(os.path.join(REPO, "claude/templates/project/permissions/*.json")):
         with open(frag, encoding="utf-8") as fh:
             granted |= set(json.load(fh).get("allow", []))
     for entry in manifest.get("permissions", []):
@@ -742,7 +742,7 @@ def _():
                  f"permission {entry['rule']!r} is listed as obsolete but a permissions/ fragment still grants it")
     for entry in manifest.get("mcpServers", []):
         name = entry.get("name", "")
-        if os.path.exists(os.path.join(REPO, "templates/project/mcp", f"{name}.json")):
+        if os.path.exists(os.path.join(REPO, "claude/templates/project/mcp", f"{name}.json")):
             fail("obsolete manifest",
                  f"MCP server {name!r} is listed as obsolete but mcp/{name}.json still ships")
 
@@ -752,10 +752,10 @@ def _():
 def _():
     # An opt-out nobody can discover is a guard nobody can relax on purpose,
     # so users disable the whole hook instead.
-    example = read("templates/project/.claude/settings.local.json.example")
+    example = read("claude/templates/project/.claude/settings.local.json.example")
     keys = set()
     for name in py_hooks():
-        body = read(f"global/.claude/hooks/{name}.py")
+        body = read(f"claude/hooks/{name}.py")
         found = re.findall(r'local_opt_out\(\w+, "(\w+)"[,)]', body)
         # A call this pattern cannot read (single quotes, a constant) would
         # otherwise drop out of the check silently.
@@ -776,7 +776,7 @@ def _():
     # init.sh/init.ps1 read the binary and install hint from here, and the
     # skill maps languages through it: a missing field degrades into a WARN
     # with an empty command, which looks like a hint and helps nobody.
-    catalog = json.loads(read("templates/project/lsp-plugins.json"))
+    catalog = json.loads(read("claude/templates/project/lsp-plugins.json"))
     if catalog.get("marketplace") != "claude-plugins-official":
         fail("LSP plugin catalog", "marketplace must be claude-plugins-official (official plugins only)")
     plugins = catalog.get("plugins", {})
@@ -856,7 +856,7 @@ def _():
         candidate = os.path.join(os.path.dirname(os.path.dirname(git)), "bin", "bash.exe") if git else ""
         bash = candidate if os.path.isfile(candidate) else None
 
-    roots = ["global/.claude/hooks", "templates/project", "tests"]
+    roots = ["claude/hooks", "claude/templates/project", "tests"]
     scripts = sorted(walk_files(roots, ".sh")) + [
         os.path.join(REPO, n) for n in ("install.sh",)
         if os.path.exists(os.path.join(REPO, n))]
@@ -885,8 +885,8 @@ def _():
     # em dash (E2 80 94) becomes `â€”`, and 0x94 is a curly quote PowerShell
     # accepts as a string delimiter. install.ps1 and init.ps1 never parsed on
     # 5.1 for that reason; only pwsh 7 (UTF-8 by default) was ever tested.
-    for path in sorted(walk_files(["templates/project"], ".ps1")) + sorted(
-            walk_files(["templates/project"], ".ps1.template")) + [os.path.join(REPO, "install.ps1")]:
+    for path in sorted(walk_files(["claude/templates/project"], ".ps1")) + sorted(
+            walk_files(["claude/templates/project"], ".ps1.template")) + [os.path.join(REPO, "install.ps1")]:
         rel = os.path.relpath(path, REPO)
         for i, line in enumerate(read(rel).splitlines(), 1):
             if any(ord(c) > 127 for c in line):
@@ -898,7 +898,7 @@ def _():
     # Python is now the standard hook form, and a .py hook that fails to
     # compile exits 1 — a non-blocking error, so the guard is silently off.
     # A broken _lib/hookio.py takes every .py hook down with it.
-    py_roots = ["global/.claude/hooks", "global/.claude/skills", "templates/project/scripts", "tests"]
+    py_roots = ["claude/hooks", "claude/skills", "claude/templates/project/scripts", "tests"]
     for path in sorted(walk_files(py_roots, ".py")) + [os.path.join(REPO, "check.py")]:
         rel = os.path.relpath(path, REPO)
         try:

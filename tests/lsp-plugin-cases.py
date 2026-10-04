@@ -22,7 +22,7 @@ import pyhook  # noqa: E402
 from stubs import minimal_path, shell_targets, write_stub  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TEMPLATE_DIR = os.path.join(REPO, "templates/project")
+TEMPLATE_DIR = os.path.join(REPO, "claude/templates/project")
 SH = os.path.join(TEMPLATE_DIR, "init.sh")
 PS1 = os.path.join(TEMPLATE_DIR, "init.ps1")
 SYSTEM_TOOLS = ("bash", "sh", "python3", "cp", "mkdir", "grep", "cmp", "dirname",

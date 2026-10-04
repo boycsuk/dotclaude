@@ -24,7 +24,7 @@ If it is local, **stop** — it does not deserve codification.
 | Convention that only applies to certain file types (code style, a language idiom) | A `.claude/rules/<topic>.md` with a `paths:` glob in frontmatter, so it loads only for matching files instead of every session |
 | Repeatable procedure (how to deploy, review, generate tests, etc.) | `.claude/skills/<name>/SKILL.md` |
 | Tone / language / response-format convention ("answer in Spanish", "no emojis", "always lead with a diagram") | A `.claude/output-styles/<name>.md` (system-prompt level, main conversation only — subagents run their own system prompt and do not inherit it) — enable via `outputStyle`, and set `keep-coding-instructions: true` in the frontmatter for a coding project, since the default strips Claude Code's software-engineering instructions |
-| Non-negotiable guarantee (must always pass) | A hook in `.claude/hooks/` + its entry in `.claude/settings.json`. Promoted to dotclaude it becomes one `global/.claude/hooks/<name>.py` with a `# hook-kind:` line and a case matrix (dotclaude's CLAUDE.md, "Writing a new hook") |
+| Non-negotiable guarantee (must always pass) | A hook in `.claude/hooks/` + its entry in `.claude/settings.json`. Promoted to dotclaude it becomes one `claude/hooks/<name>.py` with a `# hook-kind:` line and a case matrix (dotclaude's CLAUDE.md, "Writing a new hook") |
 | Knowledge that needs isolation to avoid contaminating context | `.claude/agents/<name>.md` |
 
 Mental rule:
@@ -59,7 +59,7 @@ Remind the user to test in a new session that the learning applies automatically
 
 If the learning applies to **all future projects** (not just this one), suggest promoting it to the dotclaude repo — **not** to `~/.claude/`, which `guard-central-config` blocks and `install.sh` overwrites on every run:
 
-- Reusable artifacts (skills, hooks, rules, agents, output styles) → `global/.claude/`. These are central: they apply to every project automatically.
-- Per-project surface (the CLAUDE.md template, `docs/`, scaffolds) → `templates/project/`.
+- Reusable artifacts (skills, hooks, rules, agents, output styles) → `claude/`. These are central: they apply to every project automatically.
+- Per-project surface (the CLAUDE.md template, `docs/`, scaffolds) → `claude/templates/project/`.
 
 Then: atomic commit, push, and `git pull && ./install.sh` on each machine — that is what propagates the change to every project at once.

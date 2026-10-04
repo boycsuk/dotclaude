@@ -19,19 +19,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "_li
 import bootstrap  # noqa: E402,F401
 import hookio  # noqa: E402
 
-# A project's own .claude/rules/ or the dotclaude source global/.claude/rules/
+# A project's own .claude/rules/ or the dotclaude source claude/rules/
 # (the installed ~/.claude/rules/ copy is not editable: guard-central-config).
-RULE = re.compile(r"\.claude/rules/.+\.md$")
+RULE = re.compile(r"(^|/)\.?claude/rules/.+\.md$")
 
 
 def note_for(path):
     name = os.path.basename(path)
     note = (f"NOTE: you edited a rule ({path}). Its portable mirror may now be stale. Reflect the change "
-            "in the conventions mirror: templates/project/docs/conventions.md when editing the dotclaude "
+            "in the conventions mirror: claude/templates/project/docs/conventions.md when editing the dotclaude "
             "repo, docs/conventions.md inside a deployed project.")
     if name == "ai-collaboration.md":
         note += (" If you changed a tone/language/output convention, also update the output style (repo "
-                 "source: global/.claude/output-styles/dotclaude.md, installed as ~/.claude/output-styles/).")
+                 "source: claude/output-styles/dotclaude.md, installed as ~/.claude/output-styles/).")
     if name in ("workflow.md", "ai-collaboration.md"):
         note += (" If you changed a non-negotiable convention, also update the post-compaction digest in "
                  "hooks/reinject-rules.py.")

@@ -136,7 +136,7 @@ if [ ${#UNKNOWN[@]} -gt 0 ]; then
   exit 9
 fi
 
-# Helper: compose ./.mcp.json from per-server fragments in templates/project/mcp/.
+# Helper: compose ./.mcp.json from per-server fragments in claude/templates/project/mcp/.
 # The file is COMPOSED, never copied: each flag owns its own server keys and must
 # leave every other key alone — including servers the template knows nothing
 # about (a hand-added playwright, a third-party server). Merging by key is also

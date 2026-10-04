@@ -58,7 +58,7 @@ def read_json(prune, path):
 
 
 def check_obsolete(prune):
-    """Leftovers of artifacts dotclaude stopped shipping (templates/project/obsolete.json).
+    """Leftovers of artifacts dotclaude stopped shipping (claude/templates/project/obsolete.json).
 
     Hook entries are normally already pruned by init.sh/init.ps1; a non-empty
     OBSOLETE_HOOKS means the deploy has not been re-run since. Servers and

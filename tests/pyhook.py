@@ -19,7 +19,7 @@ import tempfile
 import uuid
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HOOKS = os.path.join(REPO, "global/.claude/hooks")
+HOOKS = os.path.join(REPO, "claude/hooks")
 
 
 def hook_path(name):

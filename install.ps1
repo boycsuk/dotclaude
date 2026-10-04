@@ -100,7 +100,7 @@ $ExecHooks = [bool]($ClaudeVersion -and $ClaudeVersion -ge $MinExecVersion)
 # session, and that state cannot be repaired from inside Claude Code (the broken
 # hook blocks the installer that would replace it). Abort
 # before copying, leaving the previously installed working hooks in place.
-$hookDir = Join-Path $ScriptDir "global/.claude/hooks"
+$hookDir = Join-Path $ScriptDir "claude/hooks"
 if (Test-Path $hookDir) {
     foreach ($hook in @(Get-ChildItem -Path $hookDir -Filter "*.ps1" -File)) {
         $tokens = $null
@@ -153,7 +153,7 @@ function New-Hook($src, $name, $isPython) {
 }
 
 # --- Derive the Windows config FROM the Unix source, never re-typed ----------
-# global/.claude/settings.json is the single source of truth. Re-typing its
+# claude/settings.json is the single source of truth. Re-typing its
 # rules here is how the two drifted before (Windows silently lost the sudo/dd/
 # mkfs/shred/truncate denies). Everything below TRANSLATES that file:
 #   - Bash(x)          -> kept, plus PowerShell(<mapped equivalent>) unless unmappable
@@ -165,7 +165,7 @@ function New-Hook($src, $name, $isPython) {
 # -Encoding UTF8 on every read: Windows PowerShell 5.1 reads a BOM-less file in
 # the ANSI code page, so a non-ASCII value came back as mojibake and was then
 # written out as UTF-8 - corrupting the user's own keys on every install.
-$srcSettings = Get-Content (Join-Path $ScriptDir "global\.claude\settings.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+$srcSettings = Get-Content (Join-Path $ScriptDir "claude\settings.json") -Raw -Encoding UTF8 | ConvertFrom-Json
 
 # Bash verb -> PowerShell equivalent. $null means "no Windows analogue, drop it"
 # (e.g. sudo). A verb absent from this table is reported below, so a new rule in
@@ -253,7 +253,7 @@ $central = [ordered]@{
     # Derived, not hardcoded: every sibling above reads $srcSettings, and
     # install.sh copies "attribution" straight from the source JSON. A literal
     # pair here meant any future change to attribution in
-    # global/.claude/settings.json silently never reached Windows - exactly the
+    # claude/settings.json silently never reached Windows - exactly the
     # drift CLAUDE.md requires install.ps1 to avoid by deriving its config.
     attribution = $srcSettings.attribution
     hooks = [ordered]@{}
@@ -275,7 +275,7 @@ foreach ($event in $srcSettings.hooks.PSObject.Properties) {
             # "python3 "$HOME"/..." where .NET Core quietly accepts them.
             $name = (($h.command -split "[/\\]")[-1].Trim([char]34) -replace "\.(py|sh|ps1)$", "")
             if ($h.'if') {
-                [Console]::Error.WriteLine("ERROR: hook '$name' carries an `"if`" gate in global/.claude/settings.json.")
+                [Console]::Error.WriteLine("ERROR: hook '$name' carries an `"if`" gate in claude/settings.json.")
                 [Console]::Error.WriteLine("       Prefix-anchored `"if`" patterns reopen the wrapped-form bypasses the")
                 [Console]::Error.WriteLine("       hooks' own parsers close (DESIGN.md 27b). Remove it; hooks self-gate.")
                 exit 1
@@ -325,7 +325,7 @@ if ($pyHooks.Count -gt 0) {
 # old compiled logic. Clear the hooks' per-user cache (the folder bootstrap.py
 # names, and only that folder) so every hook recompiles once. Lockstep with
 # install.sh.
-$cacheDir = @(& $PythonExe (Join-Path $ScriptDir "global/.claude/hooks/_lib/bootstrap.py") 2>$null)[0]
+$cacheDir = @(& $PythonExe (Join-Path $ScriptDir "claude/hooks/_lib/bootstrap.py") 2>$null)[0]
 if ($cacheDir -and ($cacheDir.Trim().Replace('\', '/') -like '*/dotclaude/pycache') -and (Test-Path -LiteralPath $cacheDir.Trim())) {
     Remove-Item -LiteralPath $cacheDir.Trim() -Recurse -Force
 }
@@ -360,7 +360,7 @@ if (($oldManifest -notcontains "skills/init-project/SKILL.md") -and (Test-Path -
 
 $manifest = @()
 foreach ($dir in @("hooks", "agents", "skills", "rules", "output-styles")) {
-    $src = Join-Path $ScriptDir "global\.claude\$dir"
+    $src = Join-Path $ScriptDir "claude\$dir"
     if (-not (Test-Path $src)) { continue }
     $dst = Join-Path $Target $dir
     New-Item -ItemType Directory -Force -Path $dst | Out-Null
@@ -512,7 +512,7 @@ if ($ExecHooks) {
 # --- Per-project template ----------------------------------------------------
 $templateDest = Join-Path $Target "templates\project"
 if (Test-Path $templateDest) { Remove-Item -Recurse -Force $templateDest }
-Copy-Item -Recurse (Join-Path $ScriptDir "templates\project") (Join-Path $Target "templates\")
+Copy-Item -Recurse (Join-Path $ScriptDir "claude\templates\project") (Join-Path $Target "templates\")
 Write-Host "  - templates/project/ installed"
 
 # --- ~/.claude/CLAUDE.md is the USER's own - never touch it ------------------

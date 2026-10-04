@@ -95,7 +95,7 @@ What `--update` does (implemented in `init.sh`):
 - `settings.local.json.example` is refreshed if untouched; if the user edited
   it, it is kept (§1c reports it).
 - Hook entries that point at hooks dotclaude no longer ships (listed in
-  `templates/project/obsolete.json`) are pruned from `.claude/settings.json`
+  `claude/templates/project/obsolete.json`) are pruned from `.claude/settings.json`
   and `settings.local.json` — every deploy does this, not only `--update`. It
   is the one case where a deploy edits an existing settings file, and it only
   ever removes entries whose script is already gone. MCP servers in the
@@ -176,7 +176,7 @@ After applying, summarize: "Added N bullet(s) to your CLAUDE.md. Review it befor
 ## 1e. Obsolete-artifact reconciliation
 
 dotclaude occasionally stops shipping something a project was deployed with
-(Serena and Graphify were the first). `templates/project/obsolete.json` lists
+(Serena and Graphify were the first). `claude/templates/project/obsolete.json` lists
 those artifacts. The deploy already pruned the dead **hook entries** on its own;
 this step handles what it deliberately leaves to the user: obsolete **MCP
 servers** in `.mcp.json` and obsolete **directories**.

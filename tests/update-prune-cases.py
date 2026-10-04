@@ -7,7 +7,7 @@ Run:  python3 tests/update-prune-cases.py
 Removing a hook from dotclaude deletes its script from ~/.claude/hooks/ on the
 next install, while projects deployed earlier still wire it in their settings
 — so every matching tool call then fails with a hook error. Both init scripts
-run templates/project/scripts/prune-obsolete.py to remove those entries. These
+run claude/templates/project/scripts/prune-obsolete.py to remove those entries. These
 cases pin what it may and may not touch: only commands named in obsolete.json,
 never a user's own hook, never a server or a directory (those are reported).
 """
@@ -24,7 +24,7 @@ import pyhook  # noqa: E402
 import stubs  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TEMPLATE_DIR = os.path.join(REPO, "templates/project")
+TEMPLATE_DIR = os.path.join(REPO, "claude/templates/project")
 SH = os.path.join(TEMPLATE_DIR, "init.sh")
 PS1 = os.path.join(TEMPLATE_DIR, "init.ps1")
 PRUNE = os.path.join(TEMPLATE_DIR, "scripts/prune-obsolete.py")

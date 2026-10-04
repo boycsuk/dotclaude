@@ -7,7 +7,7 @@
 # case below injects one real regression into a scratch copy and asserts that
 # check.py fails. This caught a genuine blind spot on its first run: the
 # inline-interpreter check used glob("**/*.md"), which skips dot-directories,
-# so it saw none of the central skills under global/.claude/skills/ and
+# so it saw none of the central skills under claude/skills/ and
 # reported a clean pass on a repo that had the very bug it was written for.
 #
 # The final case is the control: a pristine copy must PASS, or every other
@@ -27,7 +27,7 @@ setup() {
   mkdir -p "$WORK/repo"
   # Copy only what check.py reads.
   (cd "$SRC" && tar -cf - check.py CLAUDE.md DESIGN.md install.sh install.ps1 \
-      global templates tests 2>/dev/null) | (cd "$WORK/repo" && tar -xf -)
+      claude tests 2>/dev/null) | (cd "$WORK/repo" && tar -xf -)
   injected=1
 }
 
@@ -87,7 +87,7 @@ inject diverge-extensions
 expect_fail "code extension lists" "the two rules' extension globs diverge"
 
 setup
-printf 'run `python3 -c "import os"` to check\n' >> "$WORK/repo/global/.claude/skills/verify/SKILL.md"
+printf 'run `python3 -c "import os"` to check\n' >> "$WORK/repo/claude/skills/verify/SKILL.md"
 expect_fail "skills avoid inline interpreters" "a central skill gains an inline interpreter"
 
 setup
@@ -115,7 +115,7 @@ inject drop-matcher-tool-case
 expect_fail "hooks have case matrices" "a hook wired on NotebookEdit is never fed one"
 
 setup
-printf 'not json' > "$WORK/repo/templates/project/.claude/settings.json"
+printf 'not json' > "$WORK/repo/claude/templates/project/.claude/settings.json"
 expect_fail "JSON validity" "a shipped JSON file stops parsing"
 
 setup
@@ -227,11 +227,11 @@ inject unpin-mcp-fragment
 expect_fail "MCP fragments" "an MCP fragment goes back to @latest"
 
 setup
-rm "$WORK/repo/templates/project/init.ps1"
+rm "$WORK/repo/claude/templates/project/init.ps1"
 expect_fail "installer/deployer pairs" "the Windows deployer is deleted"
 
 setup
-printf '\nif true; then\n' >> "$WORK/repo/templates/project/init.sh"
+printf '\nif true; then\n' >> "$WORK/repo/claude/templates/project/init.sh"
 expect_fail "script syntax" "the deployer gains a plain bash syntax error"
 
 setup
@@ -239,7 +239,7 @@ printf '\n# a comment \342\200\224 with an em dash\n' >> "$WORK/repo/install.ps1
 expect_fail "script syntax" "install.ps1 gains a non-ASCII character PowerShell 5.1 cannot parse"
 
 setup
-printf '\ndef broken(:\n' >> "$WORK/repo/global/.claude/hooks/_lib/hookio.py"
+printf '\ndef broken(:\n' >> "$WORK/repo/claude/hooks/_lib/hookio.py"
 expect_fail "script syntax" "the shared Python hook library stops compiling"
 
 setup
@@ -255,11 +255,11 @@ inject drop-skill-from-readme
 expect_fail "doc inventories" "the skills inventory drops a skill named elsewhere in the doc"
 
 setup
-rm "$WORK/repo/templates/project/CLAUDE.md.template"
+rm "$WORK/repo/claude/templates/project/CLAUDE.md.template"
 expect_fail "central artifact inventory" "a per-project template file is deleted"
 
 setup
-printf 'then run `bash -c "make"`\n' >> "$WORK/repo/global/.claude/skills/verify/SKILL.md"
+printf 'then run `bash -c "make"`\n' >> "$WORK/repo/claude/skills/verify/SKILL.md"
 expect_fail "skills avoid inline interpreters" "a central skill gains a bash -c one-liner"
 
 setup

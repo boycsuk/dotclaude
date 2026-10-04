@@ -75,7 +75,7 @@ def case_fresh_install(home, pwsh):
     except (OSError, ValueError) as e:
         return f"settings.json unreadable after install: {e}"
     hooks = os.listdir(claude(home, "hooks"))
-    shipped = {n for n in os.listdir(os.path.join(REPO, "global/.claude/hooks")) if n.endswith(".py")}
+    shipped = {n for n in os.listdir(os.path.join(REPO, "claude/hooks")) if n.endswith(".py")}
     if not shipped <= set(hooks):
         return f"hooks missing after install: {sorted(shipped - set(hooks))}"
     drop = ".sh" if pwsh else ".ps1"
@@ -156,7 +156,7 @@ def case_seeded_on_fresh(home, pwsh):
         return "installer exited non-zero"
     with open(claude(home, "settings.json"), encoding="utf-8") as fh:
         merged = json.load(fh)
-    src = os.path.join(REPO, "global/.claude/settings.json")
+    src = os.path.join(REPO, "claude/settings.json")
     with open(src, encoding="utf-8") as fh:
         want = {k: v for k, v in json.load(fh).items()
                 if k in ("outputStyle", "fileCheckpointingEnabled")}
@@ -224,13 +224,13 @@ def case_python_hook_installed_and_runs(home, pwsh):
     # the installed command actually runs, through the shell that runs it.
     repo = tempfile.mkdtemp(prefix="install-repo-")
     try:
-        for item in ("install.sh", "install.ps1", "global", "templates", "scripts"):
+        for item in ("install.sh", "install.ps1", "claude", "scripts"):
             src = os.path.join(REPO, item)
             dst = os.path.join(repo, item)
             (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, dst)
-        with open(os.path.join(repo, "global/.claude/hooks/fixture-echo.py"), "w", encoding="utf-8") as fh:
+        with open(os.path.join(repo, "claude/hooks/fixture-echo.py"), "w", encoding="utf-8") as fh:
             fh.write(FIXTURE_HOOK)
-        settings_src = os.path.join(repo, "global/.claude/settings.json")
+        settings_src = os.path.join(repo, "claude/settings.json")
         with open(settings_src, encoding="utf-8") as fh:
             settings = json.load(fh)
         settings["hooks"].setdefault("SessionStart", []).append({"hooks": [{
@@ -360,7 +360,7 @@ def case_bytecode_cache_cleared_and_refilled(home, pwsh):
     # hook of the same size: the installer clears the per-user cache. The
     # hooks then fill it again, never writing a __pycache__ under hooks/.
     env = dict(os.environ, **pyhook.home_env(home))
-    cache = subprocess.run([sys.executable, os.path.join(REPO, "global/.claude/hooks/_lib/bootstrap.py")],
+    cache = subprocess.run([sys.executable, os.path.join(REPO, "claude/hooks/_lib/bootstrap.py")],
                            capture_output=True, text=True, env=env).stdout.strip()
     if not cache.replace("\\", "/").endswith("dotclaude/pycache"):
         return f"bootstrap.py printed an unexpected cache folder: {cache!r}"
@@ -526,7 +526,7 @@ def case_wholesale_init_project_is_adopted(home, pwsh):
     if os.path.exists(os.path.join(old, "references", "retired.md")):
         return "a file the old wholesale copy left was not cleaned up"
     if _read(os.path.join(old, "SKILL.md")) != _read(
-            os.path.join(REPO, "global", ".claude", "skills", "init-project", "SKILL.md")):
+            os.path.join(REPO, "claude", "skills", "init-project", "SKILL.md")):
         return "init-project/SKILL.md was not refreshed"
     if "skills/init-project/SKILL.md" not in _read(claude(home, ".dotclaude-manifest")).decode("utf-8"):
         return "init-project is not tracked in the manifest"
@@ -576,10 +576,10 @@ def case_broken_hook_aborts_before_copying(home, pwsh):
                           "\nif ($x) {\n" if pwsh else "\nif true; then\n")):
         repo = tempfile.mkdtemp(prefix="install-repo-")
         try:
-            for item in ("install.sh", "install.ps1", "global", "templates", "scripts"):
+            for item in ("install.sh", "install.ps1", "claude", "scripts"):
                 src = os.path.join(REPO, item)
                 (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, os.path.join(repo, item))
-            with open(os.path.join(repo, "global/.claude/hooks", broken), "a") as fh:
+            with open(os.path.join(repo, "claude/hooks", broken), "a") as fh:
                 fh.write(text)
             if run_install(home, pwsh, repo) == 0:
                 return f"the installer accepted a broken {broken}"
@@ -624,10 +624,10 @@ def case_hook_fields_and_permission_keys_carry_over(home, pwsh):
     # later reached Unix and silently vanished on Windows.
     repo = tempfile.mkdtemp(prefix="install-repo-")
     try:
-        for item in ("install.sh", "install.ps1", "global", "templates", "scripts"):
+        for item in ("install.sh", "install.ps1", "claude", "scripts"):
             src = os.path.join(REPO, item)
             (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, os.path.join(repo, item))
-        settings_src = os.path.join(repo, "global/.claude/settings.json")
+        settings_src = os.path.join(repo, "claude/settings.json")
         with open(settings_src, encoding="utf-8") as fh:
             settings = json.load(fh)
         entry = settings["hooks"]["PreToolUse"][0]["hooks"][0]

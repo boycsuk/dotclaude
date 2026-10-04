@@ -195,7 +195,7 @@ def entrypoint(main):
         if _hook_kind(path) == "guard":
             ask(f"this guard crashed ({type(exc).__name__}: {exc}), so the command was not checked. "
                 f"Approve only if it is safe. A crash that repeats is a bug in "
-                f"global/.claude/hooks/{hook_name()}.py: fix it in the dotclaude repo and re-run ./install.sh.")
+                f"claude/hooks/{hook_name()}.py: fix it in the dotclaude repo and re-run ./install.sh.")
         code = 0
     sys.exit(code or 0)
 

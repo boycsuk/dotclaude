@@ -23,7 +23,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-HOOKS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "global", ".claude", "hooks")
+HOOKS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "claude", "hooks")
 GUARDS = ("guard-destructive", "guard-push-main", "guard-commit", "guard-dependencies", "guard-readonly-agents")
 PAYLOAD = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash", "session_id": "bench",
                       "tool_input": {"command": "ls"}, "cwd": os.getcwd()})

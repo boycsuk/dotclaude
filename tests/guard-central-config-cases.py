@@ -45,7 +45,7 @@ CASES = [
     ("~/.claude/CLAUDE.md",                        ALLOW, "user's global memory file"),
     ("~/.claude/projects/x/memory/note.md",        ALLOW, "auto-memory is not config"),
     ("~/projects/app/.claude/settings.json",       ALLOW, "a PROJECT's stub, not the central one"),
-    ("~/projects/dotclaude/global/.claude/hooks/f.sh", ALLOW,
+    ("~/projects/dotclaude/claude/hooks/f.sh", ALLOW,
      "the repo SOURCE is exactly where edits belong"),
     ("~/.claude-backup/settings.json",             ALLOW, "sibling dir sharing the prefix"),
 

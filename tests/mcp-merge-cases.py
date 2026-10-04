@@ -41,9 +41,9 @@ import pyhook  # noqa: E402
 import stubs  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SH = os.path.join(REPO, "templates/project/init.sh")
-PS1 = os.path.join(REPO, "templates/project/init.ps1")
-TEMPLATE_DIR = os.path.join(REPO, "templates/project")
+SH = os.path.join(REPO, "claude/templates/project/init.sh")
+PS1 = os.path.join(REPO, "claude/templates/project/init.ps1")
+TEMPLATE_DIR = os.path.join(REPO, "claude/templates/project")
 
 def make_bin(tmp, omit=(), uname_out="Darwin", xcrun_fail=False):
     """Stub the host probes so a Linux CI box can act like a Mac (or fail

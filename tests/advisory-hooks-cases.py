@@ -96,7 +96,7 @@ def case_sync_mirror(runner):
     """PostToolUse: fires on rule edits only, via additionalContext."""
     cwd = scratch()
 
-    edited = os.path.join(cwd, "global/.claude/rules/workflow.md")
+    edited = os.path.join(cwd, "claude/rules/workflow.md")
     proc = run(runner, "sync-mirror-docs",
                pyhook.payload("Edit", pyhook.edit_input(edited, "x"), event="PostToolUse"), cwd)
     ctx, event = delivered_context(proc.out)

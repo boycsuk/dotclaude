@@ -2,7 +2,7 @@
 
 The PER-PROJECT half of the dotclaude setup, deployed with `/init-project`. The
 reusable core (hooks, agents, skills, rules, output-styles) is NOT here — it is
-central in `~/.claude/` (installed from the dotclaude repo's `global/.claude/`)
+central in `~/.claude/` (installed from the dotclaude repo's `claude/`)
 and applies to every project automatically. See DESIGN.md §23.
 
 ## What `/init-project` deploys (per-project only)
@@ -25,7 +25,7 @@ and applies to every project automatically. See DESIGN.md §23.
 
 ## The central core (in `~/.claude/`, shared by every project)
 
-Installed from the dotclaude repo (`global/.claude/`) via `install.sh`; updated
+Installed from the dotclaude repo (`claude/`) via `install.sh`; updated
 for all projects at once with `git pull && ./install.sh`:
 
 - **hooks/** — verify-on-edit, guard-destructive, guard-push-main, guard-commit (denies attribution trailers, emoji and non-English commit messages; asks before `--amend`, commits on main, a commit without its CHANGELOG entry, a `.sh`/`.ps1` pair committed half, and a commit that includes a secret-bearing file or adds a literal secret, named by file, line and kind, never by value), guard-dependencies (asks before any command or manifest edit that adds a dependency, naming unpinned versions and the audit command), guard-readonly-agents (an agent whose definition gives it no Write or Edit — researcher, code-reviewer, debugger, db-inspector, or a project's own — may not write files outside temp, change git state or install packages through the shell either), read-before-write (when a new code file is created in a folder nothing was read from this session, names 2-3 siblings to read and align it with — advisory, never blocks), detect-secrets, comment-hygiene (tells Claude to rewrite a new code comment that cites a plan step or points into the project's docs, such as "see CLAUDE.md" — advisory, never blocks), sync-mirror-docs, design-sync (after an edit to a file a `docs/design/` spec names on its `Code:` line, reminds Claude to keep that spec, and the canvas when there is one, in step — advisory, never blocks), guard-central-config (blocks editing the central `~/.claude/` config from inside a project), reinject-rules (re-primes the non-negotiable conventions after a context compaction), code-intel-context (tells the session and every code-reading subagent which code-intelligence tools the project has — the LSP plugin, the codebase-memory graph — and when to use each; silent where there are none), explore-graph-prompt (appends the same guidance to every Explore delegation, since Explore skips CLAUDE.md), turn-end-notice (at the end of a turn, one line for the user: code changed with CHANGELOG.md untouched, code edited with no test run after the last edit in a repo with a test setup, web research with no Sources cited — advisory, never blocks).
@@ -74,14 +74,14 @@ Re-running `/init-project --update` inside a project only touches the per-projec
 
 The reusable core is central, so **where** you add something depends on whether it should apply everywhere or only to this project:
 
-**Reusable across all your projects → add it to the dotclaude repo (`global/.claude/`), then `git pull && ./install.sh`:**
+**Reusable across all your projects → add it to the dotclaude repo (`claude/`), then `git pull && ./install.sh`:**
 
 | You want to add... | How |
 |---|---|
-| A repeatable workflow (deploy, test gen, etc.) | New skill in the repo's `global/.claude/skills/<name>/SKILL.md` |
-| A non-negotiable guarantee (must always pass) | New hook `global/.claude/hooks/<name>.py` (with a `# hook-kind:` line) + its entry in `global/.claude/settings.json` + a `tests/<name>-cases.py` matrix |
-| A specialist agent useful everywhere | New agent in the repo's `global/.claude/agents/<name>.md` |
-| A convention all projects should follow | New file in the repo's `global/.claude/rules/<topic>.md` (mirror it in `templates/project/docs/conventions.md`) |
+| A repeatable workflow (deploy, test gen, etc.) | New skill in the repo's `claude/skills/<name>/SKILL.md` |
+| A non-negotiable guarantee (must always pass) | New hook `claude/hooks/<name>.py` (with a `# hook-kind:` line) + its entry in `claude/settings.json` + a `tests/<name>-cases.py` matrix |
+| A specialist agent useful everywhere | New agent in the repo's `claude/agents/<name>.md` |
+| A convention all projects should follow | New file in the repo's `claude/rules/<topic>.md` (mirror it in `claude/templates/project/docs/conventions.md`) |
 
 > Editing the installed `~/.claude/` copy from inside a project is blocked by the `guard-central-config` hook — change the source in the repo and re-install.
 
@@ -116,7 +116,7 @@ Finds every project dotclaude deployed under the folder (by the settings stub, `
 
 ## Retired artifacts are pruned on every deploy
 
-dotclaude sometimes stops shipping a piece a project was deployed with — Serena and Graphify (once deployed by `--serena`) were the first. `templates/project/obsolete.json` lists them, and every `init.sh` / `init.ps1` run removes their dead hook entries from `.claude/settings.json` and `settings.local.json` (the scripts behind them are gone from `~/.claude/hooks/`). Obsolete `.mcp.json` servers and directories (`.serena/`, `graphify-out/`) are only reported: `/init-project --update` asks before removing them.
+dotclaude sometimes stops shipping a piece a project was deployed with — Serena and Graphify (once deployed by `--serena`) were the first. `claude/templates/project/obsolete.json` lists them, and every `init.sh` / `init.ps1` run removes their dead hook entries from `.claude/settings.json` and `settings.local.json` (the scripts behind them are gone from `~/.claude/hooks/`). Obsolete `.mcp.json` servers and directories (`.serena/`, `graphify-out/`) are only reported: `/init-project --update` asks before removing them.
 
 ## Database inspection: `db-inspector` agent
 
@@ -206,7 +206,7 @@ Every hook is a single Python file that serves both platforms; run its case matr
 When something you added to a project's `.claude/` proves useful for all projects:
 
 1. Run `/compound` during the session where you discovered the pattern.
-2. Or manually, in the **dotclaude repo** (never in `~/.claude/`, which `guard-central-config` blocks and `install.sh` overwrites): reusable artifacts — skills, hooks, rules, agents, output styles — go to `global/.claude/`; per-project surface — the CLAUDE.md template, `docs/`, scaffolds — goes to `templates/project/`.
+2. Or manually, in the **dotclaude repo** (never in `~/.claude/`, which `guard-central-config` blocks and `install.sh` overwrites): reusable artifacts — skills, hooks, rules, agents, output styles — go to `claude/`; per-project surface — the CLAUDE.md template, `docs/`, scaffolds — goes to `claude/templates/project/`.
 3. Commit, push, and run `git pull && ./install.sh` on each machine. Central artifacts reach every project immediately; per-project files land on the next `/init-project`.
 
 ### Skills: auto-invocable vs manual

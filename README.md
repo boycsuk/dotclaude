@@ -84,7 +84,7 @@ Direct pushes to `main`/`master` are blocked by default; for solo repos, opt out
 
 ## Development
 
-Every hook is a single Python file in `global/.claude/hooks/` (the installers wire it for both Unix and Windows). The installers and the deployers ship as `.sh`/`.ps1` pairs that must stay logically equivalent — change both in the same commit. Before committing:
+Every hook is a single Python file in `claude/hooks/` (the installers wire it for both Unix and Windows). The installers and the deployers ship as `.sh`/`.ps1` pairs that must stay logically equivalent — change both in the same commit. Before committing:
 
 ```bash
 python3 check.py

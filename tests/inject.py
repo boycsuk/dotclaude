@@ -17,7 +17,7 @@ import sys
 
 def add_deny_rule(repo):
     """A new Bash deny rule with no $verbMap entry would vanish on Windows."""
-    path = os.path.join(repo, "global/.claude/settings.json")
+    path = os.path.join(repo, "claude/settings.json")
     with open(path) as fh:
         settings = json.load(fh)
     settings["permissions"]["deny"].append("Bash(curl:*)")
@@ -34,7 +34,7 @@ def drop_design_heading(repo):
 
 
 def diverge_extensions(repo):
-    path = os.path.join(repo, "global/.claude/rules/security.md")
+    path = os.path.join(repo, "claude/rules/security.md")
     with open(path) as fh:
         text = fh.read()
     with open(path, "w") as fh:
@@ -47,7 +47,7 @@ def _drop_from_inventory_line(repo, anchor, name):
     The realistic regression: the name still appears in the doc's prose, so a
     whole-document search would pass on it.
     """
-    path = os.path.join(repo, "templates/project/README.md")
+    path = os.path.join(repo, "claude/templates/project/README.md")
     with open(path) as fh:
         lines = fh.read().split("\n")
     for i, line in enumerate(lines):
@@ -70,7 +70,7 @@ def drop_skill_from_readme(repo):
 
 def unwire_shell_hook(repo):
     """A safety .sh hook dropped from settings.json still has its file and matrix."""
-    path = os.path.join(repo, "global/.claude/settings.json")
+    path = os.path.join(repo, "claude/settings.json")
     with open(path) as fh:
         settings = json.load(fh)
     for groups in settings["hooks"].values():
@@ -82,7 +82,7 @@ def unwire_shell_hook(repo):
 
 def reinject_to_stderr(repo):
     """A Stop notice that delivers as additionalContext resumes every turn."""
-    path = os.path.join(repo, "global/.claude/hooks/turn-end-notice.py")
+    path = os.path.join(repo, "claude/hooks/turn-end-notice.py")
     with open(path) as fh:
         text = fh.read()
     if "hookio.notice(" not in text:
@@ -92,7 +92,7 @@ def reinject_to_stderr(repo):
 
 
 def wire_missing_hook(repo):
-    path = os.path.join(repo, "global/.claude/settings.json")
+    path = os.path.join(repo, "claude/settings.json")
     with open(path) as fh:
         settings = json.load(fh)
     settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = \
@@ -136,7 +136,7 @@ def drop_matcher_tool_case(repo):
 
 def readd_if_gate(repo):
     """A prefix `if` gate reopens the wrapped-form bypasses."""
-    path = os.path.join(repo, "global/.claude/settings.json")
+    path = os.path.join(repo, "claude/settings.json")
     with open(path) as fh:
         settings = json.load(fh)
     settings["hooks"]["PreToolUse"][0]["hooks"][0]["if"] = "Bash(git push *)"
@@ -146,7 +146,7 @@ def readd_if_gate(repo):
 
 def revert_advisory_to_stderr(repo):
     """An advisory hook back on stderr+exit 0 is invisible to the model."""
-    path = os.path.join(repo, "global/.claude/hooks/sync-mirror-docs.py")
+    path = os.path.join(repo, "claude/hooks/sync-mirror-docs.py")
     with open(path) as fh:
         text = fh.read()
     if "hookio.context(" not in text:
@@ -157,12 +157,12 @@ def revert_advisory_to_stderr(repo):
 
 def delete_central_agent(repo):
     """Deleting a central artifact must not pass green (check 5 globs disk)."""
-    os.remove(os.path.join(repo, "global/.claude/agents/debugger.md"))
+    os.remove(os.path.join(repo, "claude/agents/debugger.md"))
 
 
 def break_frontmatter(repo):
     """A broken fence makes the artifact silently un-loadable."""
-    path = os.path.join(repo, "global/.claude/agents/researcher.md")
+    path = os.path.join(repo, "claude/agents/researcher.md")
     with open(path) as fh:
         text = fh.read()
     with open(path, "w") as fh:
@@ -171,7 +171,7 @@ def break_frontmatter(repo):
 
 def pin_model_on_reviewer(repo):
     """A reasoning agent pinning a model is a reasoning downgrade check.py forbids."""
-    path = os.path.join(repo, "global/.claude/agents/code-reviewer.md")
+    path = os.path.join(repo, "claude/agents/code-reviewer.md")
     with open(path) as fh:
         text = fh.read()
     with open(path, "w") as fh:
@@ -181,7 +181,7 @@ def pin_model_on_reviewer(repo):
 def wrap_mcp_fragment(repo):
     """A fragment re-wrapped in 'mcpServers' merges the wrong keys into the
     user's .mcp.json — the exact shape of the old monolithic template."""
-    path = os.path.join(repo, "templates/project/mcp/xcode.json")
+    path = os.path.join(repo, "claude/templates/project/mcp/xcode.json")
     with open(path) as fh:
         data = json.load(fh)
     with open(path, "w") as fh:
@@ -191,7 +191,7 @@ def wrap_mcp_fragment(repo):
 def break_mcp_fragment_json(repo):
     """playwright.json shipped outside check 11's hardcoded list, so a syntax
     error in it passed green; the list is glob-derived now."""
-    path = os.path.join(repo, "templates/project/mcp/playwright.json")
+    path = os.path.join(repo, "claude/templates/project/mcp/playwright.json")
     with open(path, "a") as fh:
         fh.write(",")
 
@@ -199,13 +199,13 @@ def break_mcp_fragment_json(repo):
 def delete_central_skill(repo):
     """Deleting a whole skill dir shrank check 5's glob and passed green;
     the inventory tuple in check 8b must name every skill."""
-    shutil.rmtree(os.path.join(repo, "global/.claude/skills/implement-ui"))
+    shutil.rmtree(os.path.join(repo, "claude/skills/implement-ui"))
 
 
 def obsolete_hits_shipped_hook(repo):
     """An obsolete.json match that also hits a live hook would strip it from
     every project on the next deploy."""
-    path = os.path.join(repo, "templates/project/obsolete.json")
+    path = os.path.join(repo, "claude/templates/project/obsolete.json")
     with open(path) as fh:
         manifest = json.load(fh)
     manifest["hooks"].append({"match": "hooks/guard-destructive.", "reason": "x"})
@@ -215,7 +215,7 @@ def obsolete_hits_shipped_hook(repo):
 
 def lsp_entry_without_binary(repo):
     """A catalog entry with no binary turns the PATH probe into a no-op."""
-    path = os.path.join(repo, "templates/project/lsp-plugins.json")
+    path = os.path.join(repo, "claude/templates/project/lsp-plugins.json")
     with open(path) as fh:
         catalog = json.load(fh)
     del catalog["plugins"]["pyright-lsp"]["binary"]
@@ -234,7 +234,7 @@ def _replace(repo, rel, old, new):
 
 def drop_py_hook_kind(repo):
     """A .py hook without its kind marker escapes the advisory/guard checks."""
-    _replace(repo, "global/.claude/hooks/code-intel-context.py", "# hook-kind: advisory\n", "")
+    _replace(repo, "claude/hooks/code-intel-context.py", "# hook-kind: advisory\n", "")
 
 
 def rewrite_hook_without_matrix(repo):
@@ -245,31 +245,31 @@ def rewrite_hook_without_matrix(repo):
 def wire_py_hook_without_interpreter(repo):
     """install.ps1 only rewrites the `python3 <hook>.py` form; a bare path
     would reach Windows unexecutable."""
-    _replace(repo, "global/.claude/settings.json",
+    _replace(repo, "claude/settings.json",
              'python3 \\"$HOME\\"/.claude/hooks/code-intel-context.py',
              '\\"$HOME\\"/.claude/hooks/code-intel-context.py')
 
 
 def py_hook_gains_shell_twin(repo):
     """One hook, one implementation: a .py with a .sh twin is drift waiting."""
-    with open(os.path.join(repo, "global/.claude/hooks/code-intel-context.sh"), "w") as fh:
+    with open(os.path.join(repo, "claude/hooks/code-intel-context.sh"), "w") as fh:
         fh.write("#!/bin/sh\nexit 0\n")
 
 
 def mixed_wildcard_rule(repo):
     """`Bash(mkfs.*:*)` matched nothing on Unix: the `*` before `:*` is literal."""
-    _replace(repo, "global/.claude/settings.json", '"Bash(mkfs.*)"', '"Bash(mkfs.*:*)"')
+    _replace(repo, "claude/settings.json", '"Bash(mkfs.*)"', '"Bash(mkfs.*:*)"')
 
 
 def undocument_opt_out(repo):
     """An opt-out missing from settings.local.json.example is undiscoverable."""
-    _replace(repo, "templates/project/.claude/settings.local.json.example",
+    _replace(repo, "claude/templates/project/.claude/settings.local.json.example",
              '"allowCommitTrailers"', '"someOtherKey"')
 
 
 def obsolete_broad_match(repo):
     """A match like "python3 " hits no hook file name but every live .py hook command."""
-    path = os.path.join(repo, "templates/project/obsolete.json")
+    path = os.path.join(repo, "claude/templates/project/obsolete.json")
     with open(path) as fh:
         manifest = json.load(fh)
     manifest["hooks"].append({"match": "python3 ", "reason": "x"})
@@ -279,7 +279,7 @@ def obsolete_broad_match(repo):
 
 def unwire_py_hook(repo):
     """A .py hook that ships but is wired to no event never runs."""
-    path = os.path.join(repo, "global/.claude/settings.json")
+    path = os.path.join(repo, "claude/settings.json")
     with open(path) as fh:
         settings = json.load(fh)
     for groups in settings["hooks"].values():
@@ -299,7 +299,7 @@ def heredoc_back_into_subshell(repo):
     static rule catches it on a modern host. Looks tidier, which is exactly why
     someone will try it again.
     """
-    path = os.path.join(repo, "templates/project/init.sh")
+    path = os.path.join(repo, "claude/templates/project/init.sh")
     with open(path) as fh:
         text = fh.read()
     marker = '  spec=$(lsp_spec "$plugin" || true)'
@@ -326,7 +326,7 @@ def add_permissions_key(repo):
         raise SystemExit("inject: install.ps1 no longer copies the remaining permissions keys")
     with open(ps1, "w") as fh:
         fh.write(text.replace(loop, "foreach ($p in @()) {", 1))
-    path = os.path.join(repo, "global/.claude/settings.json")
+    path = os.path.join(repo, "claude/settings.json")
     with open(path) as fh:
         settings = json.load(fh)
     settings["permissions"]["blockReadsOutsideWorkingDirectories"] = True
@@ -387,7 +387,7 @@ def stop_hook_starts_blocking(repo):
 
 def add_unclassified_key(repo):
     """A top-level key in neither class never reaches ~/.claude at all."""
-    path = os.path.join(repo, "global/.claude/settings.json")
+    path = os.path.join(repo, "claude/settings.json")
     with open(path) as fh:
         settings = json.load(fh)
     settings["alwaysThinkingEnabled"] = True
@@ -397,7 +397,7 @@ def add_unclassified_key(repo):
 
 def silence_feedback_hook(repo):
     """A feedback hook that stops calling hookio.feedback reports nothing to Claude."""
-    path = os.path.join(repo, "global/.claude/hooks/detect-secrets.py")
+    path = os.path.join(repo, "claude/hooks/detect-secrets.py")
     with open(path) as fh:
         text = fh.read()
     if "hookio.feedback(" not in text:
@@ -408,7 +408,7 @@ def silence_feedback_hook(repo):
 
 def drop_bootstrap(repo):
     """A hook that skips `import bootstrap` recompiles _lib on every run."""
-    path = os.path.join(repo, "global/.claude/hooks/guard-push-main.py")
+    path = os.path.join(repo, "claude/hooks/guard-push-main.py")
     with open(path) as fh:
         text = fh.read()
     if "import bootstrap" not in text:
@@ -419,7 +419,7 @@ def drop_bootstrap(repo):
 
 def bypass_entrypoint(repo):
     """A guard exiting through sys.exit(main()) lets a crash through as a non-blocking exit 1."""
-    path = os.path.join(repo, "global/.claude/hooks/guard-destructive.py")
+    path = os.path.join(repo, "claude/hooks/guard-destructive.py")
     with open(path) as fh:
         text = fh.read()
     if "hookio.entrypoint(main)" not in text:
@@ -430,7 +430,7 @@ def bypass_entrypoint(repo):
 
 def orphan_shell_hook(repo):
     """A shell hook shipped without its .ps1 twin silently skips Windows."""
-    with open(os.path.join(repo, "global/.claude/hooks/new-check.sh"), "w") as fh:
+    with open(os.path.join(repo, "claude/hooks/new-check.sh"), "w") as fh:
         fh.write("#!/usr/bin/env bash\nexit 0\n")
 
 
@@ -452,7 +452,7 @@ def drop_ps1_exit_code(repo):
 
 def drop_fork_from_verify(repo):
     """A skill that pins haiku without forking hands haiku the caller's turn."""
-    path = os.path.join(repo, "global/.claude/skills/verify/SKILL.md")
+    path = os.path.join(repo, "claude/skills/verify/SKILL.md")
     with open(path) as fh:
         text = fh.read()
     if "\ncontext: fork\n" not in text:
@@ -463,7 +463,7 @@ def drop_fork_from_verify(repo):
 
 def unpin_mcp_fragment(repo):
     """An MCP server fragment back on @latest re-resolves the package on every start."""
-    path = os.path.join(repo, "templates/project/mcp/playwright.json")
+    path = os.path.join(repo, "claude/templates/project/mcp/playwright.json")
     with open(path) as fh:
         data = json.load(fh)
     data["playwright"]["args"] = ["-y", "@playwright/mcp@latest"]

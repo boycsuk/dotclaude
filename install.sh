@@ -43,7 +43,7 @@ fi
 # guard-central-config blocks editing the installed copy. So
 # check before copying: abort with the source tree untouched and the previously
 # installed (working) hooks still in place.
-for hook in "$SCRIPT_DIR"/global/.claude/hooks/*.sh; do
+for hook in "$SCRIPT_DIR"/claude/hooks/*.sh; do
   [ -f "$hook" ] || continue
   if ! parse_err=$(bash -n "$hook" 2>&1); then
     echo "  ! $(basename "$hook") does not parse — aborting before anything is copied." >&2
@@ -54,7 +54,7 @@ for hook in "$SCRIPT_DIR"/global/.claude/hooks/*.sh; do
 done
 # Same for the Python hooks: one that fails to compile exits 1, a non-blocking
 # error, so the guard would be silently off rather than a wall — just as bad.
-python3 - "$SCRIPT_DIR"/global/.claude/hooks/*.py "$SCRIPT_DIR"/global/.claude/hooks/_lib/*.py <<'PY' || exit 1
+python3 - "$SCRIPT_DIR"/claude/hooks/*.py "$SCRIPT_DIR"/claude/hooks/_lib/*.py <<'PY' || exit 1
 import sys
 for path in sys.argv[1:]:
     try:
@@ -72,7 +72,7 @@ PY
 # old compiled logic. Clear the hooks' per-user cache (the folder bootstrap.py
 # names, and only that folder) so every hook recompiles once. Lockstep with
 # install.ps1.
-cache_dir="$(python3 "$SCRIPT_DIR/global/.claude/hooks/_lib/bootstrap.py" 2>/dev/null || true)"
+cache_dir="$(python3 "$SCRIPT_DIR/claude/hooks/_lib/bootstrap.py" 2>/dev/null || true)"
 case "$cache_dir" in
   */dotclaude/pycache) rm -rf -- "$cache_dir" ;;
 esac
@@ -109,10 +109,10 @@ fi
 # the user's own .ps1 hooks.
 : > "$MANIFEST.tmp"
 for dir in hooks agents skills rules output-styles; do
-  [ -d "$SCRIPT_DIR/global/.claude/$dir" ] || continue
+  [ -d "$SCRIPT_DIR/claude/$dir" ] || continue
   # POSIX find only: -printf is GNU-specific and BSD find (macOS) errors on it,
   # aborting the install mid-run under set -e — after the manifest cleanup.
-  (cd "$SCRIPT_DIR/global/.claude/$dir" && find . -type f ! -path '*/__pycache__/*' \
+  (cd "$SCRIPT_DIR/claude/$dir" && find . -type f ! -path '*/__pycache__/*' \
     | sed "s|^\./|$dir/|") >> "$MANIFEST.tmp"
 done
 grep -v '^hooks/.*\.ps1$' "$MANIFEST.tmp" > "$MANIFEST.new" || true
@@ -130,7 +130,7 @@ while IFS= read -r rel; do
 done < "$MANIFEST.new"
 
 for dir in hooks agents skills rules output-styles; do
-  src="$SCRIPT_DIR/global/.claude/$dir"
+  src="$SCRIPT_DIR/claude/$dir"
   [ -d "$src" ] || continue
   mkdir -p "$TARGET/$dir"
   # A dev checkout that ran the Python hooks or tests holds __pycache__ dirs;
@@ -178,7 +178,7 @@ echo "  - central hooks/agents/skills/rules/output-styles installed (Python hook
 #   everything else - the user's, preserved untouched.
 # install.ps1 rebuilds this object key by key, so both lists live there too;
 # check.py asserts all three sites agree.
-python3 - "$SCRIPT_DIR/global/.claude/settings.json" "$TARGET/settings.json" <<'PY'
+python3 - "$SCRIPT_DIR/claude/settings.json" "$TARGET/settings.json" <<'PY'
 import json, os, sys
 src_path, dst_path = sys.argv[1], sys.argv[2]
 with open(src_path) as f:
@@ -241,7 +241,7 @@ PY
 
 # --- Per-project template ----------------------------------------------------
 rm -rf "$TARGET/templates/project"
-cp -r "$SCRIPT_DIR/templates/project" "$TARGET/templates/"
+cp -r "$SCRIPT_DIR/claude/templates/project" "$TARGET/templates/"
 echo "  - templates/project/ installed"
 
 # --- ~/.claude/CLAUDE.md is the USER's own — never touch it ------------------

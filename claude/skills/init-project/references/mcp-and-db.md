@@ -142,7 +142,7 @@ screenshot-vs-reference gate). **Recommend `--ui` for any project with a web
 UI**, not only when the user asks for browser automation.
 
 `--ui` also merges the safe browser tools into the project stub's
-`permissions.allow` by exact name (`templates/project/permissions/playwright.json`).
+`permissions.allow` by exact name (`claude/templates/project/permissions/playwright.json`).
 Do not add a `mcp__playwright__*` wildcard: it would also allow
 `browser_evaluate`, `browser_run_code_unsafe` and `browser_file_upload`, which
 stay on ask. The server is pinned to one `@playwright/mcp` version in
