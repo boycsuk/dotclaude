@@ -168,6 +168,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--remove-obsolete-mcp` for `init.sh`/`init.ps1`: removes the MCP servers listed in `obsolete.json` from `.mcp.json`, with their `mcp__<name>` permission rules.
 
 ### Changed
+- DESIGN.md §52 records the skill decisions above: injections that exit 0 on an empty repo, one shared This-branch scope, arguments that pre-answer but never guess, `/audit` as a router, and the one-pass `--update`.
 - `/implement-ui` and `/compound` declare an `argument-hint` and treat the text after the command as the design reference or the learning. `/implement-ui`'s description, loaded in every session, went from 897 to 405 characters and leads with when to use it instead of summarizing its procedure.
 - `/init-project --update` runs the drift report, the CLAUDE.md bullet diff and the obsolete-artifact check before the deploy, asks every decision in as few questions as possible and prints one command (with `--remove-obsolete-mcp` when chosen), so the user runs the terminal once; only the chosen bullets are inserted after `deploy OK`. It declares `argument-hint: [--update]`, and an explicit `--update` forces update mode.
 - `/update-docs` leaves lockfiles out of its diffs, like `/changes`.
