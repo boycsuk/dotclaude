@@ -114,7 +114,7 @@ def check_example_drift():
 
 
 def check_legacy_ui_md():
-    """A docs/ui.md left from before design/ replaced it; /implement-ui migrates it."""
+    """A docs/ui.md left from before docs/design/ replaced it; /implement-ui migrates it."""
     path = os.path.join("docs", "ui.md")
     if not os.path.lexists(path):
         return "NO"

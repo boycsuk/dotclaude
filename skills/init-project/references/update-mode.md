@@ -203,9 +203,9 @@ skills.
 - `UNKNOWN` → the manifest is missing (re-run `./install.sh` in the dotclaude
   clone); say so instead of assuming either way.
 - `LEGACY_UI_MD=YES` → the project still has `docs/ui.md`, which the template
-  no longer ships: the visual contract is now `design/` at the root. Do not
+  no longer ships: the visual contract is now `docs/design/`. Do not
   move, split or delete it here (it is user content, often a full UI spec).
-  Tell the user that `/implement-ui` migrates it into `design/`, with a review
+  Tell the user that `/implement-ui` migrates it into `docs/design/`, with a review
   before anything is removed. `UNKNOWN` → `docs/ui.md` exists but is not a
   regular file; say so.
 

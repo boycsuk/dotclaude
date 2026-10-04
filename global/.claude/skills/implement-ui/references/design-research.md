@@ -18,12 +18,12 @@ Only in step 1, before the first artboard, and only when the session has the
 or design the canvas directly; never research unasked. No tools: design
 directly and say nothing about Refero.
 
-If `design/tokens.json` exists, the visual direction is decided:
+If `docs/design/tokens.json` exists, the visual direction is decided:
 skip styles and use screens and flows only.
 
 ## 1. Brief
 
-Write a five-line brief from the request, CLAUDE.md and `design/README.md`: what is
+Write a five-line brief from the request, CLAUDE.md and `docs/design/README.md`: what is
 being designed, for whom, target platform, the main goal of the UI, tone and
 constraints. Ask only for what none of them say. Every query below comes from
 it.
@@ -79,7 +79,7 @@ for:
 Add a `References` sticky note to the canvas: the chosen style (title, `url`,
 `uuid`) and, per screen, the screens and flows it drew on (their
 `refero_url`). Step 3 copies it into the `## References` section of
-`design/README.md`, so a later session knows where the direction came
+`docs/design/README.md`, so a later session knows where the direction came
 from instead of re-researching it.
 
 ## Limits

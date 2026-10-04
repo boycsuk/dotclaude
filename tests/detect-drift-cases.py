@@ -101,15 +101,15 @@ def case_clean(project):
 
 
 def case_legacy_ui_md(project):
-    # docs/ui.md left the template; /implement-ui migrates it into design/.
+    # docs/ui.md left the template; /implement-ui migrates it into docs/design/.
     write(project, "docs/ui.md", "# UI\n")
     return run(project), {"LEGACY_UI_MD": "YES"}
 
 
 def case_legacy_ui_md_beside_design(project):
-    # A migration that wrote design/ but kept the old file is still unfinished.
+    # A migration that wrote docs/design/ but kept the old file is still unfinished.
     write(project, "docs/ui.md", "# UI\n")
-    write(project, "design/README.md", "# Design\n")
+    write(project, "docs/design/README.md", "# Design\n")
     return run(project), {"LEGACY_UI_MD": "YES"}
 
 
@@ -152,7 +152,7 @@ CASES = [
     ("an edited settings.local.json.example reports drift", case_example_drift),
     ("the servers in .mcp.json are listed for the §8 check", case_mcp_servers),
     ("a legacy docs/ui.md is reported", case_legacy_ui_md),
-    ("docs/ui.md beside design/ is still reported", case_legacy_ui_md_beside_design),
+    ("docs/ui.md beside docs/design/ is still reported", case_legacy_ui_md_beside_design),
     ("a docs/ui.md that is not a file reports UNKNOWN", case_ui_md_not_a_file),
 ]
 

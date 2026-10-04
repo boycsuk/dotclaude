@@ -1,6 +1,6 @@
-# Design spec: the design/ folder
+# Design spec: the docs/design/ folder
 
-`design/` at the project root is the project's design, in the repo: its
+`docs/design/` is the project's design, in the repo: its
 tokens, the map of its screens, and one short spec per component and per
 screen. Implementation reads it instead of re-mining a canvas or a mockup,
 and every client (web, iOS, Android, desktop) shares it.
@@ -13,7 +13,7 @@ code does, and the code is the reference until something new is designed.
 ## Layout
 
 ```
-design/
+docs/design/
 ├── README.md                    # what this is, canvas, sections map, component and screen index
 ├── tokens.json                  # design-tokens.md
 ├── components/
@@ -69,7 +69,7 @@ some other way:
 ## Units: tokens and responsive behaviour, never raw pixels
 
 Sizes, gaps, paddings, radii, colors and type are written as token names
-from `design/tokens.json` (`space-lg`, `radius-md`, `heading-2`). A value with
+from `docs/design/tokens.json` (`space-lg`, `radius-md`, `heading-2`). A value with
 no token is added to `tokens.json` first, or marked `TBD`. Layout is described
 as built: a flex stack or a grid of N columns, its gap token, a max-width, and
 what happens at the narrow size (wraps, stacks, scrolls in a box). The narrow
@@ -320,9 +320,9 @@ Filling the rest:
 ## Keeping it true
 
 - With a canvas, the canvas is the source; the spec is derived. When the
-  canvas changes (its listed version differs from `design/README.md`'s),
+  canvas changes (its listed version differs from `docs/design/README.md`'s),
   regenerate the specs of the artboards that changed rather than editing them
-  to match code, then read `git diff design/`: the files it touches are the
+  to match code, then read `git diff docs/design/`: the files it touches are the
   components and screens to rebuild. Reset their status to `designed`;
   everything else keeps its status and is not touched.
 - **Regeneration keeps two sections**: `## Accepted deviations` and the `Code:`

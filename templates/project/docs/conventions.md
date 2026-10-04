@@ -18,7 +18,7 @@
 > those are project-local additions, not a replacement for this file.
 >
 > **What this file is NOT.** Not the product contract — that is `backend.md`
-> (API), `design/` (visual), and `user-stories.md` (behavior). This file is about
+> (API), `docs/design/` (visual), and `user-stories.md` (behavior). This file is about
 > *how to write the code*, not *what the code does*.
 
 ## Code quality
@@ -140,7 +140,7 @@
 - **Understand before implementing.** Ask when requirements are ambiguous;
   don't write code on a guess.
 - **Keep the contract docs true.** If a change alters a contract, update the
-  matching file (`docs/backend.md`, `design/`, `docs/user-stories.md`).
+  matching file (`docs/backend.md`, `docs/design/`, `docs/user-stories.md`).
 
 ## Collaboration & output
 

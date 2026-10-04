@@ -2,7 +2,7 @@
 
 This folder holds **portable contract docs**: a concise description of what
 the system does and exposes, split across a few files. A project with a user
-interface also has **`design/`** at its root, the third lens (below). It is meant to travel
+interface also has a **`design/`** folder here, the third lens (below). It is meant to travel
 with the repo so that anyone — a teammate, or any tool that can only see one
 slice of the project (an Xcode workspace, an embedded subdir, a sandboxed
 editor) — still has enough context to work coherently against the whole.
@@ -18,11 +18,11 @@ skill to keep it true. The skill is the convenience, not the requirement.
 - **`backend.md`** — the API contract. Every endpoint (path, method,
   request/response shape, status codes, auth), the shared error model, and
   cross-endpoint conventions. What a client can call and what comes back.
-- **`../design/`** (projects with a UI) — the visual + navigational contract.
-  `design/tokens.json` holds the design tokens (colors, typography, spacing,
-  radii) every client shares; `design/README.md` maps the top-level
+- **`design/`** (projects with a UI) — the visual + navigational contract.
+  `docs/design/tokens.json` holds the design tokens (colors, typography, spacing,
+  radii) every client shares; `docs/design/README.md` maps the top-level
   sections/screens and indexes one spec per screen and per component
-  (`design/screens/<screen>/README.md`, `design/components/<component>/README.md`:
+  (`docs/design/screens/<screen>/README.md`, `docs/design/components/<component>/README.md`:
   layout, parameters, sizes in tokens, states, copy, an acceptance checklist,
   and the source files that implement it). What it looks like and what
   screens exist. `/implement-ui` creates it; the file's own header says how to
@@ -34,7 +34,7 @@ skill to keep it true. The skill is the convenience, not the requirement.
 The three answer different questions and should not bleed into each other:
 *what can a client call* (backend) vs *what does it look like* (design) vs
 *what can the user achieve* (user-stories). A capability shows up in
-`user-stories.md` as an outcome, in `design/` as the screen it lives on, and in
+`user-stories.md` as an outcome, in `docs/design/` as the screen it lives on, and in
 `backend.md` as the endpoints behind it — same feature, three lenses, no
 duplication of detail.
 
@@ -52,11 +52,11 @@ kind:
   clone, and must be kept in sync by hand when a convention changes.
 
 When the UI is designed as a Design canvas (an Artifact made with Claude), the
-drawing stays in that canvas and `design/` is derived from it: when the design
+drawing stays in that canvas and `docs/design/` is derived from it: when the design
 changes, regenerate the specs; when the code changes first, the change goes
 back into the canvas. Without a canvas, the specs describe the code. Older
 projects may still have a `docs/ui.md`; `/implement-ui` migrates it into
-`design/`.
+`docs/design/`.
 
 Add more files (`cli.md`, `bot.md`, `events.md`, …) only when there is a *new
 producer or consumer of contracts* another part of the system must understand
@@ -68,7 +68,7 @@ a folder exists.
 Most products implement the same behavior on every client (web, iOS, Android,
 desktop). So:
 
-- `user-stories.md` and `design/` are **platform-agnostic by default**: write
+- `user-stories.md` and `docs/design/` are **platform-agnostic by default**: write
   each story/section once.
 - Only annotate a platform when a capability **genuinely differs** — e.g.
   *"Admin panel — web only"*, or a `Platform exception:` line under a story.
@@ -94,7 +94,7 @@ one-liner so it exists", always pick the one-liner.
 A change counts as a contract change when it adds, removes, or alters:
 - a backend endpoint (path, method, request body, response shape, status
   codes, auth) → `backend.md`;
-- a top-level section/screen, a component, or a design token → `design/`;
+- a top-level section/screen, a component, or a design token → `docs/design/`;
 - something the user can now do, can no longer do, or does differently
   → `user-stories.md`;
 - any cross-component agreement another consumer relies on → the relevant

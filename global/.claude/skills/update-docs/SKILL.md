@@ -1,6 +1,6 @@
 ---
 name: update-docs
-description: Updates docs/ and design/ so they reflect contract changes in the current diff — backend endpoints, user-facing capabilities (user stories), and the design (screens, design tokens, and component or screen specs, written back to the Design canvas when the code moved first). Use proactively before committing when a task may have changed a contract (a new/changed endpoint, a screen or component, a token, or a user-facing capability). Proposes the edits for confirmation before writing.
+description: Updates docs/ and docs/design/ so they reflect contract changes in the current diff — backend endpoints, user-facing capabilities (user stories), and the design (screens, design tokens, and component or screen specs, written back to the Design canvas when the code moved first). Use proactively before committing when a task may have changed a contract (a new/changed endpoint, a screen or component, a token, or a user-facing capability). Proposes the edits for confirmation before writing.
 allowed-tools: Bash(git diff:*) Bash(git status:*) Glob Read Edit Write
 ---
 
@@ -11,7 +11,7 @@ each component exposes to the rest. They are the only context available to
 tools that can only see one slice of the repo (Xcode workspaces, sandboxed
 editors, embedded subdirs). They are useful only if they are **true**.
 
-Your job: make `docs/` (and `design/`, when the project has one) match what the diff actually shipped. Nothing more,
+Your job: make `docs/` (and `docs/design/`, when the project has one) match what the diff actually shipped. Nothing more,
 nothing less.
 
 ## Inputs
@@ -46,12 +46,12 @@ not skip it either.
 
 List `docs/` with the **Glob tool** (`Glob: docs/*`) — portable across Unix and
 Windows, unlike `ls ... 2>/dev/null`. An empty result just means no docs yet.
-When the diff touches UI code, also list `design/` (`Glob: design/**/*`): it is
+When the diff touches UI code, also list `docs/design/` (`Glob: docs/design/**/*`): it is
 the project's design (`/implement-ui`'s `references/design-spec.md`). A
-project with a legacy `docs/ui.md` and no `design/` keeps maintaining
+project with a legacy `docs/ui.md` and no `docs/design/` keeps maintaining
 `docs/ui.md` for now; say once that `/implement-ui` can migrate it.
 
-**When `design/README.md` names a canvas** and the diff touches UI, compare the
+**When `docs/design/README.md` names a canvas** and the diff touches UI, compare the
 canvas's version (`Artifact` `list`, `scope: "files"`, its `url`) with the
 `Canvas version` line. A different one means the canvas was edited on the web
 since the specs were written: say so and point at `/implement-ui` to regenerate
@@ -69,7 +69,7 @@ will edit, plus any file the coverage audit below points you at.
    - **`backend.md` (the API contract)** — added/removed/renamed endpoint;
      changed request body shape; changed response shape; changed auth
      requirement; changed error code semantics; new shared error model.
-   - **`design/README.md` and `design/tokens.json` (the visual + navigational
+   - **`docs/design/README.md` and `docs/design/tokens.json` (the visual + navigational
      contract)** — added/removed/renamed top-level section/screen, or changed
      its purpose (`## Sections` and the screen index); added/removed/renamed
      a design token (color, typography, spacing, radius, elevation) or changed
@@ -81,7 +81,7 @@ will edit, plus any file the coverage audit below points you at.
      Write it as a platform-agnostic story (parity by default); add a
      `Platform exception:` line only if a client genuinely differs. A feature
      usually touches all three: the capability in `user-stories.md`, the
-     screen in `design/`, the endpoints in `backend.md` — keep each lens in its
+     screen in `docs/design/`, the endpoints in `backend.md` — keep each lens in its
      own file, do not duplicate the detail.
    - **`conventions.md` (the coding-convention mirror)** — the diff changed a
      rule file (added/removed/reworded a convention) — either the developer's
@@ -92,7 +92,7 @@ will edit, plus any file the coverage audit below points you at.
      so neither takes precedence — reconcile by hand. Keep the mirror a concise
      summary, not a paste. This is the one doc driven by a config change rather
      than a product change.
-   - **`design/` component and screen specs** — find the spec whose `Code:`
+   - **`docs/design/` component and screen specs** — find the spec whose `Code:`
      line names a changed file. If the diff makes that screen or component
      differ from its spec (a parameter added or dropped, a region moved, a
      size changed):
@@ -126,7 +126,7 @@ will edit, plus any file the coverage audit below points you at.
    invocation.
 
 3. **If there is a contract change**, first show the proposed edit for each
-   affected `docs/` or `design/` file (the section and the new text) and confirm via
+   affected `docs/` or `docs/design/` file (the section and the new text) and confirm via
    AskUserQuestion — apply / adjust / skip. The description promises that, and
    docs are shared surface. Then edit with the `Edit` tool. Rules:
    - Only touch the sections that need to change. Leave the rest verbatim.
@@ -158,10 +158,10 @@ diff-driven edits, do a quick cross-check on the touched files:
   `urls.py`, `app.ts`) and confirm every registered route appears in
   `docs/backend.md`. Add a one-liner for any missing one.
 - UI: skim the top-level navigation/router and confirm every user-reachable
-  section appears in `## Sections` of `design/README.md` (or the legacy
+  section appears in `## Sections` of `docs/design/README.md` (or the legacy
   `docs/ui.md`). Add a one-liner for any missing one. If the diff touched a
   theme/style file (CSS variables, SwiftUI Color extensions, Compose theme,
-  Tailwind config), confirm `design/tokens.json` holds every token it defines,
+  Tailwind config), confirm `docs/design/tokens.json` holds every token it defines,
   under the same names and values.
 - User stories: if the diff added or changed a user-facing capability,
   confirm there is a story for it in `docs/user-stories.md`. Add a one-liner
@@ -184,7 +184,7 @@ to backfill the entire history in one go.
 After your edits (or the "nothing to update" message), summarize in 1-3
 bullets:
 - what contract change you detected (or "none");
-- which `docs/` or `design/` file(s) you edited (or "none");
+- which `docs/` or `docs/design/` file(s) you edited (or "none");
 - anything ambiguous you had to guess — flag it so the user can correct.
 
 Do not run `git add`, do not commit. The user runs `/commit` next.

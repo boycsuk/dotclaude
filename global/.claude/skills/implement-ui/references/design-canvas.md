@@ -2,24 +2,24 @@
 
 The Design type's own instructions (a create or read result carries them)
 govern the file format. This page adds what keeps a project's design ordered
-and reusable: one canvas, laid out like `design/`, with components that are
+and reusable: one canvas, laid out like `docs/design/`, with components that are
 edited in one place.
 
 ## One canvas per project
 
-A project has at most one canvas, named in `design/README.md`. Every design
+A project has at most one canvas, named in `docs/design/README.md`. Every design
 request extends it: a second screen is new artboards on the same canvas,
-never a new artifact. Only when `design/README.md` names no canvas, start one:
+never a new artifact. Only when `docs/design/README.md` names no canvas, start one:
 the Artifact tool's `quickstart` with intent `design`, then publish with the
 `type_url` it returns and the project's name as `title`. Write its link into
-`design/README.md` at once.
+`docs/design/README.md` at once.
 
 The canvas is never stored in the repo: no `.dc.html`, no `canvas.json`.
 Edit it in a folder under the scratchpad directory and publish from there.
 
 ## Layout
 
-Artboard paths under `project/` mirror `design/`, and every artboard belongs to
+Artboard paths under `project/` mirror `docs/design/`, and every artboard belongs to
 one of three pages:
 
 | Page | Artboards |
@@ -28,7 +28,7 @@ one of three pages:
 | `screens` | `screens/<kebab>/<Pascal>.dc.html`, and its `screens/<kebab>/<Pascal>Narrow.dc.html` |
 | `explorations` | `explorations/<yyyy-mm-dd>-<slug>/<Pascal>.dc.html` |
 
-`<kebab>` is the folder of the matching spec in `design/` (`data-table`,
+`<kebab>` is the folder of the matching spec in `docs/design/` (`data-table`,
 `checkout`); `<Pascal>` is the name the code gives it (`DataTable`). Stems are
 unique across the canvas, so an exploration's artboard gets a distinct name
 (`CheckoutOneStep`, not a second `Checkout`).
@@ -52,7 +52,7 @@ name (`name="DataTable"`).
 
 ## Before drawing anything: reuse
 
-1. Read `design/README.md`'s component index and the spec of every component
+1. Read `docs/design/README.md`'s component index and the spec of every component
    the request could use.
 2. For each region of the new screen, pick in this order: an existing
    component as it is; an existing component with a new parameter value; an
@@ -66,10 +66,10 @@ Say which components you reused, extended or created before drawing.
 
 ## Rules
 
-1. **Reuse the project's tokens.** When `design/tokens.json` exists, the
+1. **Reuse the project's tokens.** When `docs/design/tokens.json` exists, the
    canvas uses exactly those values, inline (`design-tokens.md`).
    Otherwise commit to a small system, taken from the chosen style when
-   `design-research.md` ran; it becomes `design/tokens.json`. Inline styles
+   `design-research.md` ran; it becomes `docs/design/tokens.json`. Inline styles
    use values from the scale only, so every size maps to one token.
 2. **One piece, one place.** Every element that appears more than once or has
    options (table, form, card, nav bar, modal, button with variants) is its own
@@ -116,7 +116,7 @@ Say which components you reused, extended or created before drawing.
 A design that tries something out, or is not yet part of the product, is an
 exploration: its artboards go under `explorations/<yyyy-mm-dd>-<slug>/` on the
 `explorations` page. It may mount the real components. It gets no spec and no
-row in `design/README.md`, and its code is never built.
+row in `docs/design/README.md`, and its code is never built.
 
 - **Promote**: move the artboard into `screens/` or `components/` (rename it if
   its stem clashes), write its spec, add its index row as `designed`.
@@ -127,7 +127,7 @@ drift into the screens page.
 
 ## The published version
 
-`design/README.md` records the canvas version the spec was last written from:
+`docs/design/README.md` records the canvas version the spec was last written from:
 the `version <id>` that `Artifact` `list` with `scope: "files"` and the
 canvas `url` prints (a publish result prints it too, as `version id`). After
 every publish, write the new id. Every publish is a new id (tested). A save on
@@ -148,7 +148,7 @@ truth:
 1. Read the artboard (and its variants sheet) from the canvas.
 2. Copy it under one scratch `<root>` at its canvas path, edit it to match the
    code, and publish only those files.
-3. Record the new version in `design/README.md` and regenerate that spec.
+3. Record the new version in `docs/design/README.md` and regenerate that spec.
 
 Only what a canvas cannot draw (an animation, a platform widget, a behaviour
 under load) becomes an `## Accepted deviations` line instead.

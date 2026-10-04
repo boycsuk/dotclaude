@@ -1,12 +1,12 @@
 # hook-kind: advisory
-"""PostToolUse hook: when an edited file implements a design/ spec, remind Claude to keep the design in step.
+"""PostToolUse hook: when an edited file implements a docs/design/ spec, remind Claude to keep the design in step.
 
-A spec in design/ names its source files on a `Code:` line. Editing one of them
+A spec in docs/design/ names its source files on a `Code:` line. Editing one of them
 can change what the spec (and, with a canvas, the drawing) describes, and a
 design that trails its code is how a regenerated spec later resets intentional
 changes. Delivered as additionalContext: the edit is legitimate and must never
 be gated, and stderr at exit 0 never reaches the model. Silent in projects
-without design/, on files no spec names, and on the specs themselves.
+without docs/design/, on files no spec names, and on the specs themselves.
 """
 
 import glob
@@ -43,7 +43,7 @@ def code_paths(value):
 
 def specs_naming(target, root):
     hits = []
-    for spec in sorted(glob.glob(os.path.join(root, "design", "**", "README.md"), recursive=True)):
+    for spec in sorted(glob.glob(os.path.join(root, "docs", "design", "**", "README.md"), recursive=True)):
         try:
             with open(spec, encoding="utf-8-sig", errors="replace") as fh:
                 lines = fh.read().splitlines()
@@ -62,17 +62,17 @@ def main():
     tool_input = payload.get("tool_input")
     path = tool_input.get("file_path") if isinstance(tool_input, dict) else None
     root = hookio.project_dir(payload)
-    if not isinstance(path, str) or not path or not os.path.isdir(os.path.join(root, "design")):
+    if not isinstance(path, str) or not path or not os.path.isdir(os.path.join(root, "docs", "design")):
         return 0
     target = relative(path, root)
-    if not target or target.startswith("design/"):
+    if not target or target.startswith("docs/design/"):
         return 0
     specs = specs_naming(target, root)
     if specs:
         hookio.context("PostToolUse", (
             f"NOTE: {target} implements {', '.join(specs)}. If this edit changed what that spec "
             "describes (parameters, layout, sizes, states, copy), keep the design in step before "
-            "finishing: with a canvas (design/README.md names one), write the change back into its "
+            "finishing: with a canvas (docs/design/README.md names one), write the change back into its "
             "artboard, record the new canvas version and regenerate the spec; without one, update the "
             "spec. An `## Accepted deviations` line only for what a canvas cannot draw."))
     return 0

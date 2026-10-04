@@ -1,6 +1,6 @@
-# Design tokens: design/tokens.json
+# Design tokens: docs/design/tokens.json
 
-`design/tokens.json` holds every color, type style, spacing step, radius and
+`docs/design/tokens.json` holds every color, type style, spacing step, radius and
 shadow the product uses: names, values per theme, and when to use each. Specs
 and code name tokens, never raw hex or raw pixels.
 
@@ -57,7 +57,7 @@ Rules the canvas enforces (a token that breaks one is dropped silently):
   read.
 
 A value nobody has decided stays out of the file and is listed as `TBD` in the
-`design/README.md` overview instead: a seeded value that looks official gets
+`docs/design/README.md` overview instead: a seeded value that looks official gets
 built against.
 
 ## Wiring it into the code

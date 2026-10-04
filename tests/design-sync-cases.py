@@ -5,7 +5,7 @@ Run:  python3 tests/design-sync-cases.py
       python3 tests/design-sync-cases.py --pwsh PATH   # also through PowerShell
 
 The hook reminds Claude, after an Edit or Write, that the file it touched is
-implemented by a spec in design/ (named by a `Code:` line), so the design is
+implemented by a spec in docs/design/ (named by a `Code:` line), so the design is
 kept in step. An advisory hook's failure mode is silence, so the matrix asserts
 the delivery channel (additionalContext on stdout, exit 0, empty stderr) as
 much as when it fires; and it must stay quiet everywhere else, or the reminder
@@ -51,10 +51,10 @@ def scratch():
 def project(with_design=True):
     root = scratch()
     if with_design:
-        for rel, text in (("design/README.md", "# Design\n\n- Canvas: none\n"),
-                          ("design/components/data-table/README.md", COMPONENT_SPEC),
-                          ("design/screens/orders/README.md", SCREEN_SPEC),
-                          ("design/components/header/README.md", PLACEHOLDER_SPEC)):
+        for rel, text in (("docs/design/README.md", "# Design\n\n- Canvas: none\n"),
+                          ("docs/design/components/data-table/README.md", COMPONENT_SPEC),
+                          ("docs/design/screens/orders/README.md", SCREEN_SPEC),
+                          ("docs/design/components/header/README.md", PLACEHOLDER_SPEC)):
             path = os.path.join(root, *rel.split("/"))
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w", encoding="utf-8") as fh:
@@ -69,18 +69,18 @@ def payload(file_path, tool="Edit"):
 
 # (label, with_design, file_path or a callable(root) -> file_path, tool, expected spec paths or [] for silence)
 CASES = [
-    ("no design/ folder: silent", False, "src/components/DataTable.tsx", "Edit", []),
+    ("no docs/design/ folder: silent", False, "src/components/DataTable.tsx", "Edit", []),
     ("a file a Code: line names", True, "src/components/DataTable.tsx", "Edit",
-     ["design/components/data-table/README.md", "design/screens/orders/README.md"]),
+     ["docs/design/components/data-table/README.md", "docs/design/screens/orders/README.md"]),
     ("absolute path inside the project", True,
      lambda root: os.path.join(root, "src", "components", "data-table.css"), "Edit",
-     ["design/components/data-table/README.md"]),
+     ["docs/design/components/data-table/README.md"]),
     ("Windows separators in the Code: line", True, "src/screens/Orders.tsx", "Write",
-     ["design/screens/orders/README.md"]),
+     ["docs/design/screens/orders/README.md"]),
     ("Windows separators in the edited path", True, "src\\screens\\Orders.tsx", "Edit",
-     ["design/screens/orders/README.md"]),
+     ["docs/design/screens/orders/README.md"]),
     ("an unrelated file: silent", True, "src/api/client.ts", "Edit", []),
-    ("a spec itself: silent", True, "design/components/data-table/README.md", "Edit", []),
+    ("a spec itself: silent", True, "docs/design/components/data-table/README.md", "Edit", []),
     ("a template placeholder never matches", True, "<path to the component's source>", "Edit", []),
     ("a file outside the project: silent", True, "/elsewhere/src/components/DataTable.tsx", "Edit", []),
     ("a name that only shares a suffix: silent", True, "src/components/OldDataTable.tsx", "Edit", []),

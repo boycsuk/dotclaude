@@ -6,7 +6,7 @@
 > contract clients code against. Internal implementation details do NOT belong
 > here.
 >
-> **What this file is NOT.** Not the visual contract (`design/` has screens and
+> **What this file is NOT.** Not the visual contract (`docs/design/` has screens and
 > design tokens), not behavior in user terms (`user-stories.md` has what the
 > user can do). This file answers "what can a client call, and what comes
 > back".

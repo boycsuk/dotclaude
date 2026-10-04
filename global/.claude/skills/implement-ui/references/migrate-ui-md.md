@@ -1,9 +1,9 @@
-# Migrating a legacy docs/ui.md into design/
+# Migrating a legacy docs/ui.md into docs/design/
 
-Projects deployed before `design/` existed keep their visual contract in
+Projects deployed before `docs/design/` existed keep their visual contract in
 `docs/ui.md`. Some hold only tokens and a sections list; many grew into a full
 UI spec (screens, panels, modals, keys, copy) over a thousand lines long. The
-migration moves every line of it into `design/` (`design-spec.md`), where each
+migration moves every line of it into `docs/design/` (`design-spec.md`), where each
 piece has one place, without inventing anything and without losing anything.
 
 ## When
@@ -14,7 +14,7 @@ AskUserQuestion before anything else:
 - **Migrate now** (recommended): this procedure, then the request.
 - **Not now**: the request runs the old way. Tokens and sections are read from
   and written to `docs/ui.md`, no specs are written, and nothing is created in
-  `design/`. Say that `/init-project --update` keeps reporting it.
+  `docs/design/`. Say that `/init-project --update` keeps reporting it.
 
 ## 1. Outline first
 
@@ -25,15 +25,15 @@ one top-level section at a time while you classify it.
 
 | What the section holds | Where it goes |
 |------------------------|---------------|
-| Tokens (colors, type, spacing, radii, elevation, z-index, motion) | `design/tokens.json`, converted to the shape in `design-tokens.md`; a Light/Dark column pair becomes two themes |
-| The overview paragraph | `design/README.md` → `## Overview` |
-| The sections/screens list | `design/README.md` → `## Sections`, each linked to its screen spec |
-| One screen, page, window or view | `design/screens/<kebab>/README.md` |
-| A piece used from more than one place, or with options (a dialog, a panel type, a row, a form) | `design/components/<kebab>/README.md` |
+| Tokens (colors, type, spacing, radii, elevation, z-index, motion) | `docs/design/tokens.json`, converted to the shape in `design-tokens.md`; a Light/Dark column pair becomes two themes |
+| The overview paragraph | `docs/design/README.md` → `## Overview` |
+| The sections/screens list | `docs/design/README.md` → `## Sections`, each linked to its screen spec |
+| One screen, page, window or view | `docs/design/screens/<kebab>/README.md` |
+| A piece used from more than one place, or with options (a dialog, a panel type, a row, a form) | `docs/design/components/<kebab>/README.md` |
 | A region of a single screen | that screen's spec (`## Layout`, `## Content`) |
-| Rules for every screen (global keys, truncation, copy voice, error and progress reporting, style roles that are not tokens) | `design/README.md` → `## Conventions` |
+| Rules for every screen (global keys, truncation, copy voice, error and progress reporting, style roles that are not tokens) | `docs/design/README.md` → `## Conventions` |
 | Keys, copy or states of one screen or component | that spec's `## Keyboard and focus`, `## Copy`, `## States` |
-| Where an older design lived, platform limits, rationale | `design/README.md` → `## Overview`, kept short |
+| Where an older design lived, platform limits, rationale | `docs/design/README.md` → `## Overview`, kept short |
 
 Names come from the code (the component's or screen's identifier, in kebab
 case), so the spec, the code and any future canvas agree.
@@ -56,7 +56,7 @@ section) and confirm it through AskUserQuestion: apply / adjust. Then write:
   X, a long name truncates, an empty list shows Y). Nothing beyond what it
   states.
 - **Status `implemented`** in the index: the code exists, but nothing has been
-  verified against a drawing. `design/README.md` says `Canvas: none`.
+  verified against a drawing. `docs/design/README.md` says `Canvas: none`.
 - Tokens the code uses but the old file never listed: read the theme file and
   add them, marked in their `usage` as found in code.
 
@@ -70,7 +70,7 @@ destination is a gap: fix it, never drop it.
 
 Show the coverage list and ask through AskUserQuestion whether to delete
 `docs/ui.md`. On a yes, delete it and point the project's own references at
-`design/`: its CLAUDE.md (the `docs/` contract line and the `ui.md` bullet of
+`docs/design/`: its CLAUDE.md (the `docs/` contract line and the `ui.md` bullet of
 the contract-change list), `docs/README.md` if it is the older seed, and any
 link to `docs/ui.md` in other docs. On a no, keep it and say that the two now
 overlap until it is removed.
