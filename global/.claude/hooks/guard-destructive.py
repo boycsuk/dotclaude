@@ -40,8 +40,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "_li
 
 import hookio  # noqa: E402
 import shellwords  # noqa: E402
+import writes  # noqa: E402
+from writes import PS_REMOVE, absolute, canonical_home, home, ps_flag, short_bundle, split_args  # noqa: E402
 
-HOME_TOKENS = ("$HOME", "${HOME}", "$env:USERPROFILE", "$env:HOME", "%USERPROFILE%")
 SYSTEM_DIRS = re.compile(r"^/(etc|home|usr|var|opt|root|boot|bin|sbin|lib|lib64|Users|System|Library)(/|$)")
 WINDOWS_DANGER = re.compile(r"^[a-z]:/?$|^[a-z]:/(windows|users|program files[^/]*)(/|$)", re.I)
 CENTRAL_TAIL = r"/\.claude/(settings\.json|(hooks|agents|skills|rules|output-styles|templates)(/.*)?)$"
@@ -49,10 +50,6 @@ DOWNLOADERS = {"curl", "wget", "fetch", "http", "https", "aria2c", "iwr", "irm",
                "invoke-webrequest", "invoke-restmethod"}
 INTERPRETERS = re.compile(r"^((ba|z|da|k)?sh|fish|python[0-9.]*|py|perl|ruby|node|nodejs|php|bun|deno"
                           r"|pwsh|powershell|iex|invoke-expression)$", re.I)
-PS_REMOVE = {"remove-item", "ri", "rm", "del", "erase", "rd", "rmdir"}
-PS_WRITERS = {"set-content", "add-content", "out-file", "clear-content", "new-item", "sc", "ac"}
-PS_COPIES = {"copy-item", "move-item", "cpi", "mi", "copy", "move", "cp", "mv"}
-REDIRECT = re.compile(r"^(\d*|&)>>?\|?(.*)$")
 PROGRAM_PRODUCERS = {"echo", "printf"}
 INLINE_REASON = ("inline interpreter execution (python3 -c, node -e, bash -c, pwsh -c, or a program "
                  "fed on stdin or written and run in the same command). Instead: write the code to a "
@@ -72,28 +69,6 @@ FALLBACK = [
 ]
 
 
-def home():
-    return os.path.expanduser("~").replace("\\", "/")
-
-
-def canonical_home(word):
-    """`word` with a leading home spelling ($HOME, ${HOME}, $env:USERPROFILE) as `~`."""
-    w = word.replace("\\", "/")
-    for token in HOME_TOKENS:
-        if w == token or w.startswith(token + "/"):
-            return "~" + w[len(token):]
-    return w
-
-
-def absolute(word, cwd):
-    w = canonical_home(word)
-    if w == "~" or w.startswith("~/"):
-        w = home() + w[1:]
-    if not (w.startswith("/") or re.match(r"^[A-Za-z]:/", w)):
-        w = cwd.replace("\\", "/").rstrip("/") + "/" + w
-    return os.path.normpath(w).replace("\\", "/")
-
-
 def dangerous_target(word):
     w = canonical_home(word).rstrip("/") or "/"
     if w in ("/", "/*", "~", "*", ".", "./*", ".*", "..") or w.startswith(("~/", "../")):
@@ -104,38 +79,6 @@ def dangerous_target(word):
 def is_central(word, cwd):
     homes = rf"{re.escape(home())}|/home/[^/]+|/Users/[^/]+"
     return bool(re.match(rf"^({homes}){CENTRAL_TAIL}", absolute(word, cwd)))
-
-
-def split_args(args):
-    """(flags, positional, redirect targets) of a command's arguments."""
-    flags, positional, redirects, i = [], [], [], 0
-    while i < len(args):
-        a = args[i]
-        m = REDIRECT.match(a)
-        if m and not a.startswith("-"):
-            target = m.group(2) or (args[i + 1] if i + 1 < len(args) else "")
-            if not m.group(2):
-                i += 1
-            if not target.startswith("&"):
-                redirects.append(target)
-        elif a == "<" or a == "<<<":
-            i += 1
-        elif a.startswith("-") and len(a) > 1 and a != "--":
-            flags.append(a)
-        else:
-            positional.append(a)
-        i += 1
-    return flags, positional, redirects
-
-
-def short_bundle(flag, letters):
-    return flag.startswith("-") and not flag.startswith("--") and any(c in flag[1:] for c in letters)
-
-
-def ps_flag(flag, name, minimum=2):
-    """True when `flag` is an abbreviation PowerShell accepts for -`name`."""
-    f = flag.lower().lstrip("-")
-    return len(f) >= minimum and name.startswith(f)
 
 
 def judge_rm(name, args, shell):
@@ -266,34 +209,7 @@ def inline_program(command, shell):
 
 
 def judge_central(name, args, shell, cwd):
-    flags, positional, redirects = split_args(args)
-    if any(is_central(r, cwd) for r in redirects):
-        return True
-    lower = name.lower()
-    central = [p for p in positional if is_central(p, cwd)]
-    if lower in ("tee", "rm", "truncate", "chmod", "chown", "shred", "unlink", "ln", "link"):
-        return bool(central)
-    if lower == "sed" and any(f.startswith("-i") or f.startswith("--in-place") for f in flags):
-        return bool(central)
-    if lower == "perl" and any(short_bundle(f, "i") for f in flags):
-        return bool(central)
-    if lower == "dd":
-        return any(a.startswith("of=") and is_central(a[3:], cwd) for a in args)
-    if shell == "powershell" and lower in PS_REMOVE | PS_WRITERS:
-        return bool(central)
-    if shell == "powershell" and lower in PS_COPIES:
-        dest = next((args[i + 1] for i, a in enumerate(args[:-1]) if ps_flag(a, "destination", 1)), None)
-        dest = dest or (positional[1] if len(positional) > 1 else None)
-        return bool(dest and is_central(dest, cwd))
-    if lower in ("cp", "mv", "install", "rsync"):
-        if lower == "cp" and any(f in ("-l", "--link", "-s", "--symbolic-link") or short_bundle(f, "ls")
-                                 for f in flags) and central:
-            return True
-        target = next((args[i + 1] for i, a in enumerate(args[:-1]) if a in ("-t", "--target-directory")), None)
-        target = target or next((a.split("=", 1)[1] for a in args if a.startswith("--target-directory=")), None)
-        target = target or (positional[-1] if len(positional) > 1 else None)
-        return bool(target and is_central(target, cwd))
-    return False
+    return any(is_central(t, cwd) for t in writes.targets(name, args, shell))
 
 
 def judge_downloads(command, shell):
