@@ -15,11 +15,20 @@ rule was learned from a measured false result:
     AWS's documented example key.
 """
 
+import os
 import re
+import sys
+
+import writes
 
 STORE_DIR = re.compile(r"(^|/)(secrets|credentials)/")
 EXEMPT = re.compile(r"\.(example|sample|template|dist)(\.[^/]*)?$|\.(md|mdx|rst)$|/hooks/|detect-secrets-cases")
-SECRET_PATH = re.compile(r"\.env$|\.env\.|secrets|credentials|private.*key|\.pem$|\.p12$")
+SECRET_PATH = re.compile(r"\.env$|\.env\.|secrets|credentials|private.*key|\.pem$|\.p12$|\.pfx$|\.key$"
+                         r"|(^|/)id_(rsa|ed25519|ecdsa|dsa)$")
+# Credential stores under the home directory, matching the central Read deny list.
+CREDENTIAL_DIRS = (".ssh", ".aws", ".gnupg", ".kube", ".config/gh", ".config/gcloud", ".azure")
+CREDENTIAL_FILES = (".netrc", ".npmrc", ".pypirc", ".git-credentials", ".docker/config.json",
+                    ".claude/.credentials.json")
 UNIT_SPLIT = re.compile(r"\r?\n|[,;]|[ \t]+(?=[A-Za-z_][\w.-]*[ \t]*=)")
 DROP = re.compile(
     r"[:=]\s*[\"']?(process\.env|os\.environ|getenv|ENV\[)"
@@ -44,6 +53,28 @@ def secret_path(rel_path):
     if not STORE_DIR.search(lower) and EXEMPT.search(lower):
         return False
     return bool(SECRET_PATH.search(lower))
+
+
+def credential_file(abs_path):
+    """True for a credential store under the home directory (~/.ssh/..., ~/.netrc, ...)."""
+    home = writes.home().rstrip("/")
+    path = abs_path.replace("\\", "/")
+    if os.name == "nt" or sys.platform == "darwin":       # case-insensitive filesystems
+        home, path = home.lower(), path.lower()
+    if not path.startswith(home + "/"):
+        return False
+    rel = path[len(home) + 1:]
+    return rel in CREDENTIAL_FILES or any(rel == d or rel.startswith(d + "/") for d in CREDENTIAL_DIRS)
+
+
+def sensitive(word, cwd):
+    """True when a path as written in a command, run from `cwd`, names a secret-bearing file."""
+    full = writes.absolute(word, cwd)
+    if credential_file(full):
+        return True
+    base = writes.absolute(".", cwd).rstrip("/")
+    rel = full[len(base) + 1:] if full.startswith(base + "/") else full
+    return secret_path(rel)
 
 
 def line_secret(line):

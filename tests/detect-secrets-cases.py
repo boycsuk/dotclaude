@@ -146,6 +146,11 @@ CASES = [
     ("/repo/tests/detect-secrets-cases.py", "CASES = []\n", QUIET,
      "editing the matrix must not cry wolf — same rationale as */hooks/*"),
 
+    # --- key files by name, aligned with the Read deny list -----------------
+    ("/p/deploy/server.key", "not a pem header\n", WARN, "a .key file"),
+    ("/p/keys/id_ed25519", "x\n", WARN, "an ssh private key by name"),
+    ("/p/src/monkey.py", "x = 1\n", QUIET, "a name merely ending in 'key' is not a key file"),
+
     # --- NotebookEdit payload: notebook_path + new_source -------------------
     ("/p/analysis.ipynb", {"notebook_path": "/p/analysis.ipynb",
                            "new_source": f'api_key = "{KEY}"\n'}, WARN,
