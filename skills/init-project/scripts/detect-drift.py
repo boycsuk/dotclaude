@@ -95,7 +95,7 @@ def check_mcp_servers(prune):
 
 
 def check_example_drift():
-    """Report example drift here: the deploy prints it example drift on the user's terminal, which the skill never sees."""
+    """Report example drift here: the deploy prints it on the user's terminal, which the skill never sees."""
     mine = os.path.join(".claude", "settings.local.json.example")
     ours = os.path.join(template_dir(), ".claude", "settings.local.json.example")
     try:
@@ -113,6 +113,14 @@ def check_example_drift():
         return UNKNOWN
 
 
+def check_legacy_ui_md():
+    """A docs/ui.md left from before design/ replaced it; /implement-ui migrates it."""
+    path = os.path.join("docs", "ui.md")
+    if not os.path.lexists(path):
+        return "NO"
+    return "YES" if os.path.isfile(path) else UNKNOWN
+
+
 def main():
     prune = load_prune()
     if prune is None:
@@ -128,6 +136,7 @@ def main():
         ("ALLOW_PUSH_MAIN", allow_push),
         ("MCP_SERVERS", servers),
         ("SETTINGS_EXAMPLE_DRIFT", check_example_drift()),
+        ("LEGACY_UI_MD", check_legacy_ui_md()),
     ):
         print(f"{key}={value}")
     return 0

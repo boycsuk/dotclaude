@@ -202,6 +202,12 @@ skills.
   `graphify-out`).
 - `UNKNOWN` → the manifest is missing (re-run `./install.sh` in the dotclaude
   clone); say so instead of assuming either way.
+- `LEGACY_UI_MD=YES` → the project still has `docs/ui.md`, which the template
+  no longer ships: the visual contract is now `design/` at the root. Do not
+  move, split or delete it here (it is user content, often a full UI spec).
+  Tell the user that `/implement-ui` migrates it into `design/`, with a review
+  before anything is removed. `UNKNOWN` → `docs/ui.md` exists but is not a
+  regular file; say so.
 
 If all three are empty / `0`, tell the user *"No obsolete dotclaude artifacts
 in this project."* and continue to step 8.

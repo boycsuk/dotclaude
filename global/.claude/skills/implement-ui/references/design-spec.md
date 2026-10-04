@@ -110,6 +110,12 @@ it, light/dark support>
 - **[Orders](screens/orders/README.md)** — every order, newest first.
 - **Admin panel** — manage users. *(web only)*
 
+## Conventions
+
+<rules every screen follows, stated once: global keys, truncation, the copy's
+voice, how errors and progress are shown, style roles that are not tokens.
+Only what applies across screens; a rule of one screen lives in its spec>
+
 ## Components
 
 | Component | Status | Used in |
