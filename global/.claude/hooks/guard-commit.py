@@ -31,6 +31,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "_lib"))
 
 import hookio  # noqa: E402
+import secretrules  # noqa: E402
 import shellwords  # noqa: E402
 
 ATTRIBUTION_KEYS = ("co-authored-by", "signed-off-by")
@@ -58,6 +59,8 @@ LONG_OPTIONS = {
 }
 ALL_PATHS = {"-A", "--all", ".", "-u", "--update", ":/", "*"}
 GIT_TIMEOUT = 3
+HUNK = re.compile(r"^@@ -\S+ \+(\d+)")
+SCAN_LIMIT = 200_000                 # characters of added text scanned per path
 
 
 def canonical_long(name):
@@ -153,7 +156,8 @@ def _z_paths(text):
 def changed_paths(opts, cwd, flags, earlier_adds):
     """Root-relative paths the commit will include, counting `git add` earlier in the command."""
     paths = set(_z_paths(git(opts, cwd, "diff", "--cached", "--name-only", "-z")))
-    entries = _z_paths(git(opts, cwd, "status", "--porcelain", "-z"))
+    # Every untracked file, not its folder: `?? lib/` would hide lib/new.py from the checks.
+    entries = _z_paths(git(opts, cwd, "status", "--porcelain", "-z", "--untracked-files=all"))
     worktree, tracked_modified, skip = set(), set(), False
     for entry in entries:
         if skip:                                # the source path of a rename
@@ -176,6 +180,76 @@ def changed_paths(opts, cwd, flags, earlier_adds):
             spec = os.path.normpath(os.path.join(prefix, spec)).replace("\\", "/")
             paths |= {p for p in worktree if p == spec or p.startswith(spec + "/")}
     return paths
+
+
+def added_lines(diff):
+    """(path, new-file line number, text) for each added line of a unified diff."""
+    path, lineno = None, 0
+    for line in (diff or "").splitlines():
+        if line.startswith("+++ "):
+            path = line[6:] if line.startswith("+++ b/") else None
+        elif line.startswith("@@"):
+            m = HUNK.match(line)
+            lineno = int(m.group(1)) if m else 0
+        elif line.startswith("+") and path:
+            yield path, lineno, line[1:]
+            lineno += 1
+        elif line.startswith(" "):
+            lineno += 1
+
+
+def secret_problems(paths, opts, cwd, root):
+    """What in this commit looks secret: a secret-bearing path, or an added line holding a literal secret.
+
+    What gets committed is the index for a staged path and the working tree for
+    one an earlier `git add` or `-a` will stage, so each is read from there; an
+    untracked file is read whole. Messages name the file, line and kind, never
+    the value.
+    """
+    problems, scanned, found = [], {}, {}
+    flagged = sorted(p for p in paths if secretrules.secret_path(p))
+    problems += [f"{p} looks like it holds secrets and would be committed" for p in flagged]
+    rest = sorted(set(paths) - set(flagged))
+    if not rest:
+        return problems
+    staged = set(_z_paths(git(opts, cwd, "diff", "--cached", "--name-only", "-z")))
+
+    def scan(path, lineno, text):
+        if path in found or scanned.get(path, 0) > SCAN_LIMIT:
+            return
+        scanned[path] = scanned.get(path, 0) + len(text)
+        kind = secretrules.line_secret(text)
+        if kind:
+            found[path] = (lineno, kind)
+
+    for source, chosen in (("--cached", [p for p in rest if p in staged]),
+                           ("HEAD", [p for p in rest if p not in staged])):
+        if not chosen:
+            continue
+        diff = git(opts, cwd, "-c", "core.quotepath=false", "diff", source, "-U0", "--no-color", "--",
+                   *[f":(top,literal){p}" for p in chosen])
+        for path, lineno, text in added_lines(diff):
+            scan(path, lineno, text)
+        if source == "HEAD":
+            seen = {p for p, _, _ in added_lines(diff)}
+            for path in chosen:
+                if path not in seen:
+                    for lineno, text in untracked_lines(root, path):
+                        scan(path, lineno, text)
+    problems += [f"{p} line {n} adds {kind}" for p, (n, kind) in sorted(found.items())]
+    return problems
+
+
+def untracked_lines(root, path):
+    """(line number, text) of a file git does not track yet; nothing for a binary or unreadable one."""
+    try:
+        with open(os.path.join(root, path), "rb") as fh:
+            data = fh.read(SCAN_LIMIT)
+    except OSError:
+        return []
+    if b"\0" in data:
+        return []
+    return list(enumerate(data.decode("utf-8", "replace").splitlines(), 1))
 
 
 def twin_problems(paths, root):
@@ -226,6 +300,7 @@ def judge(segment_args, opts, docs, cwd, payload, earlier_adds):
     if paths and os.path.exists(os.path.join(root, "CHANGELOG.md")) and "CHANGELOG.md" not in paths:
         asks.append("the repo keeps a CHANGELOG.md but this commit does not update it")
     asks += twin_problems(paths, root)
+    asks += secret_problems(paths, opts, cwd, root) if paths else []
     if asks:
         return "ask", "Confirm this commit: " + "; ".join(asks) + "."
     return None, None

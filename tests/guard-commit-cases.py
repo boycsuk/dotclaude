@@ -139,6 +139,48 @@ STATE_CASES = [
 ]
 
 
+# Secret-shaped values are assembled at runtime so this file never trips the
+# secret checks it tests.
+KEY = "sk-live-" + "9f3b" * 6
+GHP = "ghp_" + "a1B2" * 9
+
+# (command, state, expected, text the ask must hold, why) — the ask must never echo a value.
+SECRET_CASES = [
+    ("git commit -m 'feat: x'", {"staged": [".env", "CHANGELOG.md"], "files": {".env": "DEBUG=1\n"}},
+     ASK, ".env looks like it holds secrets", "a staged .env"),
+    ("git add .env CHANGELOG.md && git commit -m 'feat: x'",
+     {"staged": [], "modified": ["CHANGELOG.md"], "files": {".env": "DEBUG=1\n"}},
+     ASK, ".env looks like it holds secrets", "a .env added in the same command"),
+    ("git commit -m 'feat: x'", {"staged": [".env.example", "CHANGELOG.md"],
+                                 "files": {".env.example": "API_KEY=changeme\n"}},
+     ALLOW, None, "a placeholder file with a placeholder value"),
+    ("git commit -m 'feat: x'", {"staged": ["config/secrets/prod.yaml", "CHANGELOG.md"],
+                                 "files": {"config/secrets/prod.yaml": "db: x\n"}},
+     ASK, "config/secrets/prod.yaml looks like it holds secrets", "a file in a secrets/ folder"),
+    ("git commit -m 'feat: x'", {"staged": ["app.py", "CHANGELOG.md"],
+                                 "files": {"app.py": f"x = 1\napi_key = '{KEY}'\n"}},
+     ASK, "app.py line 2 adds a literal value assigned to 'api_key'", "a staged literal key"),
+    ("git add app.py CHANGELOG.md && git commit -m 'feat: x'",
+     {"staged": [], "modified": ["CHANGELOG.md"], "files": {"app.py": f"x = 1\nTOKEN={KEY}\n"}},
+     ASK, "app.py line 2 adds", "a key written outside Edit, added in the same command"),
+    ("git commit -am 'feat: x'", {"staged": [], "modified": ["CHANGELOG.md"],
+                                  "files": {"app.py": f"x = 1\nsecret = '{KEY}'\n"}},
+     ASK, "app.py line 2 adds", "-a includes a tracked file's unstaged key"),
+    ("git commit -m 'feat: x'", {"staged": ["app.py", "CHANGELOG.md"],
+                                 "files": {"app.py": "x = 1\nAPI_KEY=changeme\n"}},
+     ALLOW, None, "a placeholder value is not a secret"),
+    ("git commit -m 'feat: x'", {"staged": ["app.py", "CHANGELOG.md"],
+                                 "files": {"app.py": "x = 1\ntoken = os.environ['TOKEN']\n"}},
+     ALLOW, None, "an env-var read is not a secret"),
+    ("git add -A && git commit -m 'feat: x'", {"staged": [], "modified": ["CHANGELOG.md"],
+                                                "files": {"lib/new.py": f"a = 1\nb = 2\nc = '{GHP}'\n"}},
+     ASK, "lib/new.py line 3 adds a GitHub token", "an untracked new file read whole"),
+    ("git commit -m 'feat: x'", {"staged": ["app.py", "CHANGELOG.md"],
+                                 "files": {"app.py": f"x = 1\nchange\npassword = '{KEY}'\n"}},
+     ASK, "app.py line 3 adds", "the line number counts the file, not the hunk"),
+]
+
+
 def git(repo, *args):
     subprocess.run(["git", "-C", repo] + list(args), check=True, env=GIT_ENV,
                    capture_output=True)
@@ -161,12 +203,20 @@ def make_repo():
 
 
 def set_state(repo, branch="feature/x", staged=("app.py", "CHANGELOG.md"),
-              modified=None, local=None):
+              modified=None, local=None, files=None):
+    """Reset `repo`, append a line to each modified path, write `files` {path: full text}, stage `staged`."""
     git(repo, "checkout", "-q", "-f", branch)
     git(repo, "reset", "-q", "--hard")
+    git(repo, "clean", "-q", "-f", "-d", "-e", ".claude")
     for rel in (modified if modified is not None else staged):
+        if rel in (files or {}):
+            continue
         with open(os.path.join(repo, rel), "a") as fh:
             fh.write("change\n")
+    for rel, text in (files or {}).items():
+        os.makedirs(os.path.dirname(os.path.join(repo, rel)) or repo, exist_ok=True)
+        with open(os.path.join(repo, rel), "w") as fh:
+            fh.write(text)
     if staged:
         git(repo, "add", *staged)
     local_path = os.path.join(repo, ".claude", "settings.local.json")
@@ -178,13 +228,17 @@ def set_state(repo, branch="feature/x", staged=("app.py", "CHANGELOG.md"),
             json.dump(local, fh)
 
 
-def decide(repo, command, pwsh, tool="Bash", cwd=None):
+def decide(repo, command, pwsh, tool="Bash", cwd=None, with_reason=False):
     payload = {"hook_event_name": "PreToolUse", "tool_name": tool, "cwd": cwd or repo,
                "tool_input": {"command": command}}
     code, out, err = pyhook.run("guard-commit", payload, cwd=cwd or repo, pwsh=pwsh)
     if code != 0:
-        return f"exit {code}: {err.strip()[-200:]}"
-    return pyhook.decision(out)
+        got = f"exit {code}: {err.strip()[-200:]}"
+        return (got, "") if with_reason else got
+    if not with_reason:
+        return pyhook.decision(out)
+    reason = ((out or {}).get("hookSpecificOutput") or {}).get("permissionDecisionReason", "")
+    return pyhook.decision(out), reason
 
 
 def main():
@@ -218,6 +272,18 @@ def main():
                 if got != want:
                     failures += 1
                     print(f"  FAIL want {want} got {got} | {command!r}  ({why})")
+            for command, state, want, must, why in SECRET_CASES:
+                set_state(repo, **state)
+                got, reason = decide(repo, command, pwsh, with_reason=True)
+                total += 1
+                problems = [] if got == want else [f"want {want} got {got}"]
+                if must and must not in reason:
+                    problems.append(f"the ask lacks {must!r}")
+                if KEY in reason or GHP in reason:
+                    problems.append("the ask echoes the secret value")
+                if problems:
+                    failures += 1
+                    print(f"  FAIL {'; '.join(problems)} | {command!r}  ({why}) {reason[:240]!r}")
             # Outside a git repo: never crash, still judge the message.
             outside = tempfile.mkdtemp(prefix="guard-commit-nogit-")
             for command, want in (("git commit -m 'feat: x'", ALLOW),
@@ -285,7 +351,7 @@ def main():
                 if code != 0 or out is not None:
                     failures += 1
                     print(f"  FAIL malformed payload {bad}: exit {code}, out {out}")
-            print(f"  {len(MESSAGE_CASES) + len(PS_CASES) + len(STATE_CASES) + 11} cases checked")
+            print(f"  {len(MESSAGE_CASES) + len(PS_CASES) + len(STATE_CASES) + len(SECRET_CASES) + 11} cases checked")
     finally:
         shutil.rmtree(repo, ignore_errors=True)
     print()
