@@ -368,6 +368,8 @@ One feature appears in all three under a different lens, with no duplicated deta
 
 **Conclusion:** the deny rules + guard hooks are the right always-on default; the sandbox is an opt-in hardening for users on a supported host who want defense against prompt-injected subprocess reads. Same opt-in logic as Serena. **Source:** permissions and sandboxing docs; `autoAllowBashIfSandboxed` (changelog 2.1.139).
 
+**Revised 2026-10-04 — say whether it could run.** Both installers end with one line from `scripts/sandbox-readiness.py`: ready on macOS (Seatbelt, nothing to install); on Linux/WSL2, which of bubblewrap and socat is missing and the exact install command for the package manager found (apt-get, dnf, pacman, zypper); unsupported on WSL1 and on native Windows, pointing at WSL2 or a dev container. It never installs anything and never uses sudo, which the central deny list blocks for the model on purpose: installing system packages is the user's decision, run from their own terminal — the plan-and-print split of §15. The sandbox stays opt-in, enabled with `/sandbox`. A dev container (Anthropic publishes one with a default-deny firewall) is the one isolation option that behaves the same on all three systems, including native Windows, and isolates the file tools, MCP servers and hooks as well; it is noted as a candidate `/init-project` scaffold, not shipped.
+
 ### 22. Tone/language conventions: rule by default, output style as opt-in hardening
 
 > **Revised by §37 (2026-10-03):** the output style is now on by default and the rule shrank to a short fallback.

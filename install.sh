@@ -250,6 +250,11 @@ fi
 # the hooks cannot see it. Lockstep with install.ps1.
 python3 "$SCRIPT_DIR/scripts/smoke-guards.py" "$TARGET/settings.json" sh || exit 1
 
+# --- Can the optional Bash sandbox run here? One line, never installs --------
+# Lockstep with install.ps1. Installing bubblewrap/socat needs sudo, which is
+# the user's call from their own terminal, so this only prints the command.
+python3 "$SCRIPT_DIR/scripts/sandbox-readiness.py" || true
+
 echo ""
 echo "Done. Central config is in ~/.claude/ and applies to every project."
 echo "Open Claude Code in any project and run /init-project to deploy the"

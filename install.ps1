@@ -527,6 +527,11 @@ $smokeArgs += @((Join-Path $ScriptDir "scripts/smoke-guards.py"), $settingsPath,
 & $PythonExe @smokeArgs
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
+# --- Can the optional Bash sandbox run here? One line, never installs --------
+# Lockstep with install.sh. On native Windows it says the sandbox needs WSL2
+# or a dev container; under pwsh on Linux or macOS it reports as install.sh.
+& $PythonExe (Join-Path $ScriptDir "scripts/sandbox-readiness.py")
+
 Write-Host ""
 Write-Host "Done. Central config is in $Target and applies to every project."
 Write-Host "Open Claude Code in any project and run /init-project to deploy the"

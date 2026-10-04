@@ -67,6 +67,8 @@ def launch(hook, pwsh):
 def case_fresh_install(home, pwsh):
     if run_install(home, pwsh) != 0:
         return "installer exited non-zero"
+    if "  - sandbox" not in LAST_OUTPUT[0]:
+        return "the installer did not report whether the optional Bash sandbox can run here"
     try:
         with open(claude(home, "settings.json"), encoding="utf-8") as fh:
             json.load(fh)
