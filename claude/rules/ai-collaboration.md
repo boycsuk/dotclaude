@@ -26,6 +26,7 @@ At the beginning of each new session, use `/resume-context`. It reads:
 - `CLAUDE.md` (project conventions and current state).
 - Recent `CHANGELOG.md` entries.
 - `git log --oneline -10`.
+- Work in flight: a `SPEC.md`, design units not yet verified, unmerged branches.
 
 Do not start blind in a project you have not touched recently.
 

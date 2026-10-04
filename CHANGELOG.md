@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `/resume-context` reports work in flight: a `SPEC*.md` with its steps and open questions, design units not yet `verified` in `docs/design/README.md`, and local branches not merged into main.
 - `read-before-write` hook (advisory, PreToolUse on Write) and `tests/read-before-write-cases.py`: when Claude creates a new code file in a folder nothing was read or edited from this session, it names up to three siblings (same extension and newest first; the parent folder's for an empty new folder) to read and align the file with, which also loads any path-scoped rules for that area. Once per folder per session; never blocks (DESIGN.md §50). The session-transcript reader is now `_lib/transcript.py`, shared with `turn-end-notice`.
 - `tests/bench-hook-launch.py`: a hand-run benchmark of one Bash call's guards in exec form and through Windows PowerShell 5.1 and pwsh, to measure what the launch form costs on a given machine.
 - The status line leads with "!guards off" when the running Claude Code predates 2.1.139 and `~/.claude/settings.json` wires a hook in exec form (`args`): that version ignores `args`, so every guard is off and no hook can report it. It reads the settings only in that case (DESIGN.md §48).
@@ -220,6 +221,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `check.py` no longer reads a code-extension list from a hook (check 6 compares the two path-scoped rules only).
 
 ### Fixed
+- `/resume-context` no longer aborts on a repository with no commits (`git log` moved out of the injected block), and sets `background: false` so its summary arrives in the same turn instead of as a later notification, like `/verify` and `/changes`.
 - `/commit` no longer aborts on a repository with no commits: `git log` runs as an ordinary step instead of in the injected block, where its exit 128 killed the first commit after `/init-project`.
 - `guard-destructive`, `guard-dependencies` and `guard-push-main` see the real program behind a shell keyword or a `time` flag: `for …; do python3 - <<'EOF'`, `if …; then`, `{ … }`, `! …` and `time -p …` hid it, so a heredoc-fed interpreter in a loop, `curl … | time -p bash`, `time -p rm -rf ~`, `time -p npm install x` and `time -p git push origin main` all ran unjudged. `unwrap()` now skips keywords, and `time` is stripped as a wrapper with its flags instead of as a bare keyword.
 - `guard-readonly-agents` resolves `$VAR`, `${VAR}`, `${VAR:-default}` and `$env:VAR` before judging a write, so a read-only agent's write to `"${TMPDIR:-/tmp}/x"` is recognised as the temp folder instead of denied; an unresolvable variable is still not assumed to be scratch space.
