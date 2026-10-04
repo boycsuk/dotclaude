@@ -9,7 +9,13 @@ Deny:
   - a download piped or substituted into a shell or interpreter
     (`curl … | sh`, `bash <(curl …)`, `irm … | iex`);
   - an inline interpreter (`python3 -c`, `node -e`, `bash -c`, `pwsh -c`,
-    -EncodedCommand): code the allowlist cannot inspect belongs in a file;
+    -EncodedCommand), and the same program spelled another way: a heredoc,
+    here-string or echo/printf pipe feeding python/node/perl/ruby/php, or a
+    file a heredoc writes and one of them runs in the same command. Code the
+    allowlist cannot inspect belongs in a file written first. A shell fed a
+    heredoc is not blocked, because its body is judged as commands. Known
+    gaps: a runner the wrappers list does not know (`uv run python - <<EOF`),
+    and text echoed into a shell (`echo "…" | bash`), which is never parsed;
   - a write into the installed central config (~/.claude settings.json,
     hooks, agents, skills, rules, output-styles, templates) through Bash —
     guard-central-config covers Edit/Write, this covers redirects, tee, sed
@@ -48,6 +54,10 @@ PS_WRITERS = {"set-content", "add-content", "out-file", "clear-content", "new-it
 PS_COPIES = {"copy-item", "move-item", "cpi", "mi", "copy", "move", "cp", "mv"}
 CD = {"cd", "pushd", "chdir", "set-location", "sl"}
 REDIRECT = re.compile(r"^(\d*|&)>>?\|?(.*)$")
+PROGRAM_PRODUCERS = {"echo", "printf"}
+INLINE_REASON = ("inline interpreter execution (python3 -c, node -e, bash -c, pwsh -c, or a program "
+                 "fed on stdin or written and run in the same command): put the code in a reviewable "
+                 "file with the Write tool, then run it")
 
 # Used only when the quoting cannot be parsed: the patterns of the old
 # text-matching guard, so an unbalanced quote never opens a hole.
@@ -200,6 +210,18 @@ def judge_interpreter(name, args):
     return False
 
 
+def inline_program(command, shell):
+    """True when a program reaches an interpreter through a here-string or an echo/printf pipe."""
+    for pipeline in shellwords.pipelines(command, shell) or []:
+        for i, seg in enumerate(pipeline):
+            if not shellwords.reads_program_from_stdin(seg):
+                continue
+            producer = shellwords.unwrap(pipeline[i - 1]) if i else []
+            if "<<<" in seg or (producer and shellwords.basename(producer[0]) in PROGRAM_PRODUCERS):
+                return True
+    return False
+
+
 def judge_central(name, args, shell, cwd):
     flags, positional, redirects = split_args(args)
     if any(is_central(r, cwd) for r in redirects):
@@ -249,6 +271,8 @@ def judge_downloads(command, shell):
 def judge(command, payload):
     """(decision, reason) for `command`, or (None, None) to let it run."""
     shell = shellwords.shell_of(payload)
+    if any(doc["runner"] for doc in shellwords.heredocs(command, shell)) or inline_program(command, shell):
+        return "deny", INLINE_REASON
     segments = shellwords.segments(command, shell)
     if segments is None:
         text = shellwords.code_text(command, shell)
@@ -282,8 +306,7 @@ def judge(command, payload):
         elif lower == "git":
             verdict = judge_git(seg)
         elif judge_interpreter(name, args):
-            verdict = ("deny", "inline interpreter execution (python3 -c, node -e, bash -c, pwsh -c): "
-                               "put the code in a reviewable file")
+            verdict = ("deny", INLINE_REASON)
         if verdict and verdict[0] == "deny":
             return verdict
         if verdict:

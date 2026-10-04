@@ -671,6 +671,16 @@ Code written in a deployed project came back with module docs like "Step 7, deli
 - **Paraphrases are left to `/audit`**, whose comment category now lists these forms. No pattern recognises "this part was built last".
 - **This repo follows its own rule.** Its code comments cited `DESIGN.md §N` and `CLAUDE.md §N` throughout; they now state the reason inline. DESIGN.md and CLAUDE.md keep their section cross-references: they are the docs, not comments.
 
+### 44. A program handed to an interpreter inline is an inline interpreter, however it is spelled (2026-10-04)
+
+`guard-destructive` blocked `python3 -c` but let the same program through by stdin: `python3 - <<EOF`, `cat <<EOF | python3`, a here-string, `echo … | python3`, or a heredoc writing `f.py` and `python3 f.py` in the same command. For the written-then-run form it parsed the body as shell, a rule meant for `bash x.sh`. On Python that caught nothing real (`os.system("rm -rf ~")` and `shutil.rmtree` passed) and blocked a string holding backticks: the measured false positive that started this.
+
+- **Shell vs. program.** `shellwords` now tells apart a shell running a heredoc's body (still judged as commands, as before) from python/node/perl/ruby/php taking it as a program (`runner` on the heredoc). The guard denies the second with the inline-interpreter reason, which says to write the file first and run it in a separate step.
+- **Only a program-on-stdin is reclassified; nothing becomes data.** A first draft treated a heredoc fed to a script file (`python3 tool.py <<EOF`) as input data. Review found two bypasses in it. First, a script can pass its stdin through to a shell: `python3 -m quopri -d <<EOF | bash` is a stdlib `cat`. Second, `bash -s >&/tmp/python3 x <<EOF` made a shell look like an interpreter, because `&` tokenised as a separator. Such bodies stay judged as commands, as before. Redirections are stripped before looking for the consumer, and the words after the marker count as its arguments. Interpreter flags that take a value (`-W ignore`, `node -r p.js`), `/dev/stdin` and `deno run -` are read correctly, and `xargs python3 <<EOF` is not a program on stdin.
+- **The marker's own line counts.** `cat > x.sh <<'EOF' && bash x.sh` put the run after the marker, where the old check never looked; it was a real bypass on the shell side too.
+- **Known gaps.** A runner the wrapper list does not know (`uv run python -`), and `echo … | bash` (a shell fed text from a pipe). Both are in the hook's docstring.
+- **Cost accepted.** Writing a scratch script and running it in one Bash call now needs two steps. That is the rule's point: the file exists, and the Write tool shows it, before it runs.
+
 ## Things deliberately not included
 
 - **Pre-baked stack variants.** See decision 2.

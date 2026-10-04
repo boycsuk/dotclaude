@@ -83,6 +83,10 @@ ON_MAIN = [
     ("cat > f.txt <<EOF\n$(git push origin main)\nEOF", BLOCK,
      "an unquoted heredoc runs its $( ) while being written"),
     ("ssh host <<EOF\ngit push origin main\nEOF", BLOCK, "a heredoc fed to anything but a file writer runs"),
+    ("python3 -m quopri -d <<'EOF' | bash\ngit push origin main\nEOF", BLOCK,
+     "an interpreter running a script passes the body through to a shell"),
+    ("bash -s >&/tmp/python3 x <<'EOF'\ngit push origin main\nEOF", BLOCK,
+     "a >& redirect target named like an interpreter is not the consumer"),
     ("git push origin HEAD:heads/main",          BLOCK, "git expands heads/main to refs/heads/main"),
     ("git push origin main 'x",                  BLOCK, "unparseable push fails closed"),
     # Legitimate — blocking these teaches the model the hook is noise.

@@ -51,6 +51,9 @@ WRAPPERS = {
 }
 _POSITIONAL_ARG_WRAPPERS = {"timeout"}          # `timeout 60 cmd`: the duration comes first
 _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+# Interpreters whose program is not shell, so a body they run cannot be judged
+# by parsing it as commands.
+PROGRAM_INTERPRETERS = re.compile(r"^(python[0-9.]*|py|node|nodejs|bun|deno|perl|ruby|php)$", re.I)
 
 
 def _quote(text):
@@ -122,15 +125,29 @@ def _split_heredocs(cmd):
         if j >= len(lines):                       # unterminated: leave it to the tokenizer
             i += 1
             continue
-        header = line[:m.start()]
+        header, after = line[:m.start()], line[m.end():]
         target = _WRITER_TARGET.search(header)
         body = "\n".join(lines[i + 1:j])
-        rest = "\n".join(lines[j + 1:])
-        if (not target and not _COMMIT_STDIN.search(header)) or \
-                (target and _runs_file(target.group(1), rest)):
+        rest = after + "\n" + "\n".join(lines[j + 1:])
+        runner = None
+        if target:
+            runner = _runs_file(target.group(1), rest)
+        else:
+            # Only a program-on-stdin is reclassified. A script fed the body can
+            # pass it through to a shell (`python3 -m quopri -d <<EOF | bash`),
+            # so that body stays judged as commands.
+            consumer = (_last_command(header) or []) + _leading_words(after)
+            if [basename(w) for w in unwrap(consumer)] == ["cat"]:
+                consumer = _piped_command(after) or consumer
+            if reads_program_from_stdin(consumer):
+                runner = basename(unwrap(consumer)[0])
+            elif not _COMMIT_STDIN.search(header):
+                runner = "shell"
+        if runner == "shell":
             i += 1                                # executed: its body is more commands
             continue
-        found.append({"header": line, "body": body, "target": target.group(1) if target else None})
+        found.append({"header": line, "body": body, "target": target.group(1) if target else None,
+                      "runner": runner})
         if not m.group(1):                        # unquoted: $( ) in the body still runs
             kept.extend(substitutions(body, in_heredoc=True))
         i = j + 1
@@ -138,12 +155,127 @@ def _split_heredocs(cmd):
 
 
 def _runs_file(path, text):
-    """True when `text` executes the file `path` (written by a heredoc earlier in the command)."""
+    """How `text` executes the file `path` written by an earlier heredoc.
+
+    "shell" when a shell runs it (its body is more commands), the
+    interpreter's name when a non-shell interpreter does (its body is a
+    program the shell parser cannot judge), None when nothing runs it.
+    """
     name = re.escape(path)
     base = re.escape(re.split(r"[/\\]", path)[-1])
-    return bool(re.search(
-        rf"(^|[\s;&|(])((ba|z|da|k)?sh|source|\.|python[0-9.]*|perl|ruby|node)\s+(-\S+\s+)*(\./)?{name}(\s|$|;)"
-        rf"|(^|[\s;&|(])\./{base}(\s|$|;)", text))
+    start, flags, end = r"(^|[\s;&|(])(?:\S*/)?", r"\s+(-\S+\s+)*(\./)?", r"(\s|$|;)"
+    if re.search(rf"{start}((ba|z|da|k)?sh|source|\.){flags}{name}{end}|(^|[\s;&|(])\./{base}{end}", text):
+        return "shell"
+    m = re.search(rf"{start}({PROGRAM_INTERPRETERS.pattern[1:-1]}){flags}{name}{end}", text, re.I)
+    return m.group(2) if m else None
+
+
+# A redirection with its target, glued or spaced (`>&/tmp/x`, `2>&1`, `> out`, `<in`).
+# Stripped before looking for a heredoc's consumer: tokenised as is, the `&` of
+# `>&python3` reads as a separator and the target as the next command.
+_REDIRECTION = re.compile(r"(?<![\w=-])\d*(?:&>>?|[<>]{1,2}&?)(?!<)\s*(?:\"[^\"]*\"|'[^']*'|[^\s;&|()<>]+)?")
+# Interpreter flags that consume the next word, so that word is not the script.
+_VALUE_FLAGS = {
+    "python": {"-W", "-X", "-Q"},
+    "node": {"-r", "--require", "--import", "--loader", "--experimental-loader", "-C", "--conditions"},
+    "ruby": {"-I", "-r", "-E"},
+    "php": {"-c", "-d", "-z"},
+}
+_STDIN_SCRIPTS = ("-", "/dev/stdin")
+
+
+def _tokens(text):
+    try:
+        lexer = shlex.shlex(_REDIRECTION.sub(" ", text), posix=True, punctuation_chars=";&|()")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        return list(lexer)
+    except ValueError:
+        return None
+
+
+def _last_command(text):
+    """The words of the last command in `text`, or None when it cannot be tokenised."""
+    tokens = _tokens(text)
+    if tokens is None:
+        return None
+    command = []
+    for tok in tokens:
+        command = [] if tok and set(tok) <= SEPARATOR_CHARS else command + [tok]
+    return command
+
+
+def _until_separator(tokens):
+    words = []
+    for tok in tokens:
+        if tok and set(tok) <= SEPARATOR_CHARS:
+            break
+        words.append(tok)
+    return words
+
+
+def _leading_words(text):
+    """The words at the start of `text` up to the first separator (a command's remaining arguments)."""
+    return _until_separator(_tokens(text) or [])
+
+
+def _piped_command(text):
+    """The words of the command `text` pipes into when it starts with `|`, else None."""
+    tokens = _tokens(text)
+    if not tokens or tokens[0] not in ("|", "|&"):
+        return None
+    return _until_separator(tokens[1:])
+
+
+def _program_arguments(words):
+    """The interpreter's arguments with redirections (`< f`, `<<< s`, `2>&1`) removed."""
+    args, i = [], 0
+    while i < len(words):
+        w = words[i]
+        if w in ("<", "<<", "<<<", ">", ">>", "2>", "&>"):
+            i += 2                                # the operator and its separate target
+            continue
+        if re.match(r"^\d*[<>]", w):
+            i += 1                                # operator glued to its target or delimiter
+            continue
+        args.append(w)
+        i += 1
+    return args
+
+
+def _family(name):
+    lower = name.lower()
+    if lower == "py" or lower.startswith("python"):
+        return "python"
+    return "node" if lower in ("node", "nodejs", "bun") else lower
+
+
+def reads_program_from_stdin(words):
+    """True when `words` is a non-shell interpreter that takes its program from stdin.
+
+    That is `python3`, `node -`, `python3 /dev/stdin` and the like: no script
+    argument, or stdin named as the script. `-m module` counts as a script,
+    and under `xargs` stdin becomes arguments, not a program.
+    """
+    words = words or []
+    command = unwrap(words)
+    if not command or not PROGRAM_INTERPRETERS.match(basename(command[0])):
+        return False
+    if any(basename(w) == "xargs" for w in words[:len(words) - len(command)]):
+        return False
+    family, positional = _family(basename(command[0])), []
+    args = _program_arguments(command[1:])
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a.startswith("-") and a not in _STDIN_SCRIPTS:
+            i += 2 if a in _VALUE_FLAGS.get(family, ()) else 1
+            continue
+        positional.append(a)
+        i += 1
+    if family in ("deno", "node") and positional[:1] == ["run"]:
+        positional = positional[1:]
+    return not positional or positional[0] in _STDIN_SCRIPTS
 
 
 def substitutions(text, in_heredoc=False):

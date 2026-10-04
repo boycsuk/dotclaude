@@ -70,6 +70,42 @@ CASES = [
     (f"cat > x.sh <<EOF\n{RMRF} /",                 BLOCK, "unterminated heredoc: no body to trust"),
     (f"cat > x.sh <<-EOF\n\t{RMRF} /\n\tEOF\nbash x.sh", BLOCK,
      "<<-EOF written then executed in the same command"),
+    (f"cat > x.sh <<'EOF' && bash x.sh\n{RMRF} /\nEOF", BLOCK,
+     "the run sits on the heredoc's own line, after the marker"),
+
+    # --- a program handed to an interpreter inline, not from a file ---------
+    # The same code `python3 -c` would run, spelled so the -c rule never saw it.
+    ("python3 - <<'EOF'\nimport os\nEOF",            BLOCK, "program read from a heredoc on stdin"),
+    ("python3 <<'EOF'\nprint(1)\nEOF",              BLOCK, "no script argument: stdin is the program"),
+    ("sudo node <<EOF\nconsole.log(1)\nEOF",        BLOCK, "wrapped interpreter fed a heredoc"),
+    ("cat <<'EOF' | python3\nprint(1)\nEOF",        BLOCK, "heredoc piped into an interpreter"),
+    ("cat > /tmp/f.py <<'EOF'\nprint(1)\nEOF\npython3 /tmp/f.py", BLOCK,
+     "a .py written and run in one command was never reviewable as a file"),
+    ("cat > f.js <<'EOF' && node f.js\nconsole.log(1)\nEOF", BLOCK,
+     "written and run, the run on the marker's line"),
+    ('python3 <<< "print(1)"',                       BLOCK, "program in a here-string"),
+    ("echo 'print(1)' | python3",                   BLOCK, "program echoed into an interpreter"),
+    ("printf 'print(1)' | python3 -",               BLOCK, "program printed into `-`"),
+    # Measured false positive: the body of a file run by python was parsed as
+    # shell, so backticks inside a Python string read as command substitution.
+    (f"cat > /tmp/f.py <<'EOF'\nx = \"`{PYC}`\"\nEOF", ALLOW,
+     "writing a .py whose string quotes the pattern, without running it"),
+    # A script reading the body can pass it through to a shell, so the body
+    # stays judged as commands (found in review: python3 -m quopri -d is a cat).
+    (f"python3 -m quopri -d <<'EOF' | bash\n{RMRF} ~\nEOF", BLOCK, "stdlib module as a pass-through"),
+    (f"python3 x.py <<'EOF' | sh\n{RMRF} ~\nEOF",   BLOCK, "script output piped into a shell"),
+    (f"cat <<'EOF' | python3 x.py | bash\n{RMRF} ~\nEOF", BLOCK, "pass-through in the middle of a pipe"),
+    (f"python3 x.py <<'EOF' > r.sh && bash r.sh\n{RMRF} ~\nEOF", BLOCK, "pass-through into a file then run"),
+    (f"bash -s >&/tmp/python3 x <<'EOF'\n{RMRF} ~\nEOF", BLOCK,
+     "a >& redirect target named like an interpreter is not the consumer"),
+    ("python3 /dev/stdin <<'EOF'\nprint(1)\nEOF",    BLOCK, "/dev/stdin is the program"),
+    ("python3 -W ignore <<'EOF'\nprint(1)\nEOF",     BLOCK, "a flag's value is not a script"),
+    ("node -r ./p.js <<'EOF'\nconsole.log(1)\nEOF", BLOCK, "a preload is not the script"),
+    ("deno run - <<'EOF'\nconsole.log(1)\nEOF",     BLOCK, "a subcommand is not the script"),
+    ("python3 <<'EOF' tool.py\ninput\nEOF",          ALLOW, "the script argument after the marker"),
+    ("xargs python3 <<'EOF'\ntool.py\nEOF",          ALLOW, "xargs turns the body into arguments"),
+    ('python3 tool.py <<< "some input"',             ALLOW, "a here-string is input data for a script FILE"),
+    ("cat data.txt | python3 parse.py",             ALLOW, "piping data into a script FILE"),
 
     # --- must allow: writing text that MENTIONS the patterns ----------------
     (f"cat > notes.md <<'EOF'\nThe guard blocks {PYC} calls.\nEOF",
