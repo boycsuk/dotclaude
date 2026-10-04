@@ -46,7 +46,9 @@ def home_env(path):
     HOMEDRIVE+HOMEPATH, so a test would read (or install into) the real profile.
     """
     drive, rest = os.path.splitdrive(path)
-    return {"HOME": path, "USERPROFILE": path, "HOMEDRIVE": drive, "HOMEPATH": rest or path}
+    # The hooks' bytecode cache lives under these on Linux and Windows (macOS uses HOME).
+    return {"HOME": path, "USERPROFILE": path, "HOMEDRIVE": drive, "HOMEPATH": rest or path,
+            "XDG_CACHE_HOME": os.path.join(path, ".cache"), "LOCALAPPDATA": os.path.join(path, "AppData", "Local")}
 
 
 def ps_quote(text):

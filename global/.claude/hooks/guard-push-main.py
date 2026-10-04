@@ -22,14 +22,13 @@ blocked: an unbalanced quote must not be a way around the guard.
 
 import os
 import re
-import subprocess
 import sys
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "_lib"))
 
+import bootstrap  # noqa: E402,F401
 import hookio  # noqa: E402
-import shellwords  # noqa: E402
 
 MAIN_BRANCHES = ("main", "master")
 GIT_TIMEOUT = 2
@@ -59,6 +58,7 @@ BUILTINS = {
 
 
 def git_out(repo, *argv):
+    import subprocess                            # only once the prefilter saw a git command
     try:
         out = subprocess.run(["git"] + list(argv), cwd=repo, capture_output=True,
                              text=True, timeout=GIT_TIMEOUT)
@@ -170,9 +170,10 @@ def start_dir(payload):
 
 def judge(command, payload):
     """The deny reason for `command`, or None to let it run."""
+    import shellwords                            # loaded only past the prefilter: most commands never get here
     segments = shellwords.segments(command, shellwords.shell_of(payload))
     if segments is None:
-        if shellwords.mentions(command, "git") and shellwords.mentions(command, "push"):
+        if hookio.mentions(command, "git") and hookio.mentions(command, "push"):
             return ("BLOCKED: this looks like a git push, but its quoting cannot be parsed, so "
                     "its target cannot be checked. Fix the quoting, or the user runs it manually.")
         return None
@@ -220,7 +221,7 @@ def main():
     payload = hookio.read_payload()
     tool_input = payload.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
-    if not isinstance(command, str) or not shellwords.mentions(command, "git"):
+    if not isinstance(command, str) or not hookio.mentions(command, "git"):
         return 0
     reason = judge(command, payload)
     if reason:

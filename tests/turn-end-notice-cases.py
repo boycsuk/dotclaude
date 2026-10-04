@@ -26,6 +26,7 @@ import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pyhook  # noqa: E402
+import stubs  # noqa: E402
 
 
 
@@ -50,7 +51,7 @@ def make_repo(tmp, files, changelog=True, commit_first=True):
 
 
 def run_hook(repo, pwsh=None, stop_hook_active=False, session_cwd=None, session=None,
-             transcript=None, reply="done"):
+             transcript=None, reply="done", env=None):
     payload = {
         "cwd": session_cwd or repo,
         "hook_event_name": "Stop",
@@ -62,7 +63,7 @@ def run_hook(repo, pwsh=None, stop_hook_active=False, session_cwd=None, session=
     }
     if transcript:
         payload["transcript_path"] = transcript
-    code, parsed, err = pyhook.run("turn-end-notice", payload, cwd=repo, pwsh=pwsh)
+    code, parsed, err = pyhook.run("turn-end-notice", payload, cwd=repo, pwsh=pwsh, env=env)
     if code == 0 and err.strip():
         code = f"0 with stderr {err.strip()[-120:]!r}"
     raw = parsed.get("_unparseable", "") if isinstance(parsed, dict) and "_unparseable" in parsed else \
@@ -338,6 +339,19 @@ def case_findings_share_one_line(tmp, pwsh):
     return None
 
 
+def case_no_changelog_runs_no_git(tmp, pwsh):
+    # The repo root is found by walking up for .git: a turn end in a repo that
+    # keeps no CHANGELOG.md must not start git at all (each start costs ~46 ms
+    # on Windows, at every turn end).
+    repo = make_repo(tmp, {"app.py": "x = 1\n"}, changelog=False)
+    bindir, log = os.path.join(tmp, "bin"), os.path.join(tmp, "git.log")
+    stubs.write_stub(bindir, "git", code=1, log=log)
+    problem = expect_silent(repo, pwsh, "a repo without CHANGELOG.md", env={"PATH": bindir})
+    if problem:
+        return problem
+    return f"git was called: {open(log).read().strip()!r}" if os.path.exists(log) else None
+
+
 def case_missing_transcript_is_harmless(tmp, pwsh):
     repo = tested_repo(tmp)
     return expect_silent(repo, pwsh, "a transcript path that does not exist",
@@ -363,6 +377,7 @@ CASES = [
     ("web research in an earlier turn only: silent", case_web_in_earlier_turn_only),
     ("CHANGELOG, tests and sources share one line", case_findings_share_one_line),
     ("a missing transcript is harmless", case_missing_transcript_is_harmless),
+    ("a repo without CHANGELOG.md runs no git", case_no_changelog_runs_no_git),
     ("code changed without CHANGELOG warns", case_code_without_changelog),
     ("CHANGELOG updated stays silent", case_changelog_updated),
     ("docs-only change stays silent", case_docs_only),

@@ -580,6 +580,12 @@ def _():
             continue
         kind = m.group(1)
         body = code_only(raw)
+        boot = re.search(r"^import bootstrap\b", body, re.M)
+        first_lib = re.search(r"^(import|from) (hookio|shellwords|codeintel|writes|secretrules|transcript)\b", body, re.M)
+        if not boot or (first_lib and first_lib.start() < boot.start()):
+            fail("hook wiring",
+                 f"{name}.py does not `import bootstrap` before its other _lib modules — without it "
+                 f"_lib recompiles on every run (the per-user bytecode cache is never turned on)")
         if "hookio.entrypoint(main)" not in body:
             fail("hook wiring",
                  f"{name}.py does not exit through hookio.entrypoint(main) — a bare "

@@ -67,6 +67,16 @@ for path in sys.argv[1:]:
         sys.exit(1)
 PY
 
+# Python reuses a cached .pyc while the source's mtime and size match, and the
+# copy below keeps mtimes: a hook changed without changing size would run its
+# old compiled logic. Clear the hooks' per-user cache (the folder bootstrap.py
+# names, and only that folder) so every hook recompiles once. Lockstep with
+# install.ps1.
+cache_dir="$(python3 "$SCRIPT_DIR/global/.claude/hooks/_lib/bootstrap.py" 2>/dev/null || true)"
+case "$cache_dir" in
+  */dotclaude/pycache) rm -rf -- "$cache_dir" ;;
+esac
+
 mkdir -p "$TARGET/templates" "$TARGET/skills"
 
 # --- Central artifacts: hooks, agents, skills, rules, output-styles ----------

@@ -63,6 +63,10 @@ inject silence-feedback-hook
 expect_fail "hook wiring" "a feedback hook stops reporting to Claude"
 
 setup
+inject drop-bootstrap
+expect_fail "hook wiring" "a hook skips the per-user bytecode cache"
+
+setup
 inject bypass-entrypoint
 expect_fail "hook wiring" "a guard exits through sys.exit(main()), so a crash allows the call"
 

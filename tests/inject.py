@@ -406,6 +406,17 @@ def silence_feedback_hook(repo):
         fh.write(text.replace("hookio.feedback(", "print(", 1))
 
 
+def drop_bootstrap(repo):
+    """A hook that skips `import bootstrap` recompiles _lib on every run."""
+    path = os.path.join(repo, "global/.claude/hooks/guard-push-main.py")
+    with open(path) as fh:
+        text = fh.read()
+    if "import bootstrap" not in text:
+        raise SystemExit("inject: guard-push-main.py no longer imports bootstrap")
+    with open(path, "w") as fh:
+        fh.write(text.replace("import bootstrap  # noqa: E402,F401\n", ""))
+
+
 def bypass_entrypoint(repo):
     """A guard exiting through sys.exit(main()) lets a crash through as a non-blocking exit 1."""
     path = os.path.join(repo, "global/.claude/hooks/guard-destructive.py")
@@ -493,6 +504,7 @@ REGRESSIONS = {
     "pin-model-on-reviewer": pin_model_on_reviewer,
     "add-deny-rule": add_deny_rule,
     "bypass-entrypoint": bypass_entrypoint,
+    "drop-bootstrap": drop_bootstrap,
     "drop-design-heading": drop_design_heading,
     "diverge-extensions": diverge_extensions,
     "drop-hook-from-readme": drop_hook_from_readme,

@@ -748,6 +748,19 @@ A design was spread over a canvas on claude.ai, `docs/ui.md` (tokens and section
 
 **Why advisory, after the fact.** A PreToolUse note reaches Claude next to the tool result, so the file already exists when the note arrives: it asks Claude to read the siblings and align the file, not to stop. A deny once per folder would arrive in time, but it turns a convention into a gate; §36 keeps conventions as delivered context. Grep and Glob do not count as having seen a folder, because searching does not show a file's style. A session longer than the ~2 MB tail can miss an early read and give one extra note; the per-folder dedupe caps that.
 
+### 51. Faster hooks: a per-user bytecode cache, fewer git calls, cheaper early exits (2026-10-04)
+
+**Problem.** Every hook set `sys.dont_write_bytecode`, so `_lib` recompiled on every run: a `__pycache__` under `~/.claude/hooks` would be files the installer's manifest never removes. guard-commit ran 7 git commands per commit. turn-end-notice ran git at every turn end, even in repos without CHANGELOG.md. And the A1 prefilters imported the whole shell parser for every Bash call.
+
+**Chosen.**
+- `_lib/bootstrap.py`, imported first by every hook, points `sys.pycache_prefix` at a per-user cache folder: `$XDG_CACHE_HOME` or `~/.cache` on Linux, `~/Library/Caches` on macOS, `%LOCALAPPDATA%` on Windows, each under `dotclaude/pycache`. It is never a shared temp folder, where another user could plant a `.pyc` the hooks would execute. The folder is created 0700 and, on POSIX, used only when the current user owns it and nobody else can write it; otherwise bytecode stays off. check.py requires the import.
+- The copy keeps mtimes, so a hook changed without changing size could run its stale `.pyc`. Both installers clear that folder, and only that one, before copying, asking `bootstrap.py` for the path.
+- `mentions` moved to `hookio`. guard-push-main and guard-commit import `shellwords` and `subprocess` only past the prefilter.
+- guard-commit reads branch, staged, unstaged and untracked paths from one `git status --porcelain=v2 --branch` and root plus prefix from one `rev-parse`: 7 git calls per commit become 3.
+- turn-end-notice finds the repo root by walking up for `.git` and runs `git status` only when CHANGELOG.md exists: no git at all in a repo without one.
+
+**Measured on Linux (WSL2, median of 20 runs, hooks run one after another).** A Bash `ls` call went from 112 to 105 ms. A commit stayed at about 121 ms, because guard-commit's 3 fewer git calls are cheap on Linux. An Edit went from 146 to 139 ms, and a turn end from 29 to 28 ms. With the cache warm, the imports left are the standard library's (`re`, `enum`, `json`), which no cache removes. So the gain on Linux is the ~4 ms per hook the audit predicted. The larger saving is on Windows, where compiling and every git start cost several times more; `tests/bench-hook-launch.py` measures it there.
+
 ## Things deliberately not included
 
 - **Pre-baked stack variants.** See decision 2.

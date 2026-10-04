@@ -24,15 +24,13 @@ read.
 
 import os
 import re
-import subprocess
 import sys
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "_lib"))
 
+import bootstrap  # noqa: E402,F401
 import hookio  # noqa: E402
-import secretrules  # noqa: E402
-import shellwords  # noqa: E402
 
 ATTRIBUTION_KEYS = ("co-authored-by", "signed-off-by")
 TRAILER_LINE = re.compile(r"(?im)^\s*(co-authored-by|signed-off-by)\s*:")
@@ -114,6 +112,7 @@ def parse_commit(args):
 
 
 def git(opts, cwd, *argv):
+    import subprocess                            # only once the prefilter saw a commit
     cmd = ["git"]
     for flag in ("-C", "--git-dir", "--work-tree"):
         for value in opts.get(flag, []):
@@ -153,24 +152,48 @@ def _z_paths(text):
     return [p for p in (text or "").split("\0") if p]
 
 
-def changed_paths(opts, cwd, flags, earlier_adds):
-    """Root-relative paths the commit will include, counting `git add` earlier in the command."""
-    paths = set(_z_paths(git(opts, cwd, "diff", "--cached", "--name-only", "-z")))
-    # Every untracked file, not its folder: `?? lib/` would hide lib/new.py from the checks.
-    entries = _z_paths(git(opts, cwd, "status", "--porcelain", "-z", "--untracked-files=all"))
-    worktree, tracked_modified, skip = set(), set(), False
-    for entry in entries:
-        if skip:                                # the source path of a rename
+def repo_state(opts, cwd, root):
+    """Branch and changed paths of the repo, from one `git status --porcelain=v2 --branch` call.
+
+    Untracked files are listed one by one: `?? lib/` would hide lib/new.py
+    from the checks. Paths are relative to the repo root.
+    """
+    state = {"branch": "", "staged": set(), "worktree": set(), "tracked_modified": set()}
+    if not root:
+        return state
+    records = _z_paths(git(opts, cwd, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"))
+    skip = False
+    for rec in records:
+        if skip:                                # the original path of a rename or copy
             skip = False
             continue
-        status, path = entry[:2], entry[3:]
-        worktree.add(path)
-        if status[1] in "MD":
-            tracked_modified.add(path)
-        skip = status[0] in "RC"
+        if rec.startswith("# branch.head "):
+            state["branch"] = rec[len("# branch.head "):]
+            continue
+        kind = rec[:1]
+        if kind == "?":
+            state["worktree"].add(rec[2:])
+            continue
+        fields = {"1": 8, "2": 9, "u": 10}.get(kind)
+        parts = rec.split(" ", fields) if fields else []
+        if len(parts) <= (fields or 0):
+            continue
+        xy, path = parts[1], parts[fields]
+        state["worktree"].add(path)
+        if xy[0] != ".":
+            state["staged"].add(path)
+        if xy[1] in "MD":
+            state["tracked_modified"].add(path)
+        skip = kind == "2"
+    return state
+
+
+def changed_paths(state, prefix, flags, earlier_adds):
+    """Root-relative paths the commit will include, counting `git add` earlier in the command."""
+    paths = set(state["staged"])
+    worktree = state["worktree"]
     if "-a" in flags or "--all" in flags:
-        paths |= tracked_modified
-    prefix = (git(opts, cwd, "rev-parse", "--show-prefix") or "").strip()
+        paths |= state["tracked_modified"]
     for add_args in earlier_adds:
         specs = [a for a in add_args if not a.startswith("-") or a in ALL_PATHS]
         if not specs or any(s in ALL_PATHS for s in specs):
@@ -198,7 +221,7 @@ def added_lines(diff):
             lineno += 1
 
 
-def secret_problems(paths, opts, cwd, root):
+def secret_problems(paths, opts, cwd, root, staged):
     """What in this commit looks secret: a secret-bearing path, or an added line holding a literal secret.
 
     What gets committed is the index for a staged path and the working tree for
@@ -207,12 +230,12 @@ def secret_problems(paths, opts, cwd, root):
     the value.
     """
     problems, scanned, found = [], {}, {}
+    import secretrules
     flagged = sorted(p for p in paths if secretrules.secret_path(p))
     problems += [f"{p} looks like it holds secrets and would be committed" for p in flagged]
     rest = sorted(set(paths) - set(flagged))
     if not rest:
         return problems
-    staged = set(_z_paths(git(opts, cwd, "diff", "--cached", "--name-only", "-z")))
 
     def scan(path, lineno, text):
         if path in found or scanned.get(path, 0) > SCAN_LIMIT:
@@ -272,7 +295,8 @@ def judge(segment_args, opts, docs, cwd, payload, earlier_adds):
     message = "\n".join(messages + [read_message_file(f, docs, base) for f in files])
     # The opt-outs belong to the repository being committed to, not to the
     # session's project — the bug 016b17b fixed for pushes.
-    root = (git(opts, cwd, "rev-parse", "--show-toplevel") or "").strip()
+    top = (git(opts, cwd, "rev-parse", "--show-toplevel", "--show-prefix") or "").split("\n")
+    root, prefix = top[0].strip(), (top[1].strip() if len(top) > 1 else "")
 
     denials = []
     if not hookio.local_opt_out(payload, "allowCommitTrailers", root=root or None):
@@ -293,14 +317,15 @@ def judge(segment_args, opts, docs, cwd, payload, earlier_adds):
     asks = []
     if "--amend" in flags:
         asks.append("--amend rewrites the previous commit (prefer a new commit)")
-    branch = (git(opts, cwd, "symbolic-ref", "--quiet", "--short", "HEAD") or "").strip()
+    state = repo_state(opts, cwd, root)
+    branch = state["branch"]
     if branch in ("main", "master") and not hookio.local_opt_out(payload, "allowPushToMain", root=root or None):
         asks.append(f"this commits directly on {branch} (work on a feature/fix branch)")
-    paths = changed_paths(opts, cwd, flags, earlier_adds) if root else set()
+    paths = changed_paths(state, prefix, flags, earlier_adds) if root else set()
     if paths and os.path.exists(os.path.join(root, "CHANGELOG.md")) and "CHANGELOG.md" not in paths:
         asks.append("the repo keeps a CHANGELOG.md but this commit does not update it")
     asks += twin_problems(paths, root)
-    asks += secret_problems(paths, opts, cwd, root) if paths else []
+    asks += secret_problems(paths, opts, cwd, root, state["staged"]) if paths else []
     if asks:
         return "ask", "Confirm this commit: " + "; ".join(asks) + "."
     return None, None
@@ -310,8 +335,9 @@ def main():
     payload = hookio.read_payload()
     tool_input = payload.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
-    if not isinstance(command, str) or not shellwords.mentions(command, "commit"):
+    if not isinstance(command, str) or not hookio.mentions(command, "commit"):
         return 0
+    import shellwords                            # loaded only past the prefilter: most commands never get here
     shell = shellwords.shell_of(payload)
     segments = shellwords.segments(command, shell)
     if not segments:

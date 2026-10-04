@@ -55,6 +55,19 @@ def local_opt_out(payload, key, root=None):
     return isinstance(data, dict) and data.get(key) is True
 
 
+_QUOTING = re.compile(r"[\"'\\`]")
+
+
+def mentions(cmd, word):
+    """True when `word` may run in `cmd` once quotes and escapes are removed.
+
+    The cheap prefilter a guard runs before importing the shell parser:
+    `g''it`, `gi\\t` and PowerShell's `` com`mit `` all run the word, and a
+    case-insensitive filesystem (Windows, default macOS) runs `GIT` as git.
+    """
+    return word in _QUOTING.sub("", cmd).lower()
+
+
 def granted_opt_out(text):
     """The opt-out key `text` sets to true (JSON, jq or PowerShell form), or None."""
     m = _GRANT.search(text) if isinstance(text, str) else None

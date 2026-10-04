@@ -38,6 +38,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "_lib"))
 
+import bootstrap  # noqa: E402,F401
 import hookio  # noqa: E402
 import shellwords  # noqa: E402
 import writes  # noqa: E402

@@ -33,6 +33,7 @@ from datetime import datetime
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "_lib"))
 
+import bootstrap  # noqa: E402,F401
 import hookio  # noqa: E402
 import shellwords  # noqa: E402
 from transcript import last_turn, subagents_dir, tail_entries, tool_calls  # noqa: E402
@@ -65,6 +66,18 @@ def changed_paths(top):
         if path:
             paths.append(path.strip('"'))
     return paths
+
+
+def repo_root(cwd):
+    """The nearest folder at or above `cwd` holding `.git` (a directory, or a file for worktrees), or ""."""
+    path = os.path.abspath(cwd)
+    while True:
+        if os.path.exists(os.path.join(path, ".git")):
+            return path
+        parent = os.path.dirname(path)
+        if parent == path:
+            return ""
+        path = parent
 
 
 def changelog_finding(payload, top):
@@ -200,7 +213,8 @@ def main():
     if not os.path.isdir(cwd):
         return 0
     # Looked up at the repo root: a session in a subdirectory once stayed silent.
-    top = (git(cwd, "rev-parse", "--show-toplevel") or "").strip()
+    # Found by walking up, so a turn end in a repo without CHANGELOG.md runs no git.
+    top = repo_root(cwd)
     calls = tool_calls(last_turn(tail_entries(payload.get("transcript_path"))))
     findings = [f for f in (changelog_finding(payload, top),
                             tests_finding(payload, top or cwd, calls),

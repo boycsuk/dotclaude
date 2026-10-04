@@ -53,7 +53,6 @@ WRAPPERS = {
 }
 _POSITIONAL_ARG_WRAPPERS = {"timeout"}          # `timeout 60 cmd`: the duration comes first
 _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-_QUOTING = re.compile(r"[\"'\\`]")
 CHDIR = {"cd", "pushd", "chdir", "set-location", "sl", "push-location"}
 _PS_PATH_FLAG = re.compile(r"^-(path|literalpath|lp|pspath)$", re.I)
 # Interpreters whose program is not shell, so a body they run cannot be judged
@@ -531,16 +530,6 @@ def chdir_target(words):
     if not words or basename(words[0]).lower() not in CHDIR:
         return None
     return next((w for w in words[1:] if w != "--" and not _PS_PATH_FLAG.match(w)), "~")
-
-
-def mentions(cmd, word):
-    """True when `word` may run in `cmd` once quotes and escapes are removed.
-
-    The cheap prefilter a guard runs before parsing: `g''it`, `gi\\t` and
-    PowerShell's `` com`mit `` all run the word, and a case-insensitive
-    filesystem (Windows, default macOS) runs `GIT` as git.
-    """
-    return word in _QUOTING.sub("", cmd).lower()
 
 
 def git_invocation(seg):

@@ -355,6 +355,34 @@ def case_shell_form_on_old_or_unknown_claude(home, pwsh):
     return None
 
 
+def case_bytecode_cache_cleared_and_refilled(home, pwsh):
+    # The copy keeps source mtimes, so a stale .pyc could outlive a changed
+    # hook of the same size: the installer clears the per-user cache. The
+    # hooks then fill it again, never writing a __pycache__ under hooks/.
+    env = dict(os.environ, **pyhook.home_env(home))
+    cache = subprocess.run([sys.executable, os.path.join(REPO, "global/.claude/hooks/_lib/bootstrap.py")],
+                           capture_output=True, text=True, env=env).stdout.strip()
+    if not cache.replace("\\", "/").endswith("dotclaude/pycache"):
+        return f"bootstrap.py printed an unexpected cache folder: {cache!r}"
+    os.makedirs(cache, exist_ok=True)
+    stale = os.path.join(cache, "stale-marker.pyc")
+    open(stale, "w").close()
+    if run_install(home, pwsh) != 0:
+        return "installer exited non-zero"
+    if os.path.exists(stale):
+        return "the installer left the old bytecode cache in place"
+    with open(claude(home, "settings.json"), encoding="utf-8") as fh:
+        installed = json.load(fh)
+    guard = next(h for g in installed["hooks"]["PreToolUse"] for h in g["hooks"] if "guard-destructive" in wiring(h))
+    subprocess.run(launch(guard, pwsh), input=json.dumps(pyhook.payload("Bash", {"command": "ls"})),
+                   capture_output=True, text=True, env=env)
+    if not glob.glob(os.path.join(cache, "**", "*.pyc"), recursive=True):
+        return f"running an installed hook wrote no bytecode under {cache}"
+    if glob.glob(claude(home, "hooks", "**", "__pycache__"), recursive=True):
+        return "a __pycache__ appeared under hooks/ (unmanaged files in a repo-owned tree)"
+    return None
+
+
 def case_shell_guards_cover_both_tools(home, pwsh):
     # With Git for Windows the Bash tool stays available next to PowerShell.
     # install.ps1 used to RENAME the Bash matcher and replace every Bash rule,
@@ -670,6 +698,7 @@ CASES = [
     ("non-ASCII personal values survive, the manifest has no BOM", case_non_ascii_user_keys_survive),
     ("a status line seeded as the retired shell script is repaired", case_retired_shell_statusline_is_repaired),
     ("new hook fields and permission keys reach both platforms", case_hook_fields_and_permission_keys_carry_over),
+    ("the bytecode cache is cleared on install and refilled outside hooks/", case_bytecode_cache_cleared_and_refilled),
     ("Claude Code 2.1.139+ gets exec-form hooks on the real python.exe", case_exec_form_on_recent_claude),
     ("an old or unreadable Claude Code keeps the PowerShell form", case_shell_form_on_old_or_unknown_claude),
     ("shell guards and rules cover both Bash and PowerShell", case_shell_guards_cover_both_tools),
