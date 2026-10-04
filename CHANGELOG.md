@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `/verify` runs the Test / Lint / Typecheck commands declared in the project's CLAUDE.md first, falling back to stack detection per step, and detects Maven, Gradle, .NET, Ruby (rspec / rake test) and Swift projects — the stacks `turn-end-notice` and the LSP catalog already supported, where `/verify` answered "no tests configured".
 - `/resume-context` reports work in flight: a `SPEC*.md` with its steps and open questions, design units not yet `verified` in `docs/design/README.md`, and local branches not merged into main.
 - `read-before-write` hook (advisory, PreToolUse on Write) and `tests/read-before-write-cases.py`: when Claude creates a new code file in a folder nothing was read or edited from this session, it names up to three siblings (same extension and newest first; the parent folder's for an empty new folder) to read and align the file with, which also loads any path-scoped rules for that area. Once per folder per session; never blocks (DESIGN.md §50). The session-transcript reader is now `_lib/transcript.py`, shared with `turn-end-notice`.
 - `tests/bench-hook-launch.py`: a hand-run benchmark of one Bash call's guards in exec form and through Windows PowerShell 5.1 and pwsh, to measure what the launch form costs on a given machine.
