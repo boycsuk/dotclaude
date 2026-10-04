@@ -192,6 +192,15 @@ def message_cases(runners):
              "the warning names the line and never echoes the value"),
             (src, f"x = 1\n{GHP}\n", 2, "GitHub token", GHP, "a token prefix is named by its kind"),
         ]
+        # The same folder spelled through a symlink (macOS's /var is
+        # /private/var) must still read as inside the project.
+        link = repo + "-link"
+        try:
+            os.symlink(repo, link, target_is_directory=True)
+            cases.append((os.path.join(link, "app.py"), f"a = 1\nb = 2\ntoken = '{KEY}'\n", 2, "line 3", KEY,
+                          "a path through a symlink to the project is still project-relative"))
+        except OSError:
+            pass
         for path, content, want_code, must, must_not, why in cases:
             payload = {"tool_name": "Write", "tool_input": {"file_path": path, "content": content}}
             for name, runner in runners:
@@ -212,6 +221,8 @@ def message_cases(runners):
                           f"{proc.stderr.strip()[:200]!r}")
     finally:
         shutil.rmtree(repo, ignore_errors=True)
+        if os.path.islink(repo + "-link"):
+            os.remove(repo + "-link")
     return failures
 
 

@@ -71,8 +71,10 @@ def git_ignores(path):
 
 
 def project_relative(path, payload):
-    root = os.path.abspath(hookio.project_dir(payload))
-    full = os.path.abspath(path)
+    # realpath on both: macOS's /var is /private/var and Windows hands out
+    # 8.3 short names (RUNNER~1), so the same folder can be spelled two ways.
+    root = os.path.normcase(os.path.realpath(hookio.project_dir(payload)))
+    full = os.path.normcase(os.path.realpath(path))
     return os.path.relpath(full, root) if full.startswith(root.rstrip(os.sep) + os.sep) else full
 
 
