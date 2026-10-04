@@ -24,8 +24,10 @@ flagged by the hook it tests.
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pyhook  # noqa: E402
@@ -168,6 +170,51 @@ def invoke(runner, file_path, content):
     return WARN if proc.returncode == 2 else QUIET if proc.returncode == 0 else f"CRASH(rc={proc.returncode})"
 
 
+def message_cases(runners):
+    """What the warning says, and the gitignore check on secret-bearing paths."""
+    repo = tempfile.mkdtemp(prefix="detect-secrets-")
+    failures = 0
+    try:
+        subprocess.run(["git", "init", "-q", repo], check=True)
+        with open(os.path.join(repo, ".gitignore"), "w") as fh:
+            fh.write(".env\n")
+        os.makedirs(os.path.join(repo, "config"))
+        env, store, src = (os.path.join(repo, p) for p in (".env", "config/secrets.yaml", "app.py"))
+        for p in (env, store, src):
+            open(p, "w").close()
+        # (path, content, expected exit, text the message must hold, text it must not, why)
+        cases = [
+            (env, f"API_KEY={KEY}\n", 0, None, None,
+             "a gitignored .env is where a real value belongs"),
+            (store, "db: x\n", 2, "not gitignored", None,
+             "a secret-bearing file git would commit"),
+            (src, f"import os\n\napi_key = '{KEY}'\n", 2, "line 3", KEY,
+             "the warning names the line and never echoes the value"),
+            (src, f"x = 1\n{GHP}\n", 2, "GitHub token", GHP, "a token prefix is named by its kind"),
+        ]
+        for path, content, want_code, must, must_not, why in cases:
+            payload = {"tool_name": "Write", "tool_input": {"file_path": path, "content": content}}
+            for name, runner in runners:
+                proc = subprocess.run(runner, input=json.dumps(payload), capture_output=True,
+                                      text=True, encoding="utf-8", timeout=30, cwd=repo)
+                problems = []
+                if proc.returncode != want_code:
+                    problems.append(f"exit {proc.returncode}")
+                if must and must not in proc.stderr:
+                    problems.append(f"no {must!r}")
+                if must_not and must_not in proc.stderr:
+                    problems.append("the secret value is echoed")
+                if want_code == 2 and "was written" not in proc.stderr:
+                    problems.append("does not say the edit was written")
+                if problems:
+                    failures += 1
+                    print(f"  FAIL ({name}) {os.path.basename(path)}: {', '.join(problems)}   ({why}) "
+                          f"{proc.stderr.strip()[:200]!r}")
+    finally:
+        shutil.rmtree(repo, ignore_errors=True)
+    return failures
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pwsh", help="path to pwsh, to run through the PowerShell command form too")
@@ -188,7 +235,9 @@ def main():
             detail = ", ".join(f"{n}={g}" for n, g in results.items())
             print(f"  FAIL want {want} got {detail} | {path}   ({why})")
 
-    print(f"\n{len(CASES)} cases checked")
+    failures += message_cases(runners)
+
+    print(f"\n{len(CASES) + 4} cases checked")
     if failures:
         print(f"{failures} FAILED")
         return 1
