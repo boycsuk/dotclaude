@@ -53,7 +53,7 @@ When the database is in Docker, `DATABASE_URL` may point at the host-side hostna
 
 ## Query rules (read-only, hard-enforced)
 
-You execute queries via `Bash`. Before each invocation, validate the SQL string against these rules. If validation fails, do NOT run the command — return **FAIL** explaining the rejected statement.
+You execute queries via `Bash`. Before each invocation, validate the SQL string against these rules. If validation fails, do NOT run the command — return **FAIL** explaining the rejected statement. The `guard-readonly-agents` hook denies your file writes, git changes and installs, but it does not read SQL: these rules are yours to apply.
 
 **Allowed prefixes** (case-insensitive, after stripping leading whitespace and `--` comments):
 - `select`

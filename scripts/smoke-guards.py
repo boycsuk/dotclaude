@@ -28,7 +28,13 @@ CASES = {
     "guard-dependencies": ("Bash", {"command": "npm install left-pad"}, "ask"),
     "guard-central-config": ("Edit", {"file_path": "~/.claude/settings.json",
                                       "old_string": "a", "new_string": "b"}, "deny"),
+    # Judged, never run: the filesystem root is never under the temp folder
+    # (a home can be, in a test install), so it is a write a read-only agent
+    # may not make. Needs ~/.claude/agents/researcher.md, which the installer
+    # copies before this runs.
+    "guard-readonly-agents": ("Bash", {"command": "touch /dotclaude-smoke-probe"}, "deny"),
 }
+EXTRA = {"guard-readonly-agents": {"agent_id": "smoke", "agent_type": "researcher"}}
 TIMEOUT = 30
 
 
@@ -82,7 +88,7 @@ def main():
                 problems.append(f"{guard}: no PreToolUse entry runs it")
                 continue
             payload = {"hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": tool_input,
-                       "cwd": work, "session_id": uuid.uuid4().hex}
+                       "cwd": work, "session_id": uuid.uuid4().hex, **EXTRA.get(guard, {})}
             for command in commands:
                 got, detail = run(command, payload, mode, shell_exe, work)
                 if got != want:

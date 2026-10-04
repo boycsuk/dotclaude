@@ -21,7 +21,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pyhook  # noqa: E402
 
 SMOKE = os.path.join(pyhook.REPO, "scripts", "smoke-guards.py")
-GUARDS = ("guard-destructive", "guard-push-main", "guard-commit", "guard-dependencies", "guard-central-config")
+GUARDS = ("guard-destructive", "guard-push-main", "guard-commit", "guard-dependencies", "guard-central-config",
+          "guard-readonly-agents")
 
 
 # Windows has no `sh`; there the installers wire hooks in PowerShell's form.
@@ -57,9 +58,11 @@ def main():
     home = tempfile.mkdtemp(prefix="smoke-guards-")
     failures = 0
     try:
-        os.makedirs(os.path.join(home, ".claude"))
+        os.makedirs(os.path.join(home, ".claude", "agents"))
         with open(os.path.join(home, ".claude", "settings.json"), "w") as fh:
             fh.write("{}")
+        shutil.copy(os.path.join(pyhook.REPO, "global", ".claude", "agents", "researcher.md"),
+                    os.path.join(home, ".claude", "agents"))
         cases = [
             ("every guard wired and working", settings(pyhook.HOOKS), 0, None),
             ("a guard whose script path is wrong", settings(pyhook.HOOKS, break_path="guard-push-main"),
