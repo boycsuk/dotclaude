@@ -181,10 +181,18 @@ def has_test_setup(root):
         return False
 
 
+def inside(path, root):
+    """True when `path` lies in `root`: an edit elsewhere is not this repo's untested code."""
+    full = os.path.normcase(os.path.realpath(path))
+    base = os.path.normcase(os.path.realpath(root))
+    return full == base or full.startswith(base.rstrip(os.sep) + os.sep)
+
+
 def tests_finding(payload, root, calls):
     edits = [(i, str(inp.get("file_path") or inp.get("notebook_path") or ""), ts)
              for i, (name, inp, ts) in enumerate(calls) if name in EDIT_TOOLS]
-    edits = [(i, path, ts) for i, path, ts in edits if path and not NOT_CODE.search(path.replace("\\", "/"))]
+    edits = [(i, path, ts) for i, path, ts in edits
+             if path and not NOT_CODE.search(path.replace("\\", "/")) and inside(path, root)]
     if not edits or not has_test_setup(root):
         return None
     last, _, last_ts = edits[-1]

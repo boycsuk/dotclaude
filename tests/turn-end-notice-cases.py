@@ -339,6 +339,16 @@ def case_findings_share_one_line(tmp, pwsh):
     return None
 
 
+def case_edit_outside_the_repo_does_not_count(tmp, pwsh):
+    # The session's repo has a test setup; the turn edited a file in another
+    # folder entirely. The notice is about this repo, so that edit is not its business.
+    repo = tested_repo(tmp)
+    elsewhere = tempfile.mkdtemp(prefix="elsewhere-")
+    t = transcript(tmp, [prompt("fix it"), call("Edit", file_path=os.path.join(elsewhere, "tool.py"),
+                                                old_string="a", new_string="b")])
+    return expect_silent(repo, pwsh, "an edit outside the repo being judged", transcript=t)
+
+
 def case_no_changelog_runs_no_git(tmp, pwsh):
     # The repo root is found by walking up for .git: a turn end in a repo that
     # keeps no CHANGELOG.md must not start git at all (each start costs ~46 ms
@@ -378,6 +388,7 @@ CASES = [
     ("CHANGELOG, tests and sources share one line", case_findings_share_one_line),
     ("a missing transcript is harmless", case_missing_transcript_is_harmless),
     ("a repo without CHANGELOG.md runs no git", case_no_changelog_runs_no_git),
+    ("an edit outside the repo being judged does not count", case_edit_outside_the_repo_does_not_count),
     ("code changed without CHANGELOG warns", case_code_without_changelog),
     ("CHANGELOG updated stays silent", case_changelog_updated),
     ("docs-only change stays silent", case_docs_only),

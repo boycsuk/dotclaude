@@ -217,6 +217,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `check.py` no longer reads a code-extension list from a hook (check 6 compares the two path-scoped rules only).
 
 ### Fixed
+- `guard-readonly-agents` resolves `$VAR`, `${VAR}`, `${VAR:-default}` and `$env:VAR` before judging a write, so a read-only agent's write to `"${TMPDIR:-/tmp}/x"` is recognised as the temp folder instead of denied; an unresolvable variable is still not assumed to be scratch space.
+- `turn-end-notice` counts only edits inside the repo it judges: an edit to a file elsewhere no longer raises the untested-code notice about the session's repo.
 - `prune-obsolete.py` and check.py's obsolete-manifest check now match a hook entry's `args` as well as its `command`, so a retired hook wired in exec form is pruned.
 - `design-sync` never matched an absolute path on Windows: `os.path.normcase` turns `/` into `\` there, so the prefix test against `<root>/` always failed. It now resolves the path with `os.path.relpath` (CI's Windows run caught it).
 - `install.ps1` re-typed each hook entry as type/command/shell/timeout (dropping any other field, inventing a 5-second timeout), kept only `matcher` and `hooks` per group, and rebuilt `permissions` from five named keys: a field or key added to `global/.claude/settings.json` reached Unix and silently vanished on Windows. It now carries every field and key over and only rewrites what Windows needs; pinned in `tests/install-cases.py`.
