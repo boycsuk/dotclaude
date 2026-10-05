@@ -301,6 +301,25 @@ def _():
 
 
 # --- 6. The code-extension lists agree across the path-scoped rules ----------
+def rule_front(rel):
+    """The raw frontmatter text of a rule; '' when it has none (always-on), None when the fence is broken."""
+    body = read(rel)
+    if not body.startswith("---\n"):
+        return ""
+    return body[4:].split("\n---\n", 1)[0] if "\n---\n" in body[4:] else None
+
+
+def paths_block(front):
+    """The `paths:` key with its indented list, as lines; [] when absent."""
+    block = []
+    for line in (front or "").split("\n"):
+        if block and line[:1] not in (" ", "\t", "-"):
+            break
+        if block or line.startswith("paths:"):
+            block.append(line.rstrip())
+    return block
+
+
 @check("code extension lists")
 def _():
     def exts_from_rule(path):
@@ -310,6 +329,12 @@ def _():
 
     rule_exts = exts_from_rule("claude/rules/code-quality.md")
     sec_exts = exts_from_rule("claude/rules/security.md")
+    # The extension sets cover only the first glob; a second entry added to one
+    # rule alone left them scoped differently with this check green.
+    if paths_block(rule_front("claude/rules/code-quality.md")) != \
+            paths_block(rule_front("claude/rules/security.md")):
+        fail("code extension lists",
+             "the paths: blocks of code-quality.md and security.md differ")
     # A check that silently no-ops is worse than no check: an empty list means
     # the extraction broke, and that is itself the finding.
     if not rule_exts:
@@ -450,7 +475,7 @@ def _():
     # every check stays green.
     expected = {
         "agents": ["code-reviewer.md", "db-inspector.md", "debugger.md", "researcher.md"],
-        "rules": ["ai-collaboration.md", "code-quality.md", "security.md", "workflow.md"],
+        "rules": ["ai-collaboration.md", "code-quality.md", "dependencies.md", "security.md", "workflow.md"],
         "output-styles": ["dotclaude.md"],
     }
     for subdir, names in expected.items():
@@ -659,6 +684,123 @@ def _():
                 fail("skill cross-references",
                      f"{rel} cites {m.group(0)}, but claude/skills/{m.group(1)}/scripts/"
                      f"{m.group(2)} does not exist")
+
+
+# --- 8g. Agent frontmatter uses only documented keys and values --------------
+@check("agent frontmatter fields")
+def _():
+    # Claude Code "ignores a field it doesn't recognize without reporting an
+    # error": `disallowed-tools:` (the skill spelling) silently hands an agent
+    # Write and Edit and switches guard-readonly-agents off for it. Documented
+    # set: https://code.claude.com/docs/en/sub-agents (supported frontmatter).
+    known = {"name", "description", "tools", "disallowedTools", "model", "permissionMode",
+             "maxTurns", "skills", "mcpServers", "hooks", "memory", "background",
+             "omitClaudeMd", "effort", "isolation", "color", "initialPrompt", "experimental"}
+    enums = {"effort": {"low", "medium", "high", "xhigh", "max"},
+             "color": {"red", "blue", "green", "yellow", "purple", "orange", "pink", "cyan"},
+             "permissionMode": {"default", "manual", "acceptEdits", "auto", "dontAsk",
+                                "bypassPermissions", "plan"},
+             "memory": {"user", "project", "local"},
+             "isolation": {"worktree"},
+             "background": {"true", "false"},
+             "omitClaudeMd": {"true", "false"}}
+    for path in sorted(glob.glob(os.path.join(REPO, "claude/agents/*.md"))):
+        rel = os.path.relpath(path, REPO)
+        keys = frontmatter(read(rel))
+        if keys is None:
+            continue  # reported by "frontmatter validity"
+        for key, value in keys.items():
+            if key not in known:
+                fail("agent frontmatter fields",
+                     f"{rel} has `{key}:`, not a documented agent field — Claude Code ignores it")
+            elif key in enums and value not in enums[key]:
+                fail("agent frontmatter fields",
+                     f"{rel} has `{key}: {value}`; accepted: {', '.join(sorted(enums[key]))}")
+            elif key == "maxTurns" and not re.fullmatch(r"[1-9]\d*", value):
+                fail("agent frontmatter fields",
+                     f"{rel} has `maxTurns: {value}`; it must be a positive integer")
+
+
+def readonly_guard():
+    """guard-readonly-agents.py loaded as a module (its main does not run), so
+    the agent policy is judged by the hook's own parser."""
+    import importlib.util
+    import types
+    # bootstrap would point this process's bytecode at the user's cache dir.
+    sys.modules.setdefault("bootstrap", types.ModuleType("bootstrap"))
+    saved = list(sys.path), sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    spec = importlib.util.spec_from_file_location(
+        "guard_readonly_agents", os.path.join(REPO, "claude/hooks/guard-readonly-agents.py"))
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path[:], sys.dont_write_bytecode = saved
+    return module
+
+
+# --- 8h. The central agents keep their effort, read-only and no-spawn policy --
+@check("agent policy")
+def _():
+    guard = readonly_guard()
+    # §7: depth is the reasoning agents' value; db-inspector tracks the session.
+    effort = {"researcher": "high", "code-reviewer": "high", "debugger": "high",
+              "db-inspector": None}
+    for path in sorted(glob.glob(os.path.join(REPO, "claude/agents/*.md"))):
+        rel = os.path.relpath(path, REPO)
+        name = os.path.basename(path)[:-3]
+        meta = guard.frontmatter(read(rel))
+        if name in effort and meta.get("effort") != effort[name]:
+            fail("agent policy",
+                 f"{rel} has effort: {meta.get('effort')!r}, §7 wants {effort[name]!r}")
+        if not guard.read_only(meta):
+            fail("agent policy",
+                 f"{rel} is not read-only by guard-readonly-agents' definition (no Write and "
+                 f"Edit in disallowedTools, or a tools list naming neither) — the guard skips it")
+        # A nested agent runs under its own agent_type, outside the read-only guard.
+        disallowed = guard.tool_names(meta.get("disallowedTools") or "")
+        tools = guard.tool_names(meta.get("tools") or "")
+        if "Agent" not in disallowed and (not tools or tools & {"Agent", "Task", "*"}):
+            fail("agent policy",
+                 f"{rel} can spawn agents: name Agent in disallowedTools, or keep it out of "
+                 f"a tools list — a nested agent escapes guard-readonly-agents")
+
+
+# --- 8i. Rule frontmatter holds only quoted `paths` globs ----------------------
+@check("rule frontmatter")
+def _():
+    # "paths is the only field Claude Code reads from a rule", and YAML that
+    # does not parse is dropped: an unquoted leading `*` is an alias, so the
+    # rule silently loads in every session. No frontmatter = always-on, fine.
+    quoted = re.compile(r"""^(?:"[^"]*"|'[^']*')$""")
+    for path in sorted(glob.glob(os.path.join(REPO, "claude/rules/*.md"))):
+        rel = os.path.relpath(path, REPO)
+        front = rule_front(rel)
+        if front is None:
+            fail("rule frontmatter", f"{rel} has no closing --- fence")
+            continue
+        for key in re.findall(r"^([^\s#-][^:]*):", front, re.M):
+            if key != "paths":
+                fail("rule frontmatter",
+                     f"{rel} has `{key}:`; paths is the only field a rule reads")
+        block = paths_block(front)
+        if not block:
+            continue
+        inline = block[0][len("paths:"):].strip()
+        if inline.startswith("["):
+            entries = re.findall(r"""("[^"]*"|'[^']*'|[^,\s\[\]][^,\[\]]*)""", inline)
+        else:
+            entries = [inline] if inline else []
+        entries += [m.group(1).strip() for line in block[1:]
+                    for m in [re.match(r"^\s*-\s*(.*)$", line)] if m]
+        if not entries:
+            fail("rule frontmatter", f"{rel} has an empty paths:")
+        for entry in entries:
+            if not quoted.match(entry):
+                fail("rule frontmatter",
+                     f"{rel} has an unquoted glob {entry}; quote it, or the YAML may not "
+                     f"parse and the rule loads everywhere")
 
 
 # --- 9b. Hook wiring: no prefix `if` gates, no dead advisory channel ---------

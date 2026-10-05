@@ -478,6 +478,59 @@ def background_without_fork(repo):
              "\nname: readme\nbackground: false\n")
 
 
+def misspell_agent_field(repo):
+    """The skill spelling on an agent is ignored: researcher gets Write and Edit back."""
+    _replace(repo, "claude/agents/researcher.md", "\ndisallowedTools:", "\ndisallowed-tools:")
+
+
+def bad_agent_value(repo):
+    """A color outside the documented set is ignored without a word."""
+    _replace(repo, "claude/agents/code-reviewer.md", "\ncolor: orange\n", "\ncolor: grey\n")
+
+
+def agent_drops_effort(repo):
+    """debugger without effort: high runs at whatever the session runs, against §7."""
+    _replace(repo, "claude/agents/debugger.md", "\neffort: high\n", "\n")
+
+
+def agent_loses_read_only(repo):
+    """With Edit allowed the guard no longer treats researcher as read-only."""
+    path = os.path.join(repo, "claude/agents/researcher.md")
+    with open(path) as fh:
+        text = fh.read()
+    new = re.sub(r"^(disallowedTools:.*?)\bEdit,\s*", r"\1", text, count=1, flags=re.M)
+    assert new != text, "no Edit in researcher's disallowedTools"
+    with open(path, "w") as fh:
+        fh.write(new)
+
+
+def agent_can_spawn(repo):
+    """A nested agent runs under its own agent_type, outside the read-only guard."""
+    _replace(repo, "claude/agents/debugger.md", ", Agent\n", "\n")
+
+
+def readonly_tools_gain_agent(repo):
+    """db-inspector's tools allowlist is its only barrier against spawning agents."""
+    _replace(repo, "claude/agents/db-inspector.md", "\ntools: Bash, Read\n", "\ntools: Bash, Read, Agent\n")
+
+
+def extra_rule_key(repo):
+    """A rule reads only paths:; a description: there is dead weight that looks live."""
+    _replace(repo, "claude/rules/security.md", "---\npaths:", "---\ndescription: security\npaths:")
+
+
+def unquote_rule_glob(repo):
+    """An unquoted leading `*` is a YAML alias: the frontmatter fails and the rule loads everywhere."""
+    for rel in ("claude/rules/code-quality.md", "claude/rules/security.md"):
+        _replace(repo, rel, '  - "**/*.{', "  - **/*.{")
+        _replace(repo, rel, '}"\n---', "}\n---")
+
+
+def diverge_rule_paths(repo):
+    """A second glob on one rule only leaves the extension sets equal and the scopes different."""
+    _replace(repo, "claude/rules/security.md", "}\"\n---", "}\"\n  - \"**/Dockerfile\"\n---")
+
+
 def unpin_mcp_fragment(repo):
     """An MCP server fragment back on @latest re-resolves the package on every start."""
     path = os.path.join(repo, "claude/templates/project/mcp/playwright.json")
@@ -535,6 +588,15 @@ REGRESSIONS = {
     "misspell-skill-field": misspell_skill_field,
     "bad-effort-value": bad_effort_value,
     "background-without-fork": background_without_fork,
+    "misspell-agent-field": misspell_agent_field,
+    "bad-agent-value": bad_agent_value,
+    "agent-drops-effort": agent_drops_effort,
+    "agent-loses-read-only": agent_loses_read_only,
+    "agent-can-spawn": agent_can_spawn,
+    "readonly-tools-gain-agent": readonly_tools_gain_agent,
+    "extra-rule-key": extra_rule_key,
+    "unquote-rule-glob": unquote_rule_glob,
+    "diverge-rule-paths": diverge_rule_paths,
 }
 
 

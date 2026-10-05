@@ -275,6 +275,42 @@ inject background-without-fork
 expect_fail "skill frontmatter fields" "a skill sets background: without context: fork"
 
 setup
+inject misspell-agent-field
+expect_fail "agent frontmatter fields" "an agent writes disallowed-tools, the skill spelling"
+
+setup
+inject bad-agent-value
+expect_fail "agent frontmatter fields" "an agent declares an undocumented color"
+
+setup
+inject agent-drops-effort
+expect_fail "agent policy" "a reasoning agent loses effort: high"
+
+setup
+inject agent-loses-read-only
+expect_fail "agent policy" "a central agent stops being read-only by the guard's definition"
+
+setup
+inject agent-can-spawn
+expect_fail "agent policy" "a reasoning agent may spawn agents again"
+
+setup
+inject readonly-tools-gain-agent
+expect_fail "agent policy" "db-inspector's tools list gains Agent"
+
+setup
+inject extra-rule-key
+expect_fail "rule frontmatter" "a rule gains a frontmatter key other than paths"
+
+setup
+inject unquote-rule-glob
+expect_fail "rule frontmatter" "a rule's leading-* glob loses its quotes"
+
+setup
+inject diverge-rule-paths
+expect_fail "code extension lists" "one rule gains a glob the other lacks"
+
+setup
 printf '\n```!\ngit log --oneline -5\n```\n' >> "$WORK/repo/claude/skills/changes/SKILL.md"
 expect_fail "skill injections need no commit" "an injected block runs git log"
 
