@@ -34,6 +34,18 @@ AGENTS = {
     "lister": "---\nname: lister\ndescription: x\ndisallowedTools:\n  - Write\n  - Edit\n---\n",
     "half": "---\nname: half\ndescription: x\ndisallowedTools: Write\n---\n",
     "builder": "---\nname: builder\ndescription: x\ntools: Bash, Read, Edit, Write\n---\n",
+    # YAML spellings the parser once read literally, so the name never matched
+    # and the agent went unjudged.
+    "quoted": '---\nname: "quoted"\ndescription: "x"\ndisallowedTools: Write, Edit\n---\n',
+    "single": "---\nname: 'single'\ndescription: x\ndisallowedTools: 'Write, Edit'\n---\n",
+    "commented": "---\nname: commented  # the reviewer\ndescription: x\n"
+                 "disallowedTools: Write, Edit  # read-only\n---\n",
+    "folded": "---\nname: folded\ndescription: x\ndisallowedTools: >-\n  Write,\n  Edit\n---\n",
+    "folded-commented": "---\nname: folded-commented\ndescription: x\n"
+                        "disallowedTools: >- # read-only\n  Write,\n  Edit\n---\n",
+    "indented": "---\nname: indented\ndescription: x\ndisallowedTools: >2\n  Write, Edit\n---\n",
+    "flow-lines": "---\nname: flow-lines\ndescription: x\ndisallowedTools: [Write,\n  Edit]\n---\n",
+    "comment-only": "---\nname: comment-only\ndescription: x\ntools: # none\n---\n",
 }
 PROJECT_AGENTS = {
     "proj-reader": "---\nname: proj-reader\ndescription: x\ndisallowedTools: [Write, Edit]\n---\n",
@@ -49,6 +61,23 @@ CASES = [
     ("researcher", "mv app.py app2.py",                   DENY, "renaming a project file"),
     ("researcher", "cp TMP/x.py app.py",                  DENY, "copying over a project file"),
     ("researcher", "touch HOME/elsewhere.txt",            DENY, "outside the project is not allowed either"),
+    ("quoted", "sed -i 's/a/b/' app.py",                  DENY, "a double-quoted name still names the agent"),
+    ("single", "sed -i 's/a/b/' app.py",                  DENY, "single-quoted name and tool list"),
+    ("commented", "sed -i 's/a/b/' app.py",               DENY, "a trailing # comment is not part of the value"),
+    ("folded", "sed -i 's/a/b/' app.py",                  DENY, "a folded >- tool list"),
+    ("folded-commented", "sed -i 's/a/b/' app.py",        DENY, "a block indicator followed by a comment"),
+    ("indented", "sed -i 's/a/b/' app.py",                DENY, "a block indicator with an indentation digit"),
+    ("flow-lines", "sed -i 's/a/b/' app.py",              DENY, "a flow list spread over two lines"),
+    ("comment-only", "sed -i 's/a/b/' app.py",            ALLOW, "a comment-only value is empty, not a tool list"),
+    # --- find: -delete, -exec and -fprint change files --------------------------
+    ("researcher", "find . -name '*.pyc' -delete",        DENY, "find -delete in the project"),
+    ("researcher", "find TMP -name '*.log' -delete",      ALLOW, "find -delete under temp"),
+    ("researcher", "find . -name x -exec rm {} +",        DENY, "find -exec rm"),
+    ("researcher", "find . -name '*.py' -exec sed -i 's/a/b/' {} \\;", DENY, "find -exec sed -i"),
+    ("researcher", "find . -name '*.py' -exec grep -n TODO {} +", ALLOW, "find -exec grep only reads"),
+    ("researcher", "find . -type f -fprint out.txt",      DENY, "find -fprint writes a file"),
+    ("db-inspector", "find . data db prisma -maxdepth 1 -type f \\( -name '*.db' -o -name '*.sqlite' \\) 2>/dev/null",
+     ALLOW, "db-inspector's SQLite discovery"),
     ("researcher", "echo x > TMP/probe.txt",              ALLOW, "the temp folder is scratch space"),
     ("researcher", "echo x > SCRATCH/notes.md",           ALLOW, "the session scratchpad is scratch space"),
     ("researcher", "cp app.py TMP/app.py",                ALLOW, "copying a project file into temp reads it"),

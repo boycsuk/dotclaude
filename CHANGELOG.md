@@ -231,6 +231,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `check.py` no longer reads a code-extension list from a hook (check 6 compares the two path-scoped rules only).
 
 ### Fixed
+- `guard-readonly-agents` reads agent frontmatter the way Claude Code does: a quoted `name: "x"`, a trailing `# comment`, a `>-` or `>2` block and a flow list over two lines all left the agent unmatched, so it was never judged and its shell could write. It also judges `find`: `-delete` and `-fprint` outside scratch, and `-exec` running a writing command, were let through for a read-only agent.
 - `init.sh` and `init.ps1` comments no longer claim `settings.local.json.example` is refreshed when untouched: both seed it when absent and only report drift when it differs.
 - The project `.gitignore` template ignores `/SPEC.md` and `/SPEC-*.md`, as `/plan-feature` already claimed it did; specs archived under `docs/` stay committable. `/plan-feature` declares `argument-hint: [feature description]` and seeds its interview with that text.
 - `/init-project` no longer says feature branches are merged to main via PR; it matches `/commit`'s local `--no-ff` merge.

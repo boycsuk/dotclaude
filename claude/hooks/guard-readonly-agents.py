@@ -25,6 +25,7 @@ debugger reproduce a failure.
 import glob
 import os
 import re
+import shlex
 import sys
 import tempfile
 
@@ -64,19 +65,41 @@ def frontmatter(text):
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}
-    data, key = {}, None
+    data, key, block = {}, None, None
     for line in lines[1:]:
         if line.strip() == "---":
             break
+        if block is not None:
+            if line[:1].isspace() or not line.strip():
+                block.append(line.strip())
+                data[key] = " ".join(part for part in block if part)
+                continue
+            block = None
         item = re.match(r"^\s+-\s*(.+)$", line)
         if item and key:
-            data[key] = (data[key] if isinstance(data[key], list) else []) + [item.group(1).strip()]
+            data[key] = (data[key] if isinstance(data[key], list) else []) + [scalar(item.group(1))]
             continue
         m = re.match(r"^([A-Za-z_][\w-]*):\s*(.*)$", line)
         if m:
             key = m.group(1)
-            data[key] = m.group(2).strip()
+            value = scalar(m.group(2))
+            if re.fullmatch(r"[>|](?:[1-9][+-]?|[+-][1-9]?)?", value):
+                block, data[key] = [], ""
+                continue
+            if value.startswith("[") and "]" not in value:
+                block = [value]                   # a flow list continued on the next lines
+            data[key] = value
     return data
+
+
+def scalar(raw):
+    """A YAML scalar as Claude Code reads it: quotes removed, a trailing `# comment` dropped."""
+    value = raw.strip()
+    if value[:1] in ("'", '"'):
+        end = value.find(value[0], 1)
+        if end > 0:
+            return value[1:end]
+    return re.sub(r"(?:^|\s+)#.*$", "", value).strip()
 
 
 def tool_names(value):
@@ -192,6 +215,37 @@ def installs(words):
     return f"{name} {action}" if action in INSTALL_COMMON else None
 
 
+FIND_OUTPUTS = {"-fprint": 1, "-fprint0": 1, "-fls": 1, "-fprintf": 2}
+FIND_RUNNERS = {"-exec", "-execdir", "-ok", "-okdir"}
+
+
+def find_effects(args):
+    """(paths a `find` deletes or writes, the commands its -exec actions run) for find's `args`."""
+    starts, i = [], 0
+    while i < len(args) and not args[i].startswith(("-", "(", "!", "\\(")):
+        starts.append(args[i])
+        i += 1
+    starts = starts or ["."]
+    targets, commands = [], []
+    while i < len(args):
+        arg = args[i]
+        if arg == "-delete":
+            targets += starts
+        elif arg in FIND_OUTPUTS and i + 1 < len(args):
+            targets.append(args[i + 1])
+            i += FIND_OUTPUTS[arg]
+        elif arg in FIND_RUNNERS:
+            end = i + 1
+            while end < len(args) and args[end] not in (";", "\\;", "+"):
+                end += 1
+            inner = args[i + 1:end]
+            # `{}` stands for a path under each starting point, so it is judged as one.
+            commands += [[w.replace("{}", os.path.join(s, "_")) for w in inner] for s in starts if inner]
+            i = end
+        i += 1
+    return targets, commands
+
+
 def judge(command, payload):
     shell = shellwords.shell_of(payload)
     segments = shellwords.segments(command, shell)
@@ -211,6 +265,15 @@ def judge(command, payload):
                    if outside_scratch(t, cwd, roots)]
         if written:
             return f"writes {written[0]}"
+        if shellwords.basename(words[0]).lower() == "find":
+            targets, commands = find_effects(words[1:])
+            changed = [t for t in targets if outside_scratch(t, cwd, roots)]
+            if changed:
+                return f"runs find, which deletes or writes {changed[0]}"
+            for inner in commands:
+                reason = judge(shlex.join(inner), dict(payload, cwd=cwd))
+                if reason:
+                    return f"runs find -exec, which {reason}"
         sub = git_writes(seg)
         if sub:
             return f"runs git {sub}, which changes the repository"
