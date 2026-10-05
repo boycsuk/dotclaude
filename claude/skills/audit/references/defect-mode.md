@@ -65,7 +65,7 @@ Record what you could NOT run and why — an audit that silently skipped half it
 
 Ignore every category the user did not pick. Do not "throw in" a neighbouring dimension because it looked interesting: the point of round 1 is a report the user can act on, and an unrequested category dilutes it.
 
-Scale the work to the chosen depth: at **Light** you do these passes yourself, sequentially; at **Medium** dispatch one subagent per selected category via `Task` and synthesize; at **Deep** fan out per module and then re-verify each surviving finding with a second, skeptical subagent whose job is to REFUTE it (drop what it refutes).
+Scale the work to the chosen depth: at **Light** you do these passes yourself, sequentially; at **Medium** dispatch one subagent per selected category with the Agent tool and synthesize; at **Deep** fan out per module and then re-verify each surviving finding with a second, skeptical subagent whose job is to REFUTE it (drop what it refutes). Give every audit subagent a read-only type — `code-reviewer` for a finding pass or a refutation, `researcher` for a cross-module sweep — never the default general-purpose agent, which can edit files the user did not ask to change.
 
 ### Surviving an interrupted fan-out
 

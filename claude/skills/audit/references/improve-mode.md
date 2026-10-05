@@ -51,7 +51,9 @@ the options carry real numbers.
 - **Depth**:
   - **Light**: one pass in this context, no subagents.
   - **Medium (recommended)**: one subagent per selected type, plus one for
-    web research if selected, then a synthesis. **Name the count.**
+    web research if selected, then a synthesis. **Name the count.** Each
+    subagent is a `researcher` (read-only), never the default general-purpose
+    agent, which can edit.
 
 ## 3. Understand the target before proposing anything
 

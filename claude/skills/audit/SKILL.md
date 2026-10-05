@@ -3,7 +3,7 @@ name: audit
 description: Use for a security review before committing or merging, a whole-project audit, hunting dead or unused code or duplication, checking comments and tests, finding repeated markup that should be components, or asking how a feature could be improved or what it is missing. Two modes, defects and improvements, with the categories and the depth chosen by the user. For a quick bug-focused pass over the current diff use /code-review.
 argument-hint: "[defects|improve] [categories…] [light|medium|deep] [uncommitted|branch|<path>]"
 effort: high
-allowed-tools: Bash(npm *) Bash(pnpm *) Bash(npx --no-install *) Bash(uv *) Bash(uvx --offline *) Bash(python3 *) Bash(pip *) Bash(cargo *) Bash(go *) Bash(staticcheck *) Bash(git *) Bash(rg *) Bash(grep *) Bash(find *) Bash(wc *) Bash(ls *) Bash(gitleaks *) Bash(trufflehog *) Bash(pip-audit *) Bash(govulncheck *) Glob Grep Read Task WebSearch WebFetch
+allowed-tools: Bash(npm *) Bash(pnpm *) Bash(npx --no-install *) Bash(uv *) Bash(uvx --offline *) Bash(python3 *) Bash(pip *) Bash(cargo *) Bash(go *) Bash(staticcheck *) Bash(git *) Bash(rg *) Bash(grep *) Bash(find *) Bash(wc *) Bash(ls *) Bash(gitleaks *) Bash(trufflehog *) Bash(pip-audit *) Bash(govulncheck *) Glob Grep Read Agent WebSearch WebFetch
 ---
 
 # Audit
