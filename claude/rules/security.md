@@ -46,24 +46,6 @@ Prefer data-only formats (JSON) over formats that instantiate objects from arbit
 ### Prevent race conditions (TOCTOU)
 If a check and its action must be inseparable, use atomic operations or locks. State can change between the check and the action.
 
-## Dependencies
-
-### Audit regularly
-Use ecosystem tools to detect known vulnerabilities:
-- `cargo audit` (Rust)
-- `npm audit` (Node)
-- `pip-audit` (Python)
-- `govulncheck` (Go)
-
-### Minimize dependencies
-Every dependency is attack surface. Do not add packages for trivial things that can be solved with a few lines of code. The `guard-dependencies` hook asks the user before any command or manifest edit that adds one.
-
-### Pin versions
-Use lockfiles and exact versions to avoid unexpected updates that introduce vulnerabilities or break the build.
-
-### Clean up before release
-Remove dead code, test features, and test credentials before any release.
-
 ## Runtime
 
 ### Do not trust the client
@@ -81,22 +63,11 @@ Validate by header (magic bytes), not by extension. Disable execution permission
 ### Secure logs
 Do not log sensitive data. Sanitize inputs before writing them to logs to prevent log injection (CRLF, escape sequences).
 
+### Clean up before release
+Remove dead code, test features, and test credentials before any release.
+
 ## Optional hardening: the Bash sandbox
-
-The central `deny` rules stop Claude's own file tools and the file commands it recognizes in Bash — they do **not** stop an arbitrary subprocess. A script that opens `.env` itself slips past them. The OS-level Bash sandbox blocks every process, so it is a strictly stronger layer, not a redundant one.
-
-It is **opt-in, never a default** (DESIGN.md §21): it needs a host prerequisite the setup cannot guarantee (bubblewrap + socat on Linux/WSL2), has no native Windows support, and is incompatible with Docker — which the template's own `--compose` / `--runtime` scaffolds use. A default that breaks the template's Docker path is a bad default.
-
-Turn it on per machine in `~/.claude/settings.json` when the host supports it and you want defense against a prompt-injected subprocess read:
-
-```json
-{ "sandbox": { "enabled": true } }
-```
-
-Then narrow it with `sandbox.filesystem` (`allowRead`/`denyRead`/`allowWrite`/`denyWrite`), `sandbox.network.allowedDomains`, and `sandbox.credentials`. Add any Docker or container command you need to the documented exclusions, or the sandbox will block it. Run `/sandbox` in a session to check the current state. The installers end with one line saying whether the sandbox can run on the machine and the exact command to install what it needs; they never install it.
+The OS-level sandbox stops any subprocess, which the deny rules do not; it is opt-in and deliberately not a default (it needs host packages, has no native Windows support and breaks Docker). Enable it with `{"sandbox": {"enabled": true}}` in `~/.claude/settings.json` and inspect it with `/sandbox`; the installers report whether this machine can run it. Where the project has `docs/conventions.md`, it holds the full text.
 
 ## Limit what a leak could take, with or without the sandbox
-
-The guards and deny rules judge commands, and a script can still read a file once it runs. Two habits shrink what it could take, on every OS and with no configuration:
-- **SSH keys carry a passphrase**, loaded once into `ssh-agent`. A process that reads `~/.ssh/id_*` gets an encrypted key it cannot use.
-- **A project's `.env` holds development values, never production secrets.** Production credentials come from a secret manager or are injected into the environment for the session that needs them, so a leaked `.env` exposes nothing that matters.
+SSH keys carry a passphrase (loaded into `ssh-agent`), and a project's `.env` holds development values only, never production secrets.

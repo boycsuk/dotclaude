@@ -32,7 +32,7 @@ Type everything possible. Leverage the type system to prevent errors at compile 
 Every failed operation is logged or returned with enough context to diagnose. No silently swallowed errors.
 
 ## Structured logging
-Levels (debug, info, warn, error) with structured context. Do not just log errors — log decisions, inputs to critical paths, and external call boundaries.
+Levels (debug, info, warn, error) with structured context. Do not just log errors — log decisions, inputs to critical paths (redacted: never secrets or personal data, see `security.md`), and external call boundaries.
 
 ## Comments: default to none; earn each one
 Comment the **why**, never the **what** — well-named identifiers describe the what. All comments in English.
@@ -53,11 +53,14 @@ Doc comments are the deliberate exception to "never the what" — they are the A
 - Private/internal helpers: document only if behavior is non-obvious; otherwise the name suffices.
 - Follow the docstring style the project already uses (Google vs NumPy vs reST) — see "Match existing conventions".
 
-## Do not delegate to the LLM what a linter does
+## Leave lint, types and formatting to the tools
 Lint and type errors surface on their own: the `verify-on-edit` hook runs the project's linter/type checker after each edit (TS/JS when the project defines `lint`/`typecheck` scripts, Python, Rust, Go), and an enabled LSP plugin reports diagnostics. Formatting belongs to the project's formatter. Do not spend the context window fixing style by hand.
 
 ## Tests with explicit intent
-Do not just say "write tests". Specify the cases and expected behaviors before the AI writes the tests. Otherwise it produces tests for the happy path only.
+Before writing tests, list the cases: the happy path, at least one edge or failure case, and the expected result of each. Ask only if the expected behavior is unclear.
+
+## TOON for LLM payloads
+For a flat, uniform tabular payload sent to an LLM, consider TOON (https://github.com/toon-format/toon, ~20-60% fewer tokens than JSON); JSON stays better for nested or sparse data, CSV for pure tables. The `@toon-format/toon` package is a new dependency (confirm first); encoding a one-off payload by hand is fine.
 
 ## Verify external references
 Only recommend libraries, functions, and APIs that verifiably exist and are currently maintained. If uncertain about a method signature or version, say so explicitly. Prefer well-known, actively maintained packages.

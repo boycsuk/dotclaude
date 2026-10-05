@@ -40,6 +40,7 @@
 Detailed conventions live in `docs/conventions.md`, the repo-versioned copy present in every clone. Developers using Claude Code also load them from their personal `~/.claude/rules/` — not checked into this repo, so reconcile by hand if the two diverge (those with a `paths:` field load only for matching files; the rest load every session):
 - Code quality → `~/.claude/rules/code-quality.md` (loads for source files via `paths:`)
 - Security → `~/.claude/rules/security.md` (loads for source files via `paths:`)
+- Dependencies → `~/.claude/rules/dependencies.md` (loads for manifests and lockfiles via `paths:`)
 - Workflow → `~/.claude/rules/workflow.md`
 - AI collaboration → `~/.claude/rules/ai-collaboration.md`
 
@@ -62,11 +63,10 @@ guard-dependencies and guard-commit hooks enforce them in every project.)
 
 ## Workflow
 - Changes touching >3 files: **plan mode first** (use `/plan-feature`).
-- Before declaring a task done: **always** `/verify`.
-- Before each commit: `/changes` to review the diff, then `/commit` (it updates CHANGELOG.md).
-- When opening a new session in an ongoing project: `/resume-context`.
+- Before declaring a task done: **always** `/verify`, and show its result — never "should work".
+- Review ladder: `/changes` summarizes the diff; the `code-reviewer` agent reviews a non-trivial change before `/commit` (it updates CHANGELOG.md); `/code-review` is a quick bug pass the user starts; `/audit` is the pre-merge security pass for anything touching I/O, auth, or deps (Security category, This-branch scope), or a review of code at rest.
+- When the first request depends on project state, or the project is unfamiliar: `/resume-context`. Skip it for a self-contained question.
 - When I correct a systematic mistake: use `/compound` so it does not happen again.
-- Before merging anything that touches I/O, auth, or deps: `/audit` (Security category, This-branch scope).
 - UI work, with or without a design yet (Design canvas, mockup, screenshot, handoff bundle): `/implement-ui` — the design lives in `docs/design/` (tokens, a status index, one spec per component and screen) and, when drawn, in one Design canvas for the whole project; it reuses existing components before creating new ones, then builds section by section with visual verification.
 - Branch model: feature branches by default. The `guard-push-main` hook blocks direct pushes to main/master. If this project intentionally lives on main (solo project, prototype, scratch repo), add `"allowPushToMain": true` to `.claude/settings.local.json` (see `settings.local.json.example`). Force pushes stay blocked regardless.
 

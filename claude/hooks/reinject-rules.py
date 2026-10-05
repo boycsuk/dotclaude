@@ -22,7 +22,7 @@ import hookio  # noqa: E402
 
 DIGEST = """POST-COMPACTION REMINDER — non-negotiable conventions still in force:
 - One branch per feature/fix; atomic commits covering what AND why.
-- A task is done only when verified (/verify) and logged in CHANGELOG.md (/commit handles it).
+- A task is done only when verified (/verify) and logged in CHANGELOG.md (/commit handles it); claim it with evidence (the command and its result), never "should work".
 - Use AskUserQuestion for any decision point instead of asking in prose; batch several pending decisions into one call.
 - Explain plainly: lead with the outcome, short sentences, keep every fact/name/path exactly; no filler.
 - Challenge assumptions; never agree just to be agreeable.

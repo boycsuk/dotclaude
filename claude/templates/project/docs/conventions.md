@@ -9,8 +9,8 @@
 >
 > **Relationship to Claude Code.** When the project is opened in Claude Code,
 > the same conventions are also loaded from the user's global rules
-> (`~/.claude/rules/`: `code-quality.md`, `security.md`, `workflow.md`,
-> `ai-collaboration.md`) — those are personal to each developer's machine and
+> (`~/.claude/rules/`: `code-quality.md`, `security.md`, `dependencies.md`,
+> `workflow.md`, `ai-collaboration.md`) — those are personal to each developer's machine and
 > are NOT checked into this repo, so a fresh clone will not contain them. This
 > file is what every contributor and non-Claude tool actually reads. If a
 > developer's global rules and this file ever diverge, reconcile them by hand
@@ -35,7 +35,8 @@
 - **Explicit error handling.** Every failed operation is logged or returned
   with enough context to diagnose. No silently swallowed errors.
 - **Structured logging.** Levels (debug/info/warn/error) with context. Log
-  decisions and external-call boundaries, not just errors.
+  decisions, inputs to critical paths (redacted: never secrets or personal
+  data) and external-call boundaries, not just errors.
 - **Reusable, zero hardcoding.** Literals go to named constants or central
   config; shared logic is abstracted, not duplicated. No magic numbers/strings
   (`86400` → `SECONDS_PER_DAY`, `"admin"` → a named constant). A literal used
@@ -57,8 +58,9 @@
   system declares. Private helpers only if non-obvious.
 - **Flat over nested.** Validate and early-return at the top; keep the happy
   path flat. More than ~2 levels of nesting → refactor into named helpers.
-- **Tests with explicit intent.** Specify the cases and expected behavior, not
-  just "write tests" — cover more than the happy path.
+- **Tests with explicit intent.** Before writing tests, list the cases: the
+  happy path, at least one edge or failure case, and the expected result of
+  each. Ask only if the expected behavior is unclear.
 - **Verify external references.** Only use libraries/APIs that verifiably exist
   and are maintained. If unsure of a signature or version, say so.
 - **Match logic to the domain.** Pick the data structure/algorithm that maps to
@@ -67,8 +69,13 @@
 - **Scalability awareness.** State the complexity of non-trivial algorithms;
   watch for O(n²) where O(n log n) is possible, N+1 queries, missing indexes,
   sync calls that should be async.
-- **Don't hand-fix what a linter does.** Formatting, import order, and naming
-  are the linter's job — run it, don't burn effort correcting style by hand.
+- **Leave lint, types and formatting to the tools.** Formatting, import
+  order, and naming are the linter's and formatter's job — run them, don't
+  burn effort correcting style by hand.
+- **TOON for LLM payloads.** For a flat, uniform tabular payload sent to an
+  LLM, consider [TOON](https://github.com/toon-format/toon) (~20-60% fewer
+  tokens than JSON); JSON stays better for nested or sparse data, CSV for pure
+  tables. Its package is a new dependency; a one-off encoded by hand is fine.
 
 ## Security
 
@@ -102,29 +109,48 @@
 - **Secure logs.** Never log sensitive data; sanitize inputs before logging
   (log injection via CRLF/escapes).
 - **Bash sandbox (opt-in hardening).** The deny rules stop Claude's own file
-  tools, not an arbitrary subprocess that opens `.env` itself. The OS-level
-  sandbox blocks every process, so it is strictly stronger. Off by default: it
-  needs a host prerequisite, has no native Windows support, and is incompatible
-  with Docker. Enable per machine with `{"sandbox": {"enabled": true}}` in
-  `~/.claude/settings.json` on a supported host.
-- **Limit what a leak could take.** SSH keys carry a passphrase (loaded into
-  `ssh-agent`), so a process that reads `~/.ssh/id_*` gets an unusable key; a
-  project's `.env` holds development values, never production secrets, which
-  come from a secret manager or the session's environment.
+  tools and the file commands it recognizes in Bash, not an arbitrary
+  subprocess that opens `.env` itself. The OS-level sandbox blocks every
+  process, so it is strictly stronger. It is deliberately not a default: it
+  needs host packages (bubblewrap + socat on Linux/WSL2), has no native Windows
+  support, and is incompatible with Docker, which the template's own
+  `--compose` / `--runtime` scaffolds use. Enable it per machine on a supported
+  host with `/sandbox` or `{"sandbox": {"enabled": true}}` in
+  `~/.claude/settings.json`, then narrow it with `sandbox.filesystem`
+  (`allowRead`/`denyRead`/`allowWrite`/`denyWrite`),
+  `sandbox.network.allowedDomains` and `sandbox.credentials`; add any Docker
+  or container command you need to its exclusions. The dotclaude installers
+  end with one line saying whether the sandbox can run on the machine and the
+  exact command to install what it needs; they never install it.
+- **Limit what a leak could take, with or without the sandbox.** The guards
+  and deny rules judge commands, and a script can still read a file once it
+  runs. SSH keys carry a passphrase (loaded once into `ssh-agent`), so a
+  process that reads `~/.ssh/id_*` gets an encrypted key it cannot use. A
+  project's `.env` holds development values, never production secrets:
+  production credentials come from a secret manager or are injected into the
+  environment of the session that needs them, so a leaked `.env` exposes
+  nothing that matters.
 - **Limit resources.** Timeouts on external calls, input size limits, rate
   limiting where applicable.
 - **TOCTOU.** If a check and its action must be inseparable, use atomic ops or
   locks.
 - **Don't trust the client.** All security validation happens server-side;
   frontend checks are UX only.
-- **Minimize, pin and audit dependencies.** Confirm every new dependency with
-  the maintainer; lockfiles + exact versions; run the ecosystem audit (`npm audit`, `pip-audit`, `cargo audit`, `govulncheck`).
 - **Uploaded files:** validate by magic bytes, not extension; no execute bit on
   upload dirs.
 - **Clean up before release:** remove dead code, test features and test
   credentials.
 - **Review before merging** anything that touches I/O, auth or dependencies,
   with at least the rigor of human-written code.
+
+## Dependencies
+
+- **Minimize.** Every dependency is attack surface; don't add a package for
+  what a few lines of code solve. Confirm every new dependency with the
+  maintainer.
+- **Pin.** Lockfiles and exact versions, so an update never arrives unasked.
+- **Audit regularly** with the ecosystem tool: `npm audit`, `pip-audit`,
+  `cargo audit`, `govulncheck`.
 
 ## Workflow & git
 
@@ -141,6 +167,14 @@
 - **Work in small chunks** — one function/bug/feature at a time.
 - **A task is done** only when it compiles, passes tests (if any), and the
   change is recorded in `CHANGELOG.md` (Keep a Changelog 1.1.0 + SemVer).
+- **Claim done with evidence.** Quote the command that proves it and its
+  result (or the verification report); never "should work". An agent's
+  report of success is not verification.
+- **Review in proportion.** Summarize the diff before committing; have a
+  non-trivial change reviewed before it is committed; give anything that
+  touches I/O, auth or dependencies a security review before merging. (In
+  Claude Code: `/changes`, the `code-reviewer` agent, `/code-review` for a
+  quick bug pass, `/audit` with the This-branch scope or for code at rest.)
 - **Understand before implementing.** Ask when requirements are ambiguous;
   don't write code on a guess.
 - **Keep the contract docs true.** If a change alters a contract, update the
@@ -171,6 +205,11 @@
   dimension (never one per file), save results as they arrive so an
   interruption does not discard them, and verify fixes with the project's own
   tests rather than a second sweep.
+- **Brief an agent fully.** It sees none of your conversation: state the
+  objective, the boundaries (what not to touch or repeat), the expected output
+  format, and what is already known. An agent reports to its caller in
+  English and leaves asking the user, the changelog and the commit to the
+  main session.
 - **An agent's findings are hypotheses, not facts.** A sweep returns a
   confident synthesis whether or not it is right. Before a claim from an agent
   becomes code, configuration, or an answer someone relies on, check it at the
