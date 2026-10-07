@@ -4,7 +4,7 @@
 The edit already happened (PostToolUse cannot undo it); the warning reaches
 Claude through hookio.feedback so it can revert on the next turn.
 
-What counts as a secret lives in _lib/secrets.py, shared with guard-commit,
+What counts as a secret lives in _lib/secretrules.py, shared with guard-commit,
 which checks the same rules again before a commit. Specific to this hook:
   - The path rule judges the path inside the project, so a project that
     lives under a folder named "secrets" is not flagged file by file.

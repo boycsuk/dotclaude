@@ -139,6 +139,17 @@ STATE_CASES = [
 # secret checks it tests.
 KEY = "sk-live-" + "9f3b" * 6
 GHP = "ghp_" + "a1B2" * 9
+BECH32 = "QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L"
+AGE_KEY = "AGE-SECRET-KEY-" + "1" + BECH32 + BECH32[:26]
+AGE_VALUES = ("schema = 1\n[[value]]\nname = \"DATABASE_URL\"\nciphertext = '''\n"
+              "-----BEGIN AGE ENCRYPTED FILE-----\n"
+              "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBEd1N0V0pXa3J0Zk5UNTJu\n"
+              "-----END AGE ENCRYPTED FILE-----\n'''\n")
+AEGIS_SOURCE = ("crates/engine/src/secrets/mod.rs", "crates/engine/src/catalogue/secrets.rs",
+                "crates/engine/tests/secrets.rs", "crates/gui/src/screens/secrets/mod.rs",
+                "docs/design/screens/secrets/README.md", "specs/phases/07-secrets.md")
+AEGIS_STORE = (".aegis/secrets.toml", ".aegis/recipients.toml", ".aegis/secrets/development.toml",
+               ".aegis/secrets/staging.toml", ".aegis/secrets/production.toml")
 
 # (command, state, expected, text the ask must hold, why) — the ask must never echo a value.
 SECRET_CASES = [
@@ -177,6 +188,22 @@ SECRET_CASES = [
     ("git commit -m 'feat: x'", {"staged": ["app.py", "CHANGELOG.md"],
                                  "files": {"app.py": f"x = 1\nchange\npassword = '{KEY}'\n"}},
      ASK, "app.py line 3 adds", "the line number counts the file, not the hunk"),
+    # Source and prose about secrets, and aegis's encrypted store, are committed by design (2026-10-08).
+    ("git commit -m 'feat: x'", {"staged": [*AEGIS_SOURCE, "CHANGELOG.md"],
+                                 "files": {p: "pub fn x() {}\n" for p in AEGIS_SOURCE}},
+     ALLOW, None, "source and docs under a secrets/ folder or named secrets"),
+    ("git commit -m 'feat: x'", {"staged": [*AEGIS_STORE, "CHANGELOG.md"],
+                                 "files": {p: AGE_VALUES for p in AEGIS_STORE}},
+     ALLOW, None, "aegis's store: names and age ciphertext"),
+    ("git commit -m 'feat: x'", {"staged": [".aegis/secrets/production.toml", "CHANGELOG.md"],
+                                 "files": {".aegis/secrets/production.toml": f"{AGE_VALUES}id = '{AGE_KEY}'\n"}},
+     ASK, ".aegis/secrets/production.toml line 9 adds an age secret key", "an age identity in the store"),
+    ("git commit -m 'feat: x'", {"staged": ["crates/engine/src/secrets/values.rs", "CHANGELOG.md"],
+                                 "files": {"crates/engine/src/secrets/values.rs": f'const API_KEY: &str = "{KEY}";\n'}},
+     ASK, "values.rs line 1 adds a literal value assigned to 'API_KEY'", "a typed Rust constant"),
+    ("git commit -m 'feat: x'", {"staged": ["secrets/db_password.txt", "CHANGELOG.md"],
+                                 "files": {"secrets/db_password.txt": "x\n"}},
+     ASK, "secrets/db_password.txt looks like it holds secrets", "a value file in secrets/"),
 ]
 
 
@@ -251,7 +278,7 @@ def main():
                 problems = [] if got == want else [f"want {want} got {got}"]
                 if must and must not in reason:
                     problems.append(f"the ask lacks {must!r}")
-                if KEY in reason or GHP in reason:
+                if KEY in reason or GHP in reason or AGE_KEY in reason:
                     problems.append("the ask echoes the secret value")
                 if problems:
                     failures += 1

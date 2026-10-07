@@ -40,6 +40,29 @@ AKIA = "AKIA" + "0123456789ABCDEF"          # AWS access key id shape
 GHP = "ghp_" + "a1B2" * 9                   # GitHub PAT shape (36 after prefix)
 XOXB = "xoxb-" + "1234567890-abcdefghij"    # Slack bot token shape
 PEM = "-----BEGIN RSA PRIVATE " + "KEY-----"
+BECH32 = "QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L"     # Bech32's alphabet, upper-case as age prints it
+AGE_KEY = "AGE-SECRET-KEY-" + "1" + BECH32 + BECH32[:26]          # 58 characters after the "1"
+AGE_PQ_KEY = "AGE-SECRET-KEY-PQ-" + "1" + BECH32[::-1] + BECH32[:26]
+
+# aegis's committed secret store (specs/phases/07-secrets.md): names, recipients' public keys, and one age
+# ciphertext per value.
+AEGIS_MANIFEST = ('schema = 1\n[[secret]]\nname = "DATABASE_URL"\ndescription = "Postgres for local dev"\n'
+                  'environments = ["development"]\nagent_visible = false\n')
+AEGIS_RECIPIENTS = ('schema = 1\n[[recipient]]\n'
+                    'key = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3290gq"\n'
+                    'label = "cosmin (laptop)"\n')
+AEGIS_VALUES = ("schema = 1\n[[value]]\nname = \"DATABASE_URL\"\nciphertext = '''\n"
+                "-----BEGIN AGE ENCRYPTED FILE-----\n"
+                "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBEd1N0V0pXa3J0Zk5UNTJu\n"
+                "Rk9lRnl2L3pQb1pMOHhjV0lKR3VKK0F6ckE4CjBtM2Z5S0x0cW1ZZ3dzQ0JjT2hr\n"
+                "-----END AGE ENCRYPTED FILE-----\n'''\n"
+                'changed_by = { human = "Cosmin B." }\nchanged_at = "2026-10-06T12:05:00Z"\n')
+
+# Written out here rather than imported, so a name dropped from the hook's list fails a case.
+CODE_EXTENSIONS = ("rs", "py", "pyi", "js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx", "vue", "svelte",
+                   "go", "java", "kt", "kts", "scala", "swift", "c", "h", "cc", "cpp", "hpp", "cs", "rb",
+                   "ex", "exs", "dart", "lua", "zig")
+PROSE_EXTENSIONS = ("md", "mdx", "rst")
 
 # (file_path, content, expected, why)
 CASES = [
@@ -80,8 +103,9 @@ CASES = [
      "JSON shape: the quote precedes the colon"),
     ("/p/SECRETS/prod.txt", "anything\n", WARN,
      "upper-case dir: the .sh case arms are case-folded to match PowerShell"),
-    ("/p/secrets/prod.md", "anything\n", WARN,
-     "markup inside secrets/ is still a secret store"),
+    ("/p/secrets/prod.md", "anything\n", QUIET,
+     "prose inside secrets/ documents the store; its content is still scanned (2026-10-08)"),
+    ("/p/secrets/prod.md", f"API_KEY={KEY}\n", WARN, "a key pasted into that prose"),
 
     # --- reading a secret FROM the environment is the DESIRED pattern -------
     ("/p/src/config.js", "token: process.env.GITHUB_TOKEN_FOR_RELEASES\n", QUIET,
@@ -152,6 +176,89 @@ CASES = [
     ("/p/analysis.ipynb", {"notebook_path": "/p/analysis.ipynb",
                            "new_source": f'api_key = "{KEY}"\n'}, WARN,
      "a key pasted into a notebook cell must be scanned too"),
+
+    # --- source and prose are named for what they handle, not what they hold (2026-10-08) ---
+    # A secrets feature lives in src/secrets/ and secrets.rs; warning on every edit taught the
+    # model to gitignore source code.
+    *[(f"/p/crates/engine/src/secrets/{name}.rs", "pub fn load() {}\n", QUIET, "aegis's secrets module")
+      for name in ("mod", "manifest", "recipients", "values", "identity", "pins", "ci")],
+    ("/p/crates/engine/src/catalogue/secrets.rs", "pub fn list() {}\n", QUIET, "a source file named secrets"),
+    ("/p/crates/engine/tests/secrets.rs", "#[test]\nfn binds() {}\n", QUIET, "a test file named secrets"),
+    ("/p/crates/gui/src/screens/secrets/mod.rs", "pub fn view() {}\n", QUIET, "a screen module in secrets/"),
+    ("/p/docs/design/screens/secrets/README.md", "# Secrets screen\n", QUIET, "a design spec in secrets/"),
+    ("/p/specs/phases/07-secrets.md", "# Secrets\n", QUIET, "a spec named secrets"),
+    *[(f"/p/src/secrets/store.{ext}", "x = 1\n", QUIET, f"a .{ext} source file inside secrets/")
+      for ext in CODE_EXTENSIONS],
+    *[(f"/p/credentials/guide.{ext}", "How rotation works.\n", QUIET, f".{ext} prose inside credentials/")
+      for ext in PROSE_EXTENSIONS],
+
+    # --- aegis's committed store holds names and age ciphertext, never a plaintext value ---
+    ("/p/.aegis/secrets.toml", AEGIS_MANIFEST, QUIET, "the manifest holds names only"),
+    ("/p/.aegis/recipients.toml", AEGIS_RECIPIENTS, QUIET, "recipients are public keys"),
+    *[(f"/p/.aegis/secrets/{env}.toml", AEGIS_VALUES, QUIET, f"the {env} values are age ciphertext")
+      for env in ("development", "staging", "production")],
+    ("/p/.aegis/secrets/production.toml", f'[[value]]\nname = "X"\napi_key = "{KEY}"\n', WARN,
+     "a plaintext value in the store is still caught by its content"),
+    ("/p/.aegis/secrets/production.json", "{}\n", WARN, "the store exemption covers .toml only"),
+    ("/p/.aegis/secrets.toml.bak", "x\n", WARN, "a copy of the manifest is not the manifest"),
+    ("/p/.aegis/secrets/.env.toml", "x\n", WARN, "a dotfile in the store is not an environment's values"),
+
+    # --- still secret-bearing by path: data, config and scripts, not source ---
+    ("/p/.env.local", "DEBUG=1\n", WARN, "a .env variant"),
+    ("/p/.env.ts", "export default {}\n", WARN, "a .env.* name stays secret-bearing whatever its extension"),
+    ("/p/secrets.json", "{}\n", WARN, "a secrets file in JSON"),
+    ("/p/secrets.yaml", "db: x\n", WARN, "a secrets file in YAML"),
+    ("/p/config/secrets.toml", "db = 1\n", WARN, "secrets.toml outside .aegis/"),
+    ("/p/secrets/db_password.txt", "x\n", WARN, "a value file inside secrets/"),
+    ("/p/credentials/service-account.json", "{}\n", WARN, "a key file inside credentials/"),
+    ("/p/secrets.sh", "export DB=1\n", WARN, "a shell file sourced for its exports is a .env by another name"),
+    ("/p/secrets/env.ps1", "$env:DB = 1\n", WARN, "the PowerShell spelling of the same"),
+    ("/p/config/secrets.php", "<?php return [];\n", WARN,
+     "a PHP config returning an array; its '=>' form escapes the content scan"),
+
+    # --- the content of an exempt source file is still scanned ---
+    ("/p/crates/engine/src/secrets/values.rs", f'let api_key = "{KEY}";\n', WARN, "a literal key in a .rs"),
+    ("/p/crates/engine/src/secrets/values.rs", f'const API_KEY: &str = "{KEY}";\n', WARN,
+     "Rust's typed constant: the type sits between the label and '='"),
+    ("/p/crates/engine/src/secrets/values.rs", f"static TOKEN: &'static str = \"{KEY}\";\n", WARN,
+     "a lifetime in the type"),
+    ("/p/crates/engine/src/secrets/values.rs", f'let password: String = "{KEY}".into();\n', WARN,
+     "a bare type name must not be split off as an assignment of its own"),
+    ("/p/src/secrets/client.ts", f'const apiKey: string = "{KEY}";\n', WARN, "TypeScript's annotation"),
+    ("/p/src/Config.kt", f'val token: String = "{KEY}"\n', WARN, "Kotlin's annotation"),
+    ("/p/src/settings.py", f'api_key: str = "{KEY}"\n', WARN, "a Python type hint"),
+    ("/p/src/settings.py", f'api_key: str | None = "{KEY}"\n', WARN, "a union type, spaces inside it"),
+    ("/p/src/settings.py", f'api_key = "{KEY}"  # default = "changeme"\n', WARN,
+     "a spaced '=' in a comment still splits off its placeholder"),
+    ("/p/src/settings.py", f'self.api_key: str = "{KEY}"\n', WARN, "an annotated attribute"),
+    ("/p/src/client.py", f'def connect(self, api_key: str = "{KEY}"):\n', WARN, "an annotated default argument"),
+    ("/p/src/secrets/values.rs", f'pub(crate) const GITHUB_TOKEN: &str = "{KEY}";\n', WARN,
+     "the label inside a longer name, behind pub(crate)"),
+    # The annotation rewrite once took any `word:` as a declaration and ate the label after it.
+    ("/p/src/settings.py", f'else: password = "{KEY}"\n', WARN, "a one-line else before the assignment"),
+    ("/p/src/env.ts", f'    case "prod": token = "{KEY}"; break;\n', WARN, "a switch case before the assignment"),
+    ("/p/README.md", f'# note: api_key = "{KEY}"\n', WARN, "prose with a colon before the assignment"),
+    ("/p/src/client.py", "if token: headers = build_authorization_header(token)\n", QUIET,
+     "a label used as a condition is not a declaration"),
+    ("/p/src/env.ts", "case 'token': kind = 'authentication_header_name';\n", QUIET,
+     "a label used as a case value is not a declaration"),
+    ("/p/cmd/main.go", f'apiKey := "{KEY}"\n', WARN, "Go's short declaration"),
+    ("/p/crates/engine/src/secrets/values.rs", "let password: String = String::new();\n", QUIET,
+     "a typed declaration of an empty value"),
+    ("/p/crates/engine/src/secrets/values.rs", "pub token: Option<String>,\n", QUIET, "a typed field, no value"),
+    ("/p/src/secrets/client.ts", "interface Auth { apiKey: string; }\n", QUIET, "a type with no value"),
+    ("/p/src/settings.py", 'api_key: str = "your-api-key-goes-here"\n', QUIET, "a typed placeholder"),
+
+    # --- age identities: the private half of aegis's keys (C2SP age spec: Bech32, 32 bytes) ---
+    ("/p/crates/engine/tests/secrets.rs", f'const IDENTITY: &str = "{AGE_KEY}";\n', WARN,
+     "an age secret key under a label the scan does not know"),
+    ("/p/key.txt", f"# created: 2026-10-08T12:00:00Z\n{AGE_KEY}\n", WARN, "age-keygen's output file"),
+    ("/p/.aegis/secrets/production.toml", f"{AEGIS_VALUES}identity = '{AGE_KEY}'\n", WARN,
+     "an age secret key in the committed store"),
+    ("/p/key.txt", f"{AGE_PQ_KEY}\n", WARN, "age's post-quantum identity, age-keygen -pq"),
+    ("/p/docs/secrets.md", "Identities start with AGE-SECRET-KEY-1... and recipients with age1...\n", QUIET,
+     "documentation naming the prefix"),
+    ("/p/key.txt", f"{AGE_KEY[:-1]}\n", QUIET, "one character short is not an age key"),
 ]
 
 
