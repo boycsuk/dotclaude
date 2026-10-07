@@ -50,7 +50,6 @@
       "Read(//**/.env.production)",
       "Read(//**/.env.test)",
       "Read(//**/.env.staging)",
-      "Read(//**/secrets/**)",
       "Read(//**/credentials/**)",
       "Read(~/.claude/.credentials.json)",
       "Read(~/.ssh/**)",

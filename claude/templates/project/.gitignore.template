@@ -25,9 +25,9 @@ Thumbs.db
 .env.*
 !.env.example
 
-# Secrets directories
-secrets/
-credentials/
+# Secrets directories, at the root only: unanchored, these would silently ignore a src/secrets/ module
+/secrets/
+/credentials/
 
 # codebase-memory-mcp repo snapshot (only written with its persistence: true; the index lives in ~/.cache)
 .codebase-memory/

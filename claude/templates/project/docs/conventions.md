@@ -104,8 +104,9 @@
   keys, or tokens in source or committed config — load them from env vars or a
   secret manager. Never log, serialize, or put them in URLs. Developers using
   dotclaude have Claude Code's central config deny reads of `.env`,
-  `secrets/` and `credentials/`; nothing in this repository enforces that for
-  other tools, so treat those paths as off-limits by hand.
+  `credentials/` and private key files (`*.pem`, `*.key`, `id_rsa`); nothing
+  in this repository enforces that for other tools, so treat those paths as
+  off-limits by hand.
 - **Secure logs.** Never log sensitive data; sanitize inputs before logging
   (log injection via CRLF/escapes).
 - **Bash sandbox (opt-in hardening).** The deny rules stop Claude's own file
